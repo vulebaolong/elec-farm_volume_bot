@@ -3,12 +3,18 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useGetWhiteList } from "./white-list.tanstack";
 import { IS_PRODUCTION } from "@/constant/app.constant";
+import { TSetting } from "@/types/setting.type";
+
+export type TUseChangeLeverage = {
+    webview: Electron.WebviewTag;
+    leverage: TSetting["leverage"];
+};
 
 export const useChangeLeverage = () => {
     const getWhiteList = useGetWhiteList();
 
     return useMutation({
-        mutationFn: async (webview: Electron.WebviewTag) => {
+        mutationFn: async ({ webview, leverage }: TUseChangeLeverage) => {
             if (!getWhiteList.data) {
                 toast.warning(`White List not found`);
                 return;
@@ -18,7 +24,7 @@ export const useChangeLeverage = () => {
             for (const [key, value] of entries) {
                 const stringOrder = changeLeverage({
                     symbol: key,
-                    leverage: IS_PRODUCTION ? "5" : value.leverage_max.toString(),
+                    leverage: IS_PRODUCTION ? leverage.toString() : value.leverage_max.toString(),
                 });
                 await webview.executeJavaScript(stringOrder);
             }

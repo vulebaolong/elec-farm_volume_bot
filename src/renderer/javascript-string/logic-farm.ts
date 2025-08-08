@@ -129,8 +129,8 @@ export const closeOrder = (payload: TCloseOrder) => {
       for (const block of positionBlocks) {
         const labelText = block.innerText.slice(0, 30);
         if (labelText.includes(matchSide) && labelText.includes(expectedSymbol)) {
-          const marketBtn = block.querySelector('button.mantine-GateButton-root[label="Market"]');
-          if (marketBtn && marketBtn.innerText.includes('Market')) {
+          const marketBtn = block.querySelectorAll('button')[1];
+          if (marketBtn) {
             marketBtn.click();
             return '✅ Market button clicked';
           } else {
@@ -169,5 +169,19 @@ try {
 `;
 };
 
-// https://www.gate.com/apiw/v2/futures/usdt/positions/BTC_USDT/leverage
-// https://www.gate.com/apiw/v2/futures/usdt/positions/BTC_USDT/leverage
+export const clickCloseAll = () => {
+    return `
+(async () => {
+  try {
+    const btn = document.querySelector('button[data-collect-params*="close_all"]');
+    if (!btn) throw new Error('❌ Close All button not found');
+
+    btn.click();
+    return '✅ Close All button clicked';
+  } catch (err) {
+    console.info('⚠️ clickCloseAll script error:', err.message || err);
+    throw err;
+  }
+})();
+`;
+};

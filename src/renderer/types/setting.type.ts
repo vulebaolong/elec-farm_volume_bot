@@ -13,6 +13,8 @@ export type TSetting = {
   maxDepth: number;
   maxTotalOpenPO: number;
   maxPOPerToken: number;
+  leverage: number;
+  inputUSDT: number;
 } & TBaseTimestamps;
 
 export type TSettingReq = {

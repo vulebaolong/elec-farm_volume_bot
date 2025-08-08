@@ -69,17 +69,7 @@ export default function Home() {
                     case "/apiw/v2/futures/usdt/positions":
                         try {
                             const dataFull = tryJSONparse(data.bodyPreview)?.data;
-                            const { totalOpenPO, poPerToken } = analyzePositions(dataFull);
-                            // console.log({ totalOpenPO, poPerToken });
-                            const payload: TSavePositionAccountReq = {
-                                user: dataFull[0].user,
-                                source: "gate",
-                                totalOpenPO,
-                                poPerToken: poPerToken,
-                            };
-                            // console.log({ payload });
-                            dispatch(SET_COUNT_POSITION({ totalOpenPO, poPerToken }));
-                            savePositionAccount.mutate(payload);
+                            analyzePositions(dataFull);
                         } catch (error) {}
                         break;
                     default:
@@ -106,7 +96,7 @@ export default function Home() {
     return (
         <div className="flex flex-col gap-4 h-full p-2">
             <div className="flex items-center gap-2">
-                <ButtonStartStop isReady={isReady} />
+                <ButtonStartStop isReady={isReady} webviewRef={webviewRef} />
                 <ButtonChangeLeverage isReady={isReady} webviewRef={webviewRef} />
             </div>
 

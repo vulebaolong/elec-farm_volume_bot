@@ -1,5 +1,6 @@
 import { useChangeLeverage } from "@/api/tanstack/change-leverage.tanstack";
 import { ButtonLoading } from "@/components/ui/button-loading";
+import { useAppSelector } from "@/redux/store";
 import { toast } from "sonner";
 
 type TProps = {
@@ -9,13 +10,21 @@ type TProps = {
 
 export default function ButtonChangeLeverage({ isReady, webviewRef }: TProps) {
     const changeLeverage = useChangeLeverage();
+    const leverage = useAppSelector((state) => state.setting.settingBot?.leverage);
 
     const clickChangeLeverage = async () => {
         if (!webviewRef.current) {
             toast.warning(`Webview not found`);
             return;
         }
-        changeLeverage.mutate(webviewRef.current);
+        if (!leverage) {
+            toast.warning(`Leverage not found`);
+            return;
+        }
+        changeLeverage.mutate({
+            webview: webviewRef.current,
+            leverage: leverage,
+        });
     };
 
     return (
@@ -27,7 +36,7 @@ export default function ButtonChangeLeverage({ isReady, webviewRef }: TProps) {
             size="sm"
             variant={`outline`}
         >
-            Change Leverage
+            Change Leverage: {leverage || `?`}
         </ButtonLoading>
     );
 }

@@ -1,13 +1,13 @@
 import DescriptionCloseEntry from "@/components/description-entry/description-close-entry";
 import { STOP_LOSS, TAKE_PROFIT, TIMEOUT_POSITION } from "@/constant/app.constant";
 import { taskQueueOrder } from "@/helpers/task-queue-order.helper";
+import { useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
 import { THandleEntry } from "@/types/entry.type";
 import { TSocketRoi } from "@/types/socket-roi.type";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useSocket } from "./socket.hook";
-import { useAppSelector } from "@/redux/store";
 
 export type TUseSocketRoi = {
     webviewRef: React.RefObject<Electron.WebviewTag | null>;
@@ -35,13 +35,12 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
     const handleRoi = useCallback(async (data: TSocketRes<TSocketRoi>) => {
         const { isStart, webviewRef, handleCloseEntry } = latestRef.current;
 
+        // console.log("handleRoi", taskQueueOrder, taskQueueOrder.size);
         if (!isStart || !webviewRef.current) return;
-        console.log("ORDER", taskQueueOrder, taskQueueOrder.size);
 
         const webview = webviewRef.current;
 
         const now = Date.now();
-
 
         for (const [symbol, task] of taskQueueOrder) {
             const { resultPosition, createdAt } = task;
@@ -72,7 +71,7 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
 
             if (!isTP && !isSL && !isTimeout) continue; // ✅ Không thỏa mãn điều kiện nào
 
-            const reason = isTP ? "🟢Profit" : isSL ? "🔴Loss" : "⏰Timeout";
+            const reason = isTP ? "🟢Profit" : isSL ? "🔴Loss" : `⏰Timeout - ${TIMEOUT_POSITION}`;
             const side = mode === "dual_long" ? "long" : "short";
 
             const payload: THandleEntry = {

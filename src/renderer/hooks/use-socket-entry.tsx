@@ -18,16 +18,12 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
     const socket = useSocket();
 
     const settingBot = useAppSelector((state) => state.setting.settingBot);
-    const poPerToken = useAppSelector((state) => state.position.poPerToken);
-    const totalOpenPO = useAppSelector((state) => state.position.totalOpenPO);
     const isStart = useAppSelector((state) => state.bot.isStart);
 
     const latestRef = useRef({
         isStart,
         webviewRef,
         settingBot,
-        poPerToken,
-        totalOpenPO,
         handleOpenEntry,
     });
 
@@ -36,25 +32,22 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
             isStart,
             webviewRef,
             settingBot,
-            poPerToken,
-            totalOpenPO,
             handleOpenEntry,
         };
-    }, [isStart, webviewRef, settingBot, poPerToken, totalOpenPO, handleOpenEntry]);
+    }, [isStart, webviewRef, settingBot, handleOpenEntry]);
 
     const handleEntry = useCallback(({ data }: TSocketRes<SymbolState[]>) => {
         // console.log({ handleEntry: data });
-        const { isStart, webviewRef, settingBot, poPerToken, totalOpenPO, handleOpenEntry } = latestRef.current;
+        const { isStart, webviewRef, settingBot, handleOpenEntry } = latestRef.current;
 
-        // console.log({ isStart, settingBot, poPerToken, totalOpenPO });
-        if (!isStart || !webviewRef.current || !settingBot || poPerToken === null || totalOpenPO === null) return;
+        // console.log({ isStart, settingBot });
+        if (!isStart || !webviewRef.current || !settingBot) return;
 
         const webview = webviewRef.current;
 
         for (const item of data) {
             // console.log({ "taskQueueOrder.size": taskQueueOrder.size, maxTotalOpenPO: settingBot.maxTotalOpenPO });
             if (taskQueueOrder.size >= settingBot.maxTotalOpenPO) {
-                // console.log(`taskQueueOrder size >= totalOpenPO ${taskQueueOrder.size} >= ${settingBot.maxTotalOpenPO}`);
                 return;
             }
             if (taskQueueOrder.has(item.symbol)) {
@@ -67,13 +60,13 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
             addTaskTo_QueueOrder(item.symbol, {
                 symbol: item.symbol,
                 side: item.flags.isLong ? "long" : "short",
-                size: "1",
+                size: item.size,
                 delay: delay,
                 createdAt: Date.now(),
                 resultPosition: null,
                 handle: async (task: Task_QueueOrder) => {
-                    const { side, symbol, delay } = task;
-                    const payload: THandleEntry = { webview, payload: { side, symbol, size: "1" } };
+                    const { side, symbol, delay, size } = task;
+                    const payload: THandleEntry = { webview, payload: { side, symbol, size } };
                     await handleOpenEntry(payload)
                         .then(() => {
                             const status = `Open Postion`;
@@ -81,6 +74,7 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
                                 description: (
                                     <DescriptionOpenEntry
                                         symbol={symbol}
+                                        size={size}
                                         delay={delay}
                                         timeout={TIMEOUT_POSITION}
                                         side={side}
@@ -96,6 +90,7 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
                                 description: (
                                     <DescriptionOpenEntry
                                         symbol={task.symbol}
+                                        size={size}
                                         delay={task.delay}
                                         timeout={TIMEOUT_POSITION}
                                         side={task.side}

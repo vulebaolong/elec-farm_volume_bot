@@ -21,7 +21,7 @@ export const handleOpenEntry = async ({ webview, payload }: THandleEntry) => {
 
         const payloadForOpenOrder: TOpenOrder = {
             symbol: payload.symbol,
-            size: payload.side === "long" ? "1" : "-1",
+            size: payload.side === "long" ? payload.size : `-${payload.size}`,
         };
 
         const stringOrder = openOrder(payloadForOpenOrder);
@@ -59,10 +59,9 @@ export const handleCloseEntry = async ({ webview, payload, flag }: THandleEntry)
         await webview.executeJavaScript(stringOrder);
         const result = await waitForOrder;
         console.log(`✅ 🔴Close Order ${flag} ${payload.symbol} ${payload.side} Result`, result);
+        cancelAndRemoveTask_QueueOrder(payload.symbol);
     } catch (err: any) {
         console.error(`❌ 🔴Close Order ${flag} failed: `, err.message);
         throw err;
-    } finally {
-        cancelAndRemoveTask_QueueOrder(payload.symbol);
     }
 };

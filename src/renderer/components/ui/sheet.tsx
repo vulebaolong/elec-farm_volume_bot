@@ -50,6 +50,8 @@ function SheetContent({
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
 }) {
+  const contentRef = React.useRef<HTMLDivElement>(null);
+  
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -67,6 +69,12 @@ function SheetContent({
             "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t",
           className
         )}
+        ref={contentRef}
+        aria-describedby={undefined}
+        onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            contentRef.current?.focus();
+        }}
         {...props}
       >
         {children}
