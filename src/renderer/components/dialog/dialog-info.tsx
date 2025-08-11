@@ -11,16 +11,21 @@ type TProps = {
 };
 
 type Versions = { current: string; latest: string | null };
-export default function DialogInfo({ open, onOpenChange: setOpen }: TProps) {
+export default function DialogInfo({ open, onOpenChange }: TProps) {
     const [ver, setVer] = useState<Versions>({ current: "", latest: null });
 
     useEffect(() => {
-        if (!open) return;
-        window.electron.ipcRenderer.invoke("app:get-versions").then((v: Versions) => setVer(v));
-    }, [open]);
+        window.electron.ipcRenderer.invoke("app:get-versions").then((v: Versions) => {
+            setVer(v);
+            if (v.latest && v.latest !== v.current) {
+                // Nếu có version mới => mở dialog
+                onOpenChange(true);
+            }
+        });
+    }, []);
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <form>
                 <DialogContent className="sm:max-w-[425px] [&>button[data-slot='dialog-close']]:hidden" aria-describedby={undefined}>
                     <VisuallyHidden>
