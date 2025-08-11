@@ -18,6 +18,7 @@ export default function App() {
         if (!socket?.socket) return;
 
         const handleSetting = ({ data }: TSocketRes<TSetting[]>) => {
+            console.log({ handleSetting: data });
             dispatch(SET_SETTING_BOT(data));
         };
 

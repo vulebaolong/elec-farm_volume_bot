@@ -1,5 +1,4 @@
 import DescriptionCloseEntry from "@/components/description-entry/description-close-entry";
-import { STOP_LOSS, TAKE_PROFIT, TIMEOUT_POSITION } from "@/constant/app.constant";
 import { taskQueueOrder } from "@/helpers/task-queue-order.helper";
 import { useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
@@ -16,11 +15,20 @@ export type TUseSocketRoi = {
 
 export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) => {
     const socket = useSocket();
+
     const isStart = useAppSelector((state) => state.bot.isStart);
+    const takeProfit = useAppSelector((state) => state.setting.settingBot?.takeProfit); // ví dụ: 0.5 (số)
+    const stopLoss = useAppSelector((state) => state.setting.settingBot?.stopLoss);
+    const timeoutMs = useAppSelector((state) => state.setting.settingBot?.timeoutMs);
+    const timeoutEnabled = useAppSelector((state) => state.setting.settingBot?.timeoutEnabled);
 
     const latestRef = useRef({
         isStart,
         webviewRef,
+        takeProfit,
+        stopLoss,
+        timeoutMs,
+        timeoutEnabled,
         handleCloseEntry,
     });
 
@@ -28,15 +36,32 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
         latestRef.current = {
             isStart,
             webviewRef,
+            takeProfit,
+            stopLoss,
+            timeoutMs,
+            timeoutEnabled,
             handleCloseEntry,
         };
-    }, [isStart, webviewRef, handleCloseEntry]);
+    }, [isStart, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, handleCloseEntry]);
 
     const handleRoi = useCallback(async (data: TSocketRes<TSocketRoi>) => {
-        const { isStart, webviewRef, handleCloseEntry } = latestRef.current;
+        const { isStart, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, handleCloseEntry } = latestRef.current;
 
-        // console.log("handleRoi", taskQueueOrder, taskQueueOrder.size);
+        console.log("handleRoi", { taskQueueOrder, "taskQueueOrder.size": taskQueueOrder.size, takeProfit, stopLoss, timeoutMs, timeoutEnabled });
         if (!isStart || !webviewRef.current) return;
+
+        if (
+            takeProfit == null ||
+            takeProfit == undefined ||
+            stopLoss == null ||
+            stopLoss == undefined ||
+            timeoutMs == null ||
+            timeoutMs == undefined ||
+            timeoutEnabled == null ||
+            timeoutEnabled == undefined
+        ) {
+            return;
+        }
 
         const webview = webviewRef.current;
 
@@ -57,21 +82,23 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
             // ✅ Kiểm tra dữ liệu đầu vào
             const isValidData = !!mode && size && leverage && entryPrice && lastPrice && quanto_multiplier;
 
+            console.log({ isValidData, symbol, mode, size, leverage, entryPrice, lastPrice, quanto_multiplier });
+
             if (!isValidData) continue;
 
             const initialMargin = (entryPrice * Math.abs(size) * quanto_multiplier) / leverage;
             const unrealizedPnL = (lastPrice - entryPrice) * size * quanto_multiplier;
             const returnPercent = (unrealizedPnL / initialMargin) * 100;
 
-            const isTP = returnPercent >= TAKE_PROFIT;
-            const isSL = returnPercent <= -STOP_LOSS;
-            const isTimeout = now - createdAt >= TIMEOUT_POSITION;
+            const isTP = returnPercent >= takeProfit;
+            const isSL = returnPercent <= -stopLoss;
+            const timedOut = timeoutEnabled ? now - createdAt >= timeoutMs : false; // ✅ chỉ check khi bật
 
-            console.log(`[${symbol}] ${returnPercent} |${TAKE_PROFIT} | ${STOP_LOSS}`);
+            console.log(`[${symbol}] ${returnPercent} |${takeProfit} | ${stopLoss}`);
 
-            if (!isTP && !isSL && !isTimeout) continue; // ✅ Không thỏa mãn điều kiện nào
+            if (!isTP && !isSL && !timedOut) continue; // ✅ Không thỏa mãn điều kiện nào
 
-            const reason = isTP ? "🟢Profit" : isSL ? "🔴Loss" : `⏰Timeout - ${TIMEOUT_POSITION}`;
+            const reason = isTP ? "🟢Profit" : isSL ? "🔴Loss" : `⏰Timeout - ${timeoutMs}`;
             const side = mode === "dual_long" ? "long" : "short";
 
             const payload: THandleEntry = {
@@ -89,14 +116,14 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
                 .then(() => {
                     toast.success(`[SUCCESS] Close Position`, {
                         description: (
-                            <DescriptionCloseEntry symbol={symbol} returnPercent={returnPercent} reason={reason} tp={TAKE_PROFIT} sl={STOP_LOSS} />
+                            <DescriptionCloseEntry symbol={symbol} returnPercent={returnPercent} reason={reason} tp={takeProfit} sl={stopLoss} />
                         ),
                     });
                 })
                 .catch((err) => {
                     toast.error(`[ERROR] Close Position`, {
                         description: (
-                            <DescriptionCloseEntry symbol={symbol} returnPercent={returnPercent} reason={reason} tp={TAKE_PROFIT} sl={STOP_LOSS} />
+                            <DescriptionCloseEntry symbol={symbol} returnPercent={returnPercent} reason={reason} tp={takeProfit} sl={stopLoss} />
                         ),
                     });
                 });
@@ -112,22 +139,3 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
         };
     }, [socket?.socket, handleRoi]);
 };
-
-// {
-//           "maintenance_rate": "0.03",
-//           "tier": 12,
-//           "initial_rate": "0.06666",
-//           "leverage_max": "15",
-//           "risk_limit": "100000000",
-//           "deduction": "847250"
-//       },
-
-// entry: 114353
-// notional = entryPrice * size * quanto_multiplier
-// notional = 114353 * 1 * 0,0001 = 11,4353
-
-// requiredMargin = notional * tier.initial_rate
-// requiredMargin = 11,4353 * 0,03 = 2,28706
-
-// requiredMargin <= available && notional <= tier.risk_limit
-// 2,28706

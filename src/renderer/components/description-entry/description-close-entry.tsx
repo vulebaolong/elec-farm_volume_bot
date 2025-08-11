@@ -16,7 +16,9 @@ export default function DescriptionCloseEntry({ symbol, reason, returnPercent, t
                 <p className="text-sm text-muted-foreground">Reason:</p>
                 <p className="font-bold">{reason}</p>
             </div>
-            {returnPercent && (
+            {returnPercent === undefined || returnPercent === null ? (
+                <></>
+            ) : (
                 <div className="flex items-center gap-2">
                     <p className="text-sm text-muted-foreground">ROI:</p>
                     <p className="font-bold">{returnPercent.toFixed(2)}%</p>

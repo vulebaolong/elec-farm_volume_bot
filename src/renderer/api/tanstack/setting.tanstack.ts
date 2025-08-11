@@ -22,21 +22,11 @@ export const useGetSetting = () => {
 };
 
 export const useUpdateSetting = () => {
-
     return useMutation({
         mutationFn: async (payload: TSettingReq) => {
             const { data } = await api.patch<TRes<TSettingReq>>(`${ENDPOINT.SETTING.GET_SETTING}/1`, payload);
             // console.log({ useUpdateSetting: data });
             return data;
-        },
-        onSuccess: (data) => {
-          // không cần load lại seting vì đã nhận được ở socket setting đặt ở app
-            // queryClient.invalidateQueries({ queryKey: [`get-setting`] });
-            toast.success(`Update Setting successfully`);
-        },
-        onError: (error) => {
-            console.log({ useUpdateSetting: error });
-            toast.error(resError(error, `Update Setting failed`));
         },
     });
 };

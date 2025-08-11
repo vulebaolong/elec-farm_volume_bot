@@ -1,5 +1,5 @@
 import DescriptionOpenEntry from "@/components/description-entry/description-open-entry";
-import { MAX_DELAY, MIN_DELAY, STOP_LOSS, TAKE_PROFIT, TIMEOUT_POSITION } from "@/constant/app.constant";
+import { MAX_DELAY, MIN_DELAY } from "@/constant/app.constant";
 import { addTaskTo_QueueOrder, Task_QueueOrder, taskQueueOrder } from "@/helpers/task-queue-order.helper";
 import { useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
@@ -71,33 +71,13 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
                         .then(() => {
                             const status = `Open Postion`;
                             toast.success(`[SUCCESS] ${status}`, {
-                                description: (
-                                    <DescriptionOpenEntry
-                                        symbol={symbol}
-                                        size={size}
-                                        delay={delay}
-                                        timeout={TIMEOUT_POSITION}
-                                        side={side}
-                                        tp={TAKE_PROFIT}
-                                        sl={STOP_LOSS}
-                                    />
-                                ),
+                                description: <DescriptionOpenEntry symbol={symbol} size={size} delay={delay} side={side} />,
                             });
                         })
                         .catch((err) => {
                             const status = `Open Postion`;
                             toast.error(`[ERROR] ${status}`, {
-                                description: (
-                                    <DescriptionOpenEntry
-                                        symbol={task.symbol}
-                                        size={size}
-                                        delay={task.delay}
-                                        timeout={TIMEOUT_POSITION}
-                                        side={task.side}
-                                        tp={TAKE_PROFIT}
-                                        sl={STOP_LOSS}
-                                    />
-                                ),
+                                description: <DescriptionOpenEntry symbol={task.symbol} size={size} delay={task.delay} side={task.side} />,
                             });
                         });
                 },

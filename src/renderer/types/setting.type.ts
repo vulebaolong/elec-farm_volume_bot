@@ -15,6 +15,10 @@ export type TSetting = {
   maxPOPerToken: number;
   leverage: number;
   inputUSDT: number;
+  takeProfit: number;
+  stopLoss: number;
+  timeoutMs: number;
+  timeoutEnabled: boolean;
 } & TBaseTimestamps;
 
 export type TSettingReq = {
