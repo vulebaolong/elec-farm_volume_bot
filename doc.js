@@ -7,4 +7,5 @@ xattr -cr "/Applications/ElectronReact.app"
 
 
 
+
  */
