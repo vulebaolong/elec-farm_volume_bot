@@ -28,6 +28,8 @@ jobs:
                   npm run postinstall --if-present
 
             - name: Build (webpack -> release/app/dist)
+              env:
+                  NODE_ENV: production
               run: npm run build
 
             - name: Build & Publish macOS (unsigned)
@@ -56,6 +58,8 @@ jobs:
                   npm run postinstall --if-present
 
             - name: Build (webpack -> release/app/dist)
+              env:
+                  NODE_ENV: production
               run: npm run build
 
             - name: Build & Publish Windows (unsigned)
