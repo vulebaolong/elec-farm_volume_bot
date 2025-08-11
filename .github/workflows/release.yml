@@ -27,6 +27,9 @@ jobs:
                   npm ci
                   npm run postinstall --if-present
 
+            - name: Build (webpack -> release/app/dist)
+              run: npm run build
+
             - name: Build & Publish macOS (unsigned)
               env:
                   # Token để upload asset sang Repo B (public)
@@ -51,6 +54,9 @@ jobs:
               run: |
                   npm ci
                   npm run postinstall --if-present
+
+            - name: Build (webpack -> release/app/dist)
+              run: npm run build
 
             - name: Build & Publish Windows (unsigned)
               env:
