@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeDollarSign, Palette, Settings } from "lucide-react";
+import { BadgeDollarSign, Info, Palette, Settings } from "lucide-react";
 
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { useAppSelector } from "@/redux/store";
@@ -9,11 +9,13 @@ import Symbols from "../symbols/symbols";
 import ThemeToggleV2 from "../theme-toggle/theme-toggle-v2";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import Setting from "../setting/setting";
+import DialogInfo from "../dialog/dialog-info";
 
 export function NavMain() {
     const { isMobile, state } = useSidebar();
     const [openSymbol, setOpenSymbol] = useState(false);
     const [openSetting, setOpenSetting] = useState(false);
+    const [openAbout, setOpenAbout] = useState(false);
     const info = useAppSelector((state) => state.user.info);
 
     return (
@@ -38,17 +40,17 @@ export function NavMain() {
                         </Tooltip>
                     </SidebarMenuItem>
 
-                    {/* contract */}
+                    {/* whitelist */}
                     <SidebarMenuItem>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <SidebarMenuButton onClick={() => setOpenSymbol(true)} className="flex items-center overflow-hidden">
                                     <BadgeDollarSign className="size-4 shrink-0 " />
-                                    <span className="text-sm">Contracts</span>
+                                    <span className="text-sm">White List</span>
                                 </SidebarMenuButton>
                             </TooltipTrigger>
                             <TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile}>
-                                <p>Contracts</p>
+                                <p>White List</p>
                             </TooltipContent>
                         </Tooltip>
                     </SidebarMenuItem>
@@ -69,11 +71,27 @@ export function NavMain() {
                             </Tooltip>
                         </SidebarMenuItem>
                     )}
+
+                    {/* about */}
+                    <SidebarMenuItem>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <SidebarMenuButton onClick={() => setOpenAbout(true)} className="flex items-center overflow-hidden">
+                                    <Info className="size-4 shrink-0 " />
+                                    <span className="text-sm">About</span>
+                                </SidebarMenuButton>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile}>
+                                <p>About</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </SidebarMenuItem>
                 </SidebarMenu>
             </SidebarGroup>
 
             <Symbols open={openSymbol} onOpenChange={setOpenSymbol} />
             <Setting open={openSetting} onOpenChange={setOpenSetting} />
+            <DialogInfo open={openAbout} onOpenChange={setOpenAbout} />
         </>
     );
 }
