@@ -1,28 +1,24 @@
-import { IS_PRODUCTION } from "@/constant/app.constant";
-import packageJson from "../../../../package.json";
-import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
-import { Badge } from "../ui/badge";
-import { useEffect, useState } from "react";
+import { TVersions } from "@/types/version.type";
 import { VisuallyHidden } from "@mantine/core";
+import { useEffect, useState } from "react";
+import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
+import Version from "./version";
+import { useAppSelector } from "@/redux/store";
 
 type TProps = {
     open: boolean;
     onOpenChange: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
-type Versions = { current: string; latest: string | null };
 export default function DialogInfo({ open, onOpenChange }: TProps) {
-    const [ver, setVer] = useState<Versions>({ current: "", latest: null });
+    const ver = useAppSelector((state) => state.bot.versions);
 
     useEffect(() => {
-        window.electron.ipcRenderer.invoke("app:get-versions").then((v: Versions) => {
-            setVer(v);
-            if (v.latest && v.latest !== v.current) {
-                // Nếu có version mới => mở dialog
-                onOpenChange(true);
-            }
-        });
-    }, []);
+        if (!ver?.current || !ver?.latest) return;
+        if (ver.latest && ver.latest !== ver.current) {
+            onOpenChange(true);
+        }
+    }, [ver?.current, ver?.latest]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -31,11 +27,12 @@ export default function DialogInfo({ open, onOpenChange }: TProps) {
                     <VisuallyHidden>
                         <DialogTitle>Thông tin ứng dụng</DialogTitle>
                     </VisuallyHidden>
-                    <div className="flex flex-col items-center gap-2">
+                    {ver?.current && <Version current={ver?.current} latest={ver?.latest} />}
+                    {/* <div className="flex flex-col items-center gap-2">
                         <p className="text-sm text-muted-foreground">Version: {ver.current}</p>
                         {ver.latest && ver.latest !== ver.current && <p className="text-sm text-green-500">New available: {ver.latest}</p>}
                         <Badge variant="outline">{IS_PRODUCTION ? "Production" : "Development"}</Badge>
-                    </div>
+                    </div> */}
                 </DialogContent>
             </form>
         </Dialog>
