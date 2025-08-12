@@ -20,6 +20,7 @@ export const addTaskTo_QueueOrder = (key: string, task: Task_QueueOrder) => {
         return;
     }
     taskQueueOrder.set(key, task);
+    console.log(`Thêm task: ${key} - `, Array.from(taskQueueOrder.entries()));
     process_QueueOrder(); // bắt đầu xử lý nếu chưa chạy
 };
 
@@ -29,7 +30,7 @@ export const cancelAndRemoveTask_QueueOrder = (key: string) => {
 
     // Remove khỏi queue
     taskQueueOrder.delete(key);
-    console.log(`Đã hủy và xóa task: ${key}`);
+    console.log(`Đã hủy và xóa task: ${key} - `, Array.from(taskQueueOrder.entries()));
 };
 
 export const process_QueueOrder = async () => {

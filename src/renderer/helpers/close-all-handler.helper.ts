@@ -30,7 +30,7 @@ export const handleCloseAll = async ({ webview }: THandleCloseAll) => {
         toast.success(`Close All success`);
     } catch (err: any) {
         console.error("❌ Close All failed: ", err.message);
-        toast.success(`Close All failed`);
-        throw err;
+        // toast.success(`Close All failed`);
+        // throw err;
     }
 };

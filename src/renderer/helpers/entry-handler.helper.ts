@@ -3,15 +3,16 @@ import { THandleEntry } from "@/types/entry.type";
 import { TOrderRes } from "@/types/order.type";
 import { tryJSONparse } from "./function.helper";
 import { cancelAndRemoveTask_QueueOrder } from "./task-queue-order.helper";
+import { TRespnoseGate } from "@/types/base.type";
 
 export const handleOpenEntry = async ({ webview, payload }: THandleEntry) => {
     try {
-        const waitForOrder = new Promise<TOrderRes>((resolve) => {
+        const waitForOrder = new Promise((resolve: (value: TRespnoseGate<any>) => void) => {
             const handler = (event: any) => {
                 const chanel = event.channel;
                 const data = event.args?.[0];
                 if (chanel === "api-response" && data.url === "/apiw/v2/futures/usdt/orders") {
-                    const dataFull = tryJSONparse(data.bodyPreview);
+                    const dataFull: TRespnoseGate<any> = tryJSONparse(data.bodyPreview);
                     webview.removeEventListener("ipc-message", handler);
                     resolve(dataFull);
                 }
@@ -28,7 +29,9 @@ export const handleOpenEntry = async ({ webview, payload }: THandleEntry) => {
         // console.log('Open Order string: ', stringOrder);
         await webview.executeJavaScript(stringOrder);
         const result: TOrderRes = await waitForOrder;
-        console.log(`✅ 🟢Open Order ${payloadForOpenOrder.symbol} ${payload.side} Result`, result);
+        if (result.code >= 400) throw new Error(`${payload.symbol}: ${result.message}`);
+
+        console.log(`✅ 🟢Open Order ${payloadForOpenOrder.symbol} - ${payload.side} - ${payload.size} - `, result);
     } catch (err: any) {
         console.error("❌ 🟢Open Order failed: ", err.message);
         throw err;
@@ -37,12 +40,12 @@ export const handleOpenEntry = async ({ webview, payload }: THandleEntry) => {
 
 export const handleCloseEntry = async ({ webview, payload, flag }: THandleEntry) => {
     try {
-        const waitForOrder = new Promise((resolve) => {
+        const waitForOrder = new Promise((resolve: (value: TRespnoseGate<any>) => void) => {
             const handler = (event: any) => {
                 const chanel = event.channel;
                 const data = event.args?.[0];
                 if (chanel === "api-response" && data.url === "/apiw/v2/futures/usdt/orders") {
-                    const dataFull = tryJSONparse(data.bodyPreview);
+                    const dataFull: TRespnoseGate<any> = tryJSONparse(data.bodyPreview);
                     webview.removeEventListener("ipc-message", handler);
                     resolve(dataFull);
                 }
@@ -58,7 +61,9 @@ export const handleCloseEntry = async ({ webview, payload, flag }: THandleEntry)
         // console.log('Close Order string: ', stringOrder);
         await webview.executeJavaScript(stringOrder);
         const result = await waitForOrder;
-        console.log(`✅ 🔴Close Order ${flag} ${payload.symbol} ${payload.side} Result`, result);
+        if (result.code !== 200) throw new Error(`${payload.symbol}: ${result.message}`);
+
+        console.log(`✅ 🔴Close Order ${flag} - ${payload.symbol} - ${payload.side} - ${payload.size} - `, result);
         cancelAndRemoveTask_QueueOrder(payload.symbol);
     } catch (err: any) {
         console.error(`❌ 🔴Close Order ${flag} failed: `, err.message);

@@ -123,227 +123,229 @@ export default function Setting({ open, onOpenChange: setOpen }: TProps) {
 
     return (
         <Sheet open={open} onOpenChange={setOpen}>
-            <SheetContent>
+            <SheetContent className="w-[500px] !max-w-full gap-0">
                 <SheetHeader>
                     <SheetTitle>Setting</SheetTitle>
                 </SheetHeader>
                 {/* from */}
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} id="setting">
-                        <div className="grid gap-2 px-5">
-                            {/* takeProfit */}
-                            <Controller
-                                name="takeProfit"
-                                control={form.control}
-                                render={({ field }) => (
-                                    <NumberInput
-                                        size="xs"
-                                        withAsterisk
-                                        label="Take Profit"
-                                        placeholder="Take Profit"
-                                        inputWrapperOrder={["label", "input", "error"]}
-                                        value={field.value ?? ""}
-                                        onChange={(val) => field.onChange(val ?? "")}
-                                        onBlur={field.onBlur}
-                                        error={form.formState.errors.takeProfit?.message}
-                                        decimalSeparator="."
-                                        thousandSeparator=","
-                                        min={0}
-                                        step={0.1}
-                                        clampBehavior="strict"
-                                    />
-                                )}
-                            />
+                <div className="flex-1 h-auto w-full overflow-y-auto">
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} id="setting">
+                            <div className="grid gap-2 px-5">
+                                {/* takeProfit */}
+                                <Controller
+                                    name="takeProfit"
+                                    control={form.control}
+                                    render={({ field }) => (
+                                        <NumberInput
+                                            size="xs"
+                                            withAsterisk
+                                            label="Take Profit"
+                                            placeholder="Take Profit"
+                                            inputWrapperOrder={["label", "input", "error"]}
+                                            value={field.value ?? ""}
+                                            onChange={(val) => field.onChange(val ?? "")}
+                                            onBlur={field.onBlur}
+                                            error={form.formState.errors.takeProfit?.message}
+                                            decimalSeparator="."
+                                            thousandSeparator=","
+                                            min={0}
+                                            step={0.1}
+                                            clampBehavior="strict"
+                                        />
+                                    )}
+                                />
 
-                            {/* stopLoss */}
-                            <Controller
-                                name="stopLoss"
-                                control={form.control}
-                                render={({ field }) => (
-                                    <NumberInput
-                                        size="xs"
-                                        withAsterisk
-                                        label="Stop Loss"
-                                        placeholder="Stop Loss"
-                                        inputWrapperOrder={["label", "input", "error"]}
-                                        value={field.value ?? ""}
-                                        onChange={(val) => field.onChange(val ?? "")}
-                                        onBlur={field.onBlur}
-                                        error={form.formState.errors.stopLoss?.message}
-                                        decimalSeparator="."
-                                        thousandSeparator=","
-                                        min={0}
-                                        step={0.1}
-                                        clampBehavior="strict"
-                                    />
-                                )}
-                            />
+                                {/* stopLoss */}
+                                <Controller
+                                    name="stopLoss"
+                                    control={form.control}
+                                    render={({ field }) => (
+                                        <NumberInput
+                                            size="xs"
+                                            withAsterisk
+                                            label="Stop Loss"
+                                            placeholder="Stop Loss"
+                                            inputWrapperOrder={["label", "input", "error"]}
+                                            value={field.value ?? ""}
+                                            onChange={(val) => field.onChange(val ?? "")}
+                                            onBlur={field.onBlur}
+                                            error={form.formState.errors.stopLoss?.message}
+                                            decimalSeparator="."
+                                            thousandSeparator=","
+                                            min={0}
+                                            step={0.1}
+                                            clampBehavior="strict"
+                                        />
+                                    )}
+                                />
 
-                            {/* maxTotalOpenPO */}
-                            <Controller
-                                name="maxTotalOpenPO"
-                                control={form.control}
-                                render={({ field }) => (
-                                    <NumberInput
-                                        size="xs"
-                                        withAsterisk
-                                        label="Maximum Position"
-                                        placeholder="Maximum Position"
-                                        inputWrapperOrder={["label", "input", "error"]}
-                                        value={field.value ?? ""}
-                                        onChange={(val) => field.onChange(val ?? "")}
-                                        onBlur={field.onBlur}
-                                        error={form.formState.errors.maxTotalOpenPO?.message}
-                                        decimalSeparator="."
-                                        thousandSeparator=","
-                                        min={0}
-                                        step={1}
-                                        clampBehavior="strict"
-                                    />
-                                )}
-                            />
+                                {/* maxTotalOpenPO */}
+                                <Controller
+                                    name="maxTotalOpenPO"
+                                    control={form.control}
+                                    render={({ field }) => (
+                                        <NumberInput
+                                            size="xs"
+                                            withAsterisk
+                                            label="Maximum Position"
+                                            placeholder="Maximum Position"
+                                            inputWrapperOrder={["label", "input", "error"]}
+                                            value={field.value ?? ""}
+                                            onChange={(val) => field.onChange(val ?? "")}
+                                            onBlur={field.onBlur}
+                                            error={form.formState.errors.maxTotalOpenPO?.message}
+                                            decimalSeparator="."
+                                            thousandSeparator=","
+                                            min={0}
+                                            step={1}
+                                            clampBehavior="strict"
+                                        />
+                                    )}
+                                />
 
-                            {/* leverage */}
-                            <Controller
-                                name="leverage"
-                                control={form.control}
-                                render={({ field }) => (
-                                    <NumberInput
-                                        size="xs"
-                                        withAsterisk
-                                        label="Leverage"
-                                        placeholder="Leverage"
-                                        inputWrapperOrder={["label", "input", "error"]}
-                                        value={field.value ?? ""}
-                                        onChange={(val) => field.onChange(val ?? "")}
-                                        onBlur={field.onBlur}
-                                        error={form.formState.errors.leverage?.message}
-                                        decimalSeparator="."
-                                        thousandSeparator=","
-                                        min={0}
-                                        step={1}
-                                        clampBehavior="strict"
-                                    />
-                                )}
-                            />
+                                {/* leverage */}
+                                <Controller
+                                    name="leverage"
+                                    control={form.control}
+                                    render={({ field }) => (
+                                        <NumberInput
+                                            size="xs"
+                                            withAsterisk
+                                            label="Leverage"
+                                            placeholder="Leverage"
+                                            inputWrapperOrder={["label", "input", "error"]}
+                                            value={field.value ?? ""}
+                                            onChange={(val) => field.onChange(val ?? "")}
+                                            onBlur={field.onBlur}
+                                            error={form.formState.errors.leverage?.message}
+                                            decimalSeparator="."
+                                            thousandSeparator=","
+                                            min={0}
+                                            step={1}
+                                            clampBehavior="strict"
+                                        />
+                                    )}
+                                />
 
-                            {/* inputUSDT */}
-                            <Controller
-                                name="inputUSDT"
-                                control={form.control}
-                                render={({ field }) => (
-                                    <NumberInput
-                                        size="xs"
-                                        withAsterisk
-                                        label="Input USDT"
-                                        placeholder="Input USDT"
-                                        inputWrapperOrder={["label", "input", "error"]}
-                                        value={field.value ?? ""}
-                                        onChange={(val) => field.onChange(val ?? "")}
-                                        onBlur={field.onBlur}
-                                        error={form.formState.errors.inputUSDT?.message}
-                                        decimalSeparator="."
-                                        thousandSeparator=","
-                                        suffix="$"
-                                        min={0}
-                                        step={1}
-                                        clampBehavior="strict"
-                                    />
-                                )}
-                            />
+                                {/* inputUSDT */}
+                                <Controller
+                                    name="inputUSDT"
+                                    control={form.control}
+                                    render={({ field }) => (
+                                        <NumberInput
+                                            size="xs"
+                                            withAsterisk
+                                            label="Input USDT"
+                                            placeholder="Input USDT"
+                                            inputWrapperOrder={["label", "input", "error"]}
+                                            value={field.value ?? ""}
+                                            onChange={(val) => field.onChange(val ?? "")}
+                                            onBlur={field.onBlur}
+                                            error={form.formState.errors.inputUSDT?.message}
+                                            decimalSeparator="."
+                                            thousandSeparator=","
+                                            suffix="$"
+                                            min={0}
+                                            step={1}
+                                            clampBehavior="strict"
+                                        />
+                                    )}
+                                />
 
-                            {/* ifImbalanceBidPercent */}
-                            <Controller
-                                name="ifImbalanceBidPercent"
-                                control={form.control}
-                                render={({ field }) => (
-                                    <NumberInput
-                                        size="xs"
-                                        withAsterisk
-                                        label="Imbalance Bid"
-                                        placeholder="Imbalance Bid"
-                                        inputWrapperOrder={["label", "input", "error"]}
-                                        value={field.value ?? ""}
-                                        onChange={(val) => field.onChange(val ?? "")}
-                                        onBlur={field.onBlur}
-                                        error={form.formState.errors.ifImbalanceBidPercent?.message}
-                                        decimalSeparator="."
-                                        thousandSeparator=","
-                                        suffix="%"
-                                        min={0}
-                                        step={0.1}
-                                        clampBehavior="strict"
-                                    />
-                                )}
-                            />
+                                {/* ifImbalanceBidPercent */}
+                                <Controller
+                                    name="ifImbalanceBidPercent"
+                                    control={form.control}
+                                    render={({ field }) => (
+                                        <NumberInput
+                                            size="xs"
+                                            withAsterisk
+                                            label="Imbalance Bid"
+                                            placeholder="Imbalance Bid"
+                                            inputWrapperOrder={["label", "input", "error"]}
+                                            value={field.value ?? ""}
+                                            onChange={(val) => field.onChange(val ?? "")}
+                                            onBlur={field.onBlur}
+                                            error={form.formState.errors.ifImbalanceBidPercent?.message}
+                                            decimalSeparator="."
+                                            thousandSeparator=","
+                                            suffix="%"
+                                            min={0}
+                                            step={0.1}
+                                            clampBehavior="strict"
+                                        />
+                                    )}
+                                />
 
-                            {/* ifImbalanceAskPercent */}
-                            <Controller
-                                name="ifImbalanceAskPercent"
-                                control={form.control}
-                                render={({ field }) => (
-                                    <NumberInput
-                                        size="xs"
-                                        withAsterisk
-                                        label="Imbalance Ask"
-                                        placeholder="Imbalance Ask"
-                                        inputWrapperOrder={["label", "input", "error"]}
-                                        value={field.value ?? ""}
-                                        onChange={(val) => field.onChange(val ?? "")}
-                                        onBlur={field.onBlur}
-                                        error={form.formState.errors.ifImbalanceAskPercent?.message}
-                                        decimalSeparator="."
-                                        thousandSeparator=","
-                                        suffix="%"
-                                        min={0}
-                                        step={0.1}
-                                        clampBehavior="strict"
-                                    />
-                                )}
-                            />
+                                {/* ifImbalanceAskPercent */}
+                                <Controller
+                                    name="ifImbalanceAskPercent"
+                                    control={form.control}
+                                    render={({ field }) => (
+                                        <NumberInput
+                                            size="xs"
+                                            withAsterisk
+                                            label="Imbalance Ask"
+                                            placeholder="Imbalance Ask"
+                                            inputWrapperOrder={["label", "input", "error"]}
+                                            value={field.value ?? ""}
+                                            onChange={(val) => field.onChange(val ?? "")}
+                                            onBlur={field.onBlur}
+                                            error={form.formState.errors.ifImbalanceAskPercent?.message}
+                                            decimalSeparator="."
+                                            thousandSeparator=","
+                                            suffix="%"
+                                            min={0}
+                                            step={0.1}
+                                            clampBehavior="strict"
+                                        />
+                                    )}
+                                />
 
-                            {/* timeoutMs */}
-                            <Controller
-                                name="timeoutMs"
-                                control={form.control}
-                                render={({ field }) => (
-                                    <NumberInput
-                                        size="xs"
-                                        withAsterisk
-                                        label="Timeout (milliseconds)"
-                                        placeholder="Timeout in milliseconds"
-                                        inputWrapperOrder={["label", "input", "error"]}
-                                        value={field.value ?? ""}
-                                        onChange={(val) => field.onChange(val ?? "")}
-                                        onBlur={field.onBlur}
-                                        error={form.formState.errors.timeoutMs?.message}
-                                        decimalSeparator="."
-                                        thousandSeparator=","
-                                        suffix="ms"
-                                        min={0}
-                                        step={1000}
-                                        clampBehavior="strict"
-                                        disabled={!form.watch("timeoutEnabled")} // chỉ bật khi timeoutEnabled = true
-                                    />
-                                )}
-                            />
+                                {/* timeoutMs */}
+                                <Controller
+                                    name="timeoutMs"
+                                    control={form.control}
+                                    render={({ field }) => (
+                                        <NumberInput
+                                            size="xs"
+                                            withAsterisk
+                                            label="Timeout (milliseconds)"
+                                            placeholder="Timeout in milliseconds"
+                                            inputWrapperOrder={["label", "input", "error"]}
+                                            value={field.value ?? ""}
+                                            onChange={(val) => field.onChange(val ?? "")}
+                                            onBlur={field.onBlur}
+                                            error={form.formState.errors.timeoutMs?.message}
+                                            decimalSeparator="."
+                                            thousandSeparator=","
+                                            suffix="ms"
+                                            min={0}
+                                            step={1000}
+                                            clampBehavior="strict"
+                                            disabled={!form.watch("timeoutEnabled")} // chỉ bật khi timeoutEnabled = true
+                                        />
+                                    )}
+                                />
 
-                            {/* timeoutEnabled checkbox */}
-                            <Controller
-                                name="timeoutEnabled"
-                                control={form.control}
-                                render={({ field }) => (
-                                    <Checkbox
-                                        size="xs"
-                                        label="Enable Timeout"
-                                        checked={field.value}
-                                        onChange={(event) => field.onChange(event.currentTarget.checked)}
-                                    />
-                                )}
-                            />
-                        </div>
-                    </form>
-                </Form>
+                                {/* timeoutEnabled checkbox */}
+                                <Controller
+                                    name="timeoutEnabled"
+                                    control={form.control}
+                                    render={({ field }) => (
+                                        <Checkbox
+                                            size="xs"
+                                            label="Enable Timeout"
+                                            checked={field.value}
+                                            onChange={(event) => field.onChange(event.currentTarget.checked)}
+                                        />
+                                    )}
+                                />
+                            </div>
+                        </form>
+                    </Form>
+                </div>
                 <SheetFooter>
                     <div className="flex w-full items-center justify-between gap-2">
                         <ButtonLoading className="flex-1" loading={updateSetting.isPending} type="submit" form="setting">

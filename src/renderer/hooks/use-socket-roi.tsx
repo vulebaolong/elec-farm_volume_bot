@@ -1,5 +1,6 @@
 import DescriptionCloseEntry from "@/components/description-entry/description-close-entry";
 import { taskQueueOrder } from "@/helpers/task-queue-order.helper";
+import { changedLaveragelist } from "@/helpers/white-list.helper";
 import { useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
 import { THandleEntry } from "@/types/entry.type";
@@ -47,7 +48,15 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
     const handleRoi = useCallback(async (data: TSocketRes<TSocketRoi>) => {
         const { isStart, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, handleCloseEntry } = latestRef.current;
 
-        console.log("handleRoi", { taskQueueOrder, "taskQueueOrder.size": taskQueueOrder.size, takeProfit, stopLoss, timeoutMs, timeoutEnabled });
+        console.log("handleRoi", {
+            taskQueueOrder: Array.from(taskQueueOrder.entries()), 
+            "taskQueueOrder.size": taskQueueOrder.size,
+            changedLaveragelist,
+            takeProfit,
+            stopLoss,
+            timeoutMs,
+            timeoutEnabled,
+        });
         if (!isStart || !webviewRef.current) return;
 
         if (
@@ -80,11 +89,13 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
             const mode = resultPosition.mode;
 
             // ✅ Kiểm tra dữ liệu đầu vào
-            const isValidData = !!mode && size && leverage && entryPrice && lastPrice && quanto_multiplier;
-
-            console.log({ isValidData, symbol, mode, size, leverage, entryPrice, lastPrice, quanto_multiplier });
-
-            if (!isValidData) continue;
+            console.log({ mode, size, leverage, entryPrice, lastPrice, quanto_multiplier });
+            if (mode === null || mode === undefined) continue;
+            if (size === null || size === undefined) continue;
+            if (leverage === null || leverage === undefined) continue;
+            if (entryPrice === null || entryPrice === undefined) continue;
+            if (lastPrice === null || lastPrice === undefined) continue;
+            if (quanto_multiplier === null || quanto_multiplier === undefined) continue;
 
             const initialMargin = (entryPrice * Math.abs(size) * quanto_multiplier) / leverage;
             const unrealizedPnL = (lastPrice - entryPrice) * size * quanto_multiplier;

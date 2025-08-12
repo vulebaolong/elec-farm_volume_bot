@@ -1,11 +1,12 @@
-import { configureStore } from '@reduxjs/toolkit';
-import { rootReducer } from './slices/root-reducer';
-import { useDispatch, useSelector } from 'react-redux';
-import type { TypedUseSelectorHook } from 'react-redux';
+import { configureStore } from "@reduxjs/toolkit";
+import { rootReducer } from "./slices/root-reducer";
+import { useDispatch, useSelector } from "react-redux";
+import type { TypedUseSelectorHook } from "react-redux";
+import { IS_PRODUCTION } from "@/constant/app.constant";
 
 export const store = configureStore({
-  reducer: rootReducer,
-  devTools: false,
+    reducer: rootReducer,
+    devTools: !IS_PRODUCTION,
 });
 
 // Infer the `RootState` and `AppDispatch` types from the store itself

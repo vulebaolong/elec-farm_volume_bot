@@ -5,4 +5,4 @@ export type TWhiteListItem = {
   leverage_min: number;
 };
 
-export type TWhiteList = Record<string, TWhiteListItem>;
+export type TWhiteListSocketRes = Record<string, TWhiteListItem>;

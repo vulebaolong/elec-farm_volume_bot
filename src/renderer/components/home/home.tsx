@@ -4,11 +4,9 @@ import { handleCloseEntry, handleOpenEntry } from "@/helpers/entry-handler.helpe
 import { analyzePositions, tryJSONparse } from "@/helpers/function.helper";
 import { useWebSocketHandler } from "@/hooks/use-socket-entry";
 import { useSocketRoi } from "@/hooks/use-socket-roi";
-import { SET_COUNT_POSITION } from "@/redux/slices/position.slice";
 import { useAppDispatch } from "@/redux/store";
-import { TSaveAccountReq, TSavePositionAccountReq } from "@/types/account.type";
+import { TSaveAccountReq } from "@/types/account.type";
 import { useEffect, useRef, useState } from "react";
-import ButtonChangeLeverage from "./button-change-leverage/button-change-leverage";
 import ButtonStartStop from "./button-start-stop/button-start-stop";
 
 export default function Home() {
@@ -97,7 +95,7 @@ export default function Home() {
         <div className="flex flex-col gap-4 h-full p-2">
             <div className="flex items-center gap-2">
                 <ButtonStartStop isReady={isReady} webviewRef={webviewRef} />
-                <ButtonChangeLeverage isReady={isReady} webviewRef={webviewRef} />
+                {/* <ButtonChangeLeverage isReady={isReady} webviewRef={webviewRef} /> */}
             </div>
 
             <div className="flex-1  overflow-auto">

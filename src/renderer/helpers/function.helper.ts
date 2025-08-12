@@ -100,3 +100,11 @@ export const wait = (miliseconds: number) => {
 export function isDefined<T>(value: T): value is NonNullable<T> {
     return value !== undefined && value !== null;
 }
+
+export function checkSize(size: string | null | undefined): boolean {
+    // Nếu size null/undefined hoặc bằng "0" hoặc không phải số => false
+    if (size == null || size === "0" || isNaN(Number(size)) || Number(size) === 0) {
+        return false;
+    }
+    return true; // Ngược lại thì hợp lệ
+}
