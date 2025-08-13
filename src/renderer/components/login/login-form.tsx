@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { useAppSelector } from "@/redux/store";
 import { useEffect } from "react";
 import Version from "../dialog/version";
+import { IS_PRODUCTION } from "@/constant/app.constant";
 
 export const validatePassword = [
     { re: /[0-9]/, label: "Includes number." },
@@ -48,8 +49,8 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
     const form = useForm<z.infer<typeof FormSchema>>({
         resolver: zodResolver(FormSchema),
         defaultValues: {
-            email: `admin@gmail.com`,
-            password: `Admin@123`,
+            email: IS_PRODUCTION ? `` : `admin@gmail.com`,
+            password: IS_PRODUCTION ? `` : `Admin@123`,
         },
     });
 
