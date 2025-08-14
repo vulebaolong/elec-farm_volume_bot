@@ -1,26 +1,44 @@
-import { SET_SETTING_BOT } from "@/redux/slices/setting.slice";
+import { SET_SETTING_SYSTEM, SET_WHITELIST_RESET_IN_PROGRESS } from "@/redux/slices/bot.slice";
 import { useAppDispatch } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
-import { TSetting } from "@/types/setting.type";
+import { TSettingSystemsSocket } from "@/types/setting-system.type";
 import { useEffect } from "react";
 import { useSocket } from "./socket.hook";
+import { useGetInfoMutation } from "@/api/tanstack/auth.tanstack";
 
 export const useInitData = () => {
     const socket = useSocket();
     const dispatch = useAppDispatch();
+    const getInfoMoutation = useGetInfoMutation();
 
     useEffect(() => {
         if (!socket?.socket) return;
 
-        const handleSetting = ({ data }: TSocketRes<TSetting[]>) => {
-            console.log({ handleSetting: data });
-            dispatch(SET_SETTING_BOT(data));
+        // cập nhật setting system
+        const handleSettingSystem = ({ data }: TSocketRes<TSettingSystemsSocket>) => {
+            console.log({ handleSettingSystem: data });
+            dispatch(SET_SETTING_SYSTEM(data));
         };
+        socket.socket.on("setting-system", handleSettingSystem);
 
-        socket.socket.on("setting", handleSetting);
+        // cập nhật setting user - chỉ cần getinfo lại
+        const handleSettingUser = ({ data }: TSocketRes<TSettingSystemsSocket>) => {
+            console.log({ handleSettingUser: data });
+            getInfoMoutation.mutate();
+        };
+        socket.socket.on("setting-user", handleSettingUser);
+
+        // tránh vào lệnh trong khi đang reset whitelist
+        const handleBlockEntryDuringWhitelistReset = ({ data }: TSocketRes<boolean>) => {
+            console.log({ handleBlockEntryDuringWhitelistReset: data });
+            dispatch(SET_WHITELIST_RESET_IN_PROGRESS(data));
+        };
+        socket.socket.on("white-list-reset-in-progress", handleBlockEntryDuringWhitelistReset);
 
         return () => {
-            socket.socket?.off("setting", handleSetting);
+            socket.socket?.off("setting-system", handleSettingSystem);
+            socket.socket?.off("setting-user", handleSettingUser);
+            socket.socket?.off("white-list-reset-in-progress", handleBlockEntryDuringWhitelistReset);
         };
     }, [socket?.socket]);
 

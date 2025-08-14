@@ -70,11 +70,17 @@ const createWindow = async () => {
         return path.join(RESOURCES_PATH, ...paths);
     };
 
+    const MIN_WIDTH = 1024; // >= lg của Tailwind (desktop)
+    const MIN_HEIGHT = 700;
+
     mainWindow = new BrowserWindow({
         show: false,
         // width: 1024,
         // height: 728,
         // fullscreen: true,
+        minWidth: MIN_WIDTH,
+        minHeight: MIN_HEIGHT,
+        useContentSize: true,
         icon: getAssetPath("icon.png"),
         webPreferences: {
             webviewTag: true,

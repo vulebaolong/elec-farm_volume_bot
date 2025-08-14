@@ -9,12 +9,17 @@ export interface SymbolState {
     askUSD: number;
     lastPrice: number;
     flags: TFlags;
-    size: string;
 }
 
 export type TFlags = {
     isSpreadPercent: boolean;
+    isDepth: boolean;
+    entryBySettingUserId: Record<number, TEntrySpec>;
+};
+
+export type TEntrySpec = {
+    settingUserId: number;
     isLong: boolean;
     isShort: boolean;
-    isDepth: boolean;
+    size: string;
 };

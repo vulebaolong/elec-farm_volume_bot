@@ -18,13 +18,15 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
     const socket = useSocket();
 
     const isStart = useAppSelector((state) => state.bot.isStart);
-    const takeProfit = useAppSelector((state) => state.setting.settingBot?.takeProfit); // ví dụ: 0.5 (số)
-    const stopLoss = useAppSelector((state) => state.setting.settingBot?.stopLoss);
-    const timeoutMs = useAppSelector((state) => state.setting.settingBot?.timeoutMs);
-    const timeoutEnabled = useAppSelector((state) => state.setting.settingBot?.timeoutEnabled);
+    const whitelistResetInProgress = useAppSelector((state) => state.bot.whitelistResetInProgress);
+    const takeProfit = useAppSelector((state) => state.user.info?.SettingUsers.takeProfit); // ví dụ: 0.5 (số)
+    const stopLoss = useAppSelector((state) => state.user.info?.SettingUsers.stopLoss);
+    const timeoutMs = useAppSelector((state) => state.user.info?.SettingUsers.timeoutMs);
+    const timeoutEnabled = useAppSelector((state) => state.user.info?.SettingUsers.timeoutEnabled);
 
     const latestRef = useRef({
         isStart,
+        whitelistResetInProgress,
         webviewRef,
         takeProfit,
         stopLoss,
@@ -36,6 +38,7 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
     useEffect(() => {
         latestRef.current = {
             isStart,
+            whitelistResetInProgress,
             webviewRef,
             takeProfit,
             stopLoss,
@@ -43,13 +46,14 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
             timeoutEnabled,
             handleCloseEntry,
         };
-    }, [isStart, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, handleCloseEntry]);
+    }, [isStart, whitelistResetInProgress, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, handleCloseEntry]);
 
     const handleRoi = useCallback(async (data: TSocketRes<TSocketRoi>) => {
-        const { isStart, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, handleCloseEntry } = latestRef.current;
+        const { isStart, whitelistResetInProgress, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, handleCloseEntry } =
+            latestRef.current;
 
         console.log("handleRoi", {
-            taskQueueOrder: Array.from(taskQueueOrder.entries()), 
+            taskQueueOrder: Array.from(taskQueueOrder.entries()),
             "taskQueueOrder.size": taskQueueOrder.size,
             changedLaveragelist,
             takeProfit,
@@ -57,7 +61,8 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
             timeoutMs,
             timeoutEnabled,
         });
-        if (!isStart || !webviewRef.current) return;
+
+        if (!isStart || whitelistResetInProgress || !webviewRef.current) return;
 
         if (
             takeProfit == null ||
@@ -90,12 +95,12 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
 
             // ✅ Kiểm tra dữ liệu đầu vào
             console.log({ mode, size, leverage, entryPrice, lastPrice, quanto_multiplier });
-            if (mode === null || mode === undefined) continue;
-            if (size === null || size === undefined) continue;
+            if (!mode) continue;
+            if (!size || size === null || size === undefined) continue;
             if (leverage === null || leverage === undefined) continue;
             if (entryPrice === null || entryPrice === undefined) continue;
             if (lastPrice === null || lastPrice === undefined) continue;
-            if (quanto_multiplier === null || quanto_multiplier === undefined) continue;
+            if (!quanto_multiplier) continue;
 
             const initialMargin = (entryPrice * Math.abs(size) * quanto_multiplier) / leverage;
             const unrealizedPnL = (lastPrice - entryPrice) * size * quanto_multiplier;

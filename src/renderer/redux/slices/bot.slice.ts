@@ -1,14 +1,19 @@
+import { TSettingSystem } from "@/types/setting-system.type";
 import { TVersions } from "@/types/version.type";
 import { createSlice } from "@reduxjs/toolkit";
 
 export type TInitialState = {
     isStart: boolean;
     versions: TVersions | null;
+    settingSystem: TSettingSystem | null;
+    whitelistResetInProgress: boolean;
 };
 
 const initialState: TInitialState = {
     isStart: false,
     versions: null,
+    settingSystem: null,
+    whitelistResetInProgress: false,
 };
 
 const botSlice = createSlice({
@@ -21,9 +26,15 @@ const botSlice = createSlice({
         SET_VERSIONS: (state, { payload }) => {
             state.versions = payload;
         },
+        SET_SETTING_SYSTEM: (state, { payload }) => {
+            state.settingSystem = payload;
+        },
+        SET_WHITELIST_RESET_IN_PROGRESS: (state, { payload }) => {
+            state.whitelistResetInProgress = payload;
+        },
     },
 });
 
-export const { SET_IS_START, SET_VERSIONS } = botSlice.actions;
+export const { SET_IS_START, SET_VERSIONS, SET_SETTING_SYSTEM, SET_WHITELIST_RESET_IN_PROGRESS } = botSlice.actions;
 
 export default botSlice.reducer;

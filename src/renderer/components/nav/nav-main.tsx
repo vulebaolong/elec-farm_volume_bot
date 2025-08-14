@@ -1,15 +1,16 @@
 "use client";
 
-import { BadgeDollarSign, Info, Palette, Settings } from "lucide-react";
+import { BadgeDollarSign, House, Info, Palette, Settings } from "lucide-react";
 
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
+import { navigateTo } from "@/helpers/navigate.helper";
 import { useAppSelector } from "@/redux/store";
 import { useState } from "react";
+import DialogInfo from "../dialog/dialog-info";
 import Symbols from "../symbols/symbols";
 import ThemeToggleV2 from "../theme-toggle/theme-toggle-v2";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import Setting from "../setting/setting";
-import DialogInfo from "../dialog/dialog-info";
+import { ROUTER } from "@/constant/router.constant";
 
 export function NavMain() {
     const { isMobile, state } = useSidebar();
@@ -22,6 +23,20 @@ export function NavMain() {
         <>
             <SidebarGroup>
                 <SidebarMenu>
+                    <SidebarMenuItem>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <SidebarMenuButton onClick={() => navigateTo(ROUTER.HOME)} className="flex items-center overflow-hidden">
+                                    <House className="size-4 shrink-0 " />
+                                    <span className="text-sm">Home</span>
+                                </SidebarMenuButton>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile}>
+                                <p>Home</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </SidebarMenuItem>
+
                     {/* theme */}
                     <SidebarMenuItem>
                         <Tooltip>
@@ -60,7 +75,7 @@ export function NavMain() {
                         <SidebarMenuItem>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <SidebarMenuButton onClick={() => setOpenSetting(true)} className="flex items-center overflow-hidden">
+                                    <SidebarMenuButton onClick={() => navigateTo(ROUTER.SETTING)} className="flex items-center overflow-hidden">
                                         <Settings className="size-4 shrink-0 " />
                                         <span className="text-sm">Setting</span>
                                     </SidebarMenuButton>
@@ -90,7 +105,6 @@ export function NavMain() {
             </SidebarGroup>
 
             <Symbols open={openSymbol} onOpenChange={setOpenSymbol} />
-            <Setting open={openSetting} onOpenChange={setOpenSetting} />
             <DialogInfo open={openAbout} onOpenChange={setOpenAbout} />
         </>
     );
