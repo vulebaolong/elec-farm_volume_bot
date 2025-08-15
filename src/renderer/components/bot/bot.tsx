@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import ButtonStartStop from "./button-start-stop/button-start-stop";
 import { PageTitle } from "../title-page/title-page";
 import { BotIcon } from "lucide-react";
+import Priority24hChange from "../priority-24h-change/priority-24h-change";
 
 export default function Bot() {
     const [isReady, setIsReady] = useState(false);
@@ -99,9 +100,11 @@ export default function Bot() {
                     <ButtonStartStop isReady={isReady} webviewRef={webviewRef} />
                 </div>
 
+                <Priority24hChange />
+
                 <div className="p-1 h-full border border-border shadow-lg rounded-2xl aspect-[6/5]">
                     <div className="flex-1 overflow-auto rounded-2xl w-full h-full">
-                        <div className="min-w-[1000px] h-full">
+                        <div className="min-w-[1280px] h-full">
                             {wvPreload && <Webview webviewRef={webviewRef} setIsReady={setIsReady} wvPreload={wvPreload} />}
                         </div>
                     </div>

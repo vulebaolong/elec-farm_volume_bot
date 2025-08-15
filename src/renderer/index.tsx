@@ -2,6 +2,13 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import Provider from "./components/provider/provider";
 
+if (process.env.NODE_ENV === "production") {
+    console.log = () => {};
+    console.debug = () => {};
+    console.info = () => {};
+    console.trace = () => {};
+}
+
 const container = document.getElementById("root") as HTMLElement;
 const root = createRoot(container);
 root.render(

@@ -13,6 +13,8 @@ export type TSettingUsers = {
     stopLoss: number;
     timeoutEnabled: boolean;
     timeoutMs: number;
+    max24hChangeGreen: number;
+    max24hChangeRed: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

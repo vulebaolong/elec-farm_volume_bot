@@ -1,8 +1,9 @@
+import { TSide } from "@/types/base.type";
 import { TPosition } from "@/types/position.type";
 
 export type Task_QueueOrder = {
     symbol: string;
-    side: "long" | "short";
+    side: TSide;
     size: string;
     delay: number;
     createdAt: number;

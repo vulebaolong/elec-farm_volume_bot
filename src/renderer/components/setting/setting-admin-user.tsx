@@ -42,6 +42,8 @@ export const FormSchema = z.object({
     stopLoss: positiveNumber("Stop Loss"),
     timeoutMs: intField(1, "Timeout (ms)"),
     timeoutEnabled: z.boolean(),
+    max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
+    max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
 });
 
 type FormInput = z.input<typeof FormSchema>; // kiểu dữ liệu TRƯỚC khi Zod parse ('' | string | number)
@@ -53,7 +55,7 @@ type TProps = {
 
 export default function SettingAdminUser({ type }: TProps) {
     const updateSettingUser = useUpdateSettingUser();
-    const getSettingUserById = useGetSettingUserById(1)
+    const getSettingUserById = useGetSettingUserById(1);
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
     const queryClient = useQueryClient();
 
@@ -75,6 +77,8 @@ export default function SettingAdminUser({ type }: TProps) {
             stopLoss: "",
             timeoutMs: "",
             timeoutEnabled: false,
+            max24hChangeGreen: "",
+            max24hChangeRed: "",
         },
     });
 
@@ -91,6 +95,8 @@ export default function SettingAdminUser({ type }: TProps) {
                 stopLoss: setting.stopLoss ?? "",
                 timeoutMs: setting.timeoutMs ?? "",
                 timeoutEnabled: setting.timeoutEnabled ?? false,
+                max24hChangeGreen: setting.max24hChangeGreen ?? "",
+                max24hChangeRed: setting.max24hChangeRed ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form]);
@@ -110,12 +116,14 @@ export default function SettingAdminUser({ type }: TProps) {
             stopLoss: data.stopLoss,
             timeoutMs: data.timeoutMs,
             timeoutEnabled: data.timeoutEnabled,
+            max24hChangeGreen: data.max24hChangeGreen,
+            max24hChangeRed: data.max24hChangeRed,
         };
         console.log({ updateSettingUser: payload });
         updateSettingUser.mutate(payload, {
             onSuccess: (data) => {
                 // không cần load lại seting vì đã nhận được ở socket setting đặt ở app
-               if(type === "user") queryClient.invalidateQueries({ queryKey: [`get-setting-user-by-id`] });
+                if (type === "user") queryClient.invalidateQueries({ queryKey: [`get-setting-user-by-id`] });
                 toast.success(`Update Setting successfully`);
             },
             onError: (error) => {
@@ -338,6 +346,56 @@ export default function SettingAdminUser({ type }: TProps) {
                             label="Enable Timeout"
                             checked={field.value}
                             onChange={(event) => field.onChange(event.currentTarget.checked)}
+                        />
+                    )}
+                />
+
+                {/* max24hChangeGreen */}
+                <Controller
+                    name="max24hChangeGreen"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="24h Change Green %"
+                            placeholder="24h Change Green %"
+                            inputWrapperOrder={["label", "input", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.max24hChangeGreen?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix="%"
+                            min={0}
+                            step={0.1}
+                            clampBehavior="strict"
+                        />
+                    )}
+                />
+
+                {/* max24hChangeRed */}
+                <Controller
+                    name="max24hChangeRed"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="24h Change Red %"
+                            placeholder="24h Change Red %"
+                            inputWrapperOrder={["label", "input", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.max24hChangeRed?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix="%"
+                            min={0}
+                            step={0.1}
+                            clampBehavior="strict"
                         />
                     )}
                 />

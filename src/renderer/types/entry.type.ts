@@ -1,3 +1,5 @@
+import { TSide } from "./base.type";
+
 export type THandleEntry = {
     webview: Electron.WebviewTag;
     payload: TPayloadClickOpenEntry;
@@ -7,7 +9,7 @@ export type THandleEntry = {
 export type TPayloadClickOpenEntry = {
     symbol: string;
     size: string;
-    side: "long" | "short";
+    side: TSide;
 };
 
 export type TSocketEntry = {

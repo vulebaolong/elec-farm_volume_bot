@@ -44,4 +44,7 @@ export const ENDPOINT = {
     WHITE_LIST: {
         GET_WHITE_LIST: "white-list",
     },
+    PRIORITY_24h_CHANGE: {
+        GET_PRIORITY_24h_CHANGE: "priority-24h-change",
+    },
 };

@@ -16,3 +16,5 @@ export type TRespnoseGate<T> = {
     code: number;
     data: T;
 };
+
+export type TSide = 'long' | 'short';

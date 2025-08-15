@@ -11,8 +11,6 @@ import { SymbolState } from "@/types/symbol.type";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useSocket } from "./socket.hook";
-import { pickSideByPriority } from "@/helpers/priority-24h-change-handle";
-import { TPriority } from "@/types/priority-change.type";
 
 export type TUseWebSocketHandler = {
     webviewRef: React.RefObject<Electron.WebviewTag | null>;
@@ -54,60 +52,35 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
         // console.log({ handleEntry: data });
 
         const { isStart, webviewRef, SettingUsers, whitelistResetInProgress, priority, handleOpenEntry } = latestRef.current;
-        if (!isStart || whitelistResetInProgress || !webviewRef.current || !SettingUsers) {
-            console.log({ isStart, whitelistResetInProgress, webviewRef, SettingUsers });
-            return;
-        }
+        if (!isStart || whitelistResetInProgress || !webviewRef.current || !SettingUsers) return;
 
         const { maxTotalOpenPO, id: settingUserId, leverage: leverageNumber } = SettingUsers;
+
         const webview = webviewRef.current;
 
         for (const item of data) {
+            // console.log({ "taskQueueOrder.size": taskQueueOrder.size, maxTotalOpenPO: settingBot.maxTotalOpenPO });
             const { symbol, flags } = item;
-            const spec = flags?.entryBySettingUserId?.[settingUserId];
-            if (!spec) {
-                console.log(`Can't find spec for ${symbol}`);
-                continue;
-            }
+            const { entryBySettingUserId } = flags;
+            const size = entryBySettingUserId[settingUserId].size;
+            const isLong = entryBySettingUserId[settingUserId].isLong;
+            // const isShort = entryBySettingUserId[settingUserId].isShort;
 
-            const { size, isLong, isShort } = spec;
+            if (taskQueueOrder.size >= maxTotalOpenPO) return;
+            if (taskQueueOrder.has(symbol)) return;
 
-            // Ưu tiên/lọc theo priority
-            const side = pickSideByPriority(isLong, isShort, priority as TPriority);
-            if (!side) {
-                // không phù hợp priority -> bỏ
-                console.log(`Can't find side for ${symbol}: `, side);
-                continue;
-            }
+            if (!checkSize(size)) return toast.error(`Size: ${size} is not valid`);
 
-            // Giới hạn hàng đợi
-            if (taskQueueOrder.size >= maxTotalOpenPO) {
-                // đã full, ngừng thêm
-                console.log(`Queue order is full: ${taskQueueOrder.size} >= ${maxTotalOpenPO}`);
-                break;
-            }
-            if (taskQueueOrder.has(symbol)) {
-                console.log(`Queue order has symbol: ${symbol}`);
-                continue;
-            }
-
-            if (!checkSize(size)) {
-                toast.error(`Size: ${size} is not valid`);
-                continue;
-            }
-
-            // Đổi leverage trước khi vào lệnh
-            const ok = await changeLeverageHandler({ symbol, leverageNumber, webview });
-            if (!ok) {
-                console.log(`Can't change leverage for ${symbol}`);
-                continue;
-            }
+            // thay đổi đòn bẩy trước khi vào lệnh
+            // nếu không thay đổi được thì không vào
+            const isChangeLeverage = await changeLeverageHandler({ symbol, leverageNumber, webview });
+            if (!isChangeLeverage) return;
 
             const delay = Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
 
             addTaskTo_QueueOrder(symbol, {
                 symbol: symbol,
-                side,
+                side: isLong ? "long" : "short",
                 size: size,
                 delay: delay,
                 createdAt: Date.now(),

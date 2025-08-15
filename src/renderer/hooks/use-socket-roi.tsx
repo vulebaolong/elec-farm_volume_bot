@@ -94,7 +94,7 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
             const mode = resultPosition.mode;
 
             // ✅ Kiểm tra dữ liệu đầu vào
-            console.log({ mode, size, leverage, entryPrice, lastPrice, quanto_multiplier });
+            // console.log({ mode, size, leverage, entryPrice, lastPrice, quanto_multiplier });
             if (!mode) continue;
             if (!size || size === null || size === undefined) continue;
             if (leverage === null || leverage === undefined) continue;

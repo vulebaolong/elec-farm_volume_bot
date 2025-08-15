@@ -1,3 +1,4 @@
+import { TSide } from "@/types/base.type";
 import { TPayloadLeverage } from "@/types/leverage.type";
 
 export const setLocalStorageScript = `
@@ -109,7 +110,7 @@ window.state = Object.assign(window.state || {}, {...window.state, symbol: '${pa
 
 export type TCloseOrder = {
     symbol: string;
-    side: "long" | "short";
+    side: TSide;
 };
 export const closeOrder = (payload: TCloseOrder) => {
     return `
