@@ -85,28 +85,27 @@ export function NavMain() {
                     </SidebarMenuItem>
 
                     {/* setting - amin */}
-                    {info?.Roles?.id === 1 ||
-                        (info?.Roles?.id === 3 && (
-                            <SidebarMenuItem>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <SidebarMenuButton
-                                            onClick={() => {
-                                                navigateTo(ROUTER.SETTING);
-                                                srollToTop();
-                                            }}
-                                            className="flex items-center overflow-hidden"
-                                        >
-                                            <Settings className="size-4 shrink-0 " />
-                                            <span className="text-sm">Setting</span>
-                                        </SidebarMenuButton>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile}>
-                                        <p>Setting</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </SidebarMenuItem>
-                        ))}
+                    {(info?.Roles?.id === 3 || info?.Roles?.id === 1) && (
+                        <SidebarMenuItem>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <SidebarMenuButton
+                                        onClick={() => {
+                                            navigateTo(ROUTER.SETTING);
+                                            srollToTop();
+                                        }}
+                                        className="flex items-center overflow-hidden"
+                                    >
+                                        <Settings className="size-4 shrink-0 " />
+                                        <span className="text-sm">Setting</span>
+                                    </SidebarMenuButton>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile}>
+                                    <p>Setting</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </SidebarMenuItem>
+                    )}
 
                     {info?.Roles?.id === 3 && (
                         <SidebarMenuItem>
