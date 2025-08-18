@@ -1,5 +1,6 @@
 import { TPriority } from "@/types/priority-change.type";
 import { TSettingSystem } from "@/types/setting-system.type";
+import { TUiSelector } from "@/types/ui-selector.type";
 import { TVersions } from "@/types/version.type";
 import { createSlice } from "@reduxjs/toolkit";
 
@@ -9,6 +10,7 @@ export type TInitialState = {
     settingSystem: TSettingSystem | null;
     whitelistResetInProgress: boolean;
     priority: TPriority;
+    uiSelector: TUiSelector[] | null;
 };
 
 const initialState: TInitialState = {
@@ -17,6 +19,7 @@ const initialState: TInitialState = {
     settingSystem: null,
     whitelistResetInProgress: false,
     priority: "normal",
+    uiSelector: null,
 };
 
 const botSlice = createSlice({
@@ -38,9 +41,12 @@ const botSlice = createSlice({
         SET_PRIORITY: (state, { payload }) => {
             state.priority = payload;
         },
+        SET_UI_SELECTOR: (state, { payload }) => {
+            state.uiSelector = payload;
+        },
     },
 });
 
-export const { SET_IS_START, SET_VERSIONS, SET_SETTING_SYSTEM, SET_WHITELIST_RESET_IN_PROGRESS, SET_PRIORITY } = botSlice.actions;
+export const { SET_IS_START, SET_VERSIONS, SET_SETTING_SYSTEM, SET_WHITELIST_RESET_IN_PROGRESS, SET_PRIORITY, SET_UI_SELECTOR } = botSlice.actions;
 
 export default botSlice.reducer;

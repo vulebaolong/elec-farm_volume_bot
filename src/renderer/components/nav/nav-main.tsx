@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeDollarSign, House, Info, Palette, Settings } from "lucide-react";
+import { BadgeDollarSign, CodeXml, House, Info, Palette, Settings } from "lucide-react";
 
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { navigateTo } from "@/helpers/navigate.helper";
@@ -19,6 +19,14 @@ export function NavMain() {
     const [openAbout, setOpenAbout] = useState(false);
     const info = useAppSelector((state) => state.user.info);
 
+    const srollToTop = () => {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" });
+            });
+        });
+    };
+
     return (
         <>
             <SidebarGroup>
@@ -26,7 +34,13 @@ export function NavMain() {
                     <SidebarMenuItem>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <SidebarMenuButton onClick={() => navigateTo(ROUTER.HOME)} className="flex items-center overflow-hidden">
+                                <SidebarMenuButton
+                                    onClick={() => {
+                                        navigateTo(ROUTER.HOME);
+                                        srollToTop();
+                                    }}
+                                    className="flex items-center overflow-hidden"
+                                >
                                     <House className="size-4 shrink-0 " />
                                     <span className="text-sm">Home</span>
                                 </SidebarMenuButton>
@@ -45,7 +59,7 @@ export function NavMain() {
                                     <div className="p-2">
                                         <Palette className="size-4 shrink-0 " />
                                     </div>
-                                    <span className="text-sm">{`Theme`}</span>
+                                    <span className="text-sm">Theme</span>
                                     <ThemeToggleV2 className="ml-auto" />
                                 </div>
                             </TooltipTrigger>
@@ -71,17 +85,46 @@ export function NavMain() {
                     </SidebarMenuItem>
 
                     {/* setting - amin */}
-                    {info?.Roles?.id === 1 && (
+                    {info?.Roles?.id === 1 ||
+                        (info?.Roles?.id === 3 && (
+                            <SidebarMenuItem>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <SidebarMenuButton
+                                            onClick={() => {
+                                                navigateTo(ROUTER.SETTING);
+                                                srollToTop();
+                                            }}
+                                            className="flex items-center overflow-hidden"
+                                        >
+                                            <Settings className="size-4 shrink-0 " />
+                                            <span className="text-sm">Setting</span>
+                                        </SidebarMenuButton>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile}>
+                                        <p>Setting</p>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </SidebarMenuItem>
+                        ))}
+
+                    {info?.Roles?.id === 3 && (
                         <SidebarMenuItem>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <SidebarMenuButton onClick={() => navigateTo(ROUTER.SETTING)} className="flex items-center overflow-hidden">
-                                        <Settings className="size-4 shrink-0 " />
-                                        <span className="text-sm">Setting</span>
+                                    <SidebarMenuButton
+                                        onClick={() => {
+                                            navigateTo(ROUTER.SETTING_DEV);
+                                            srollToTop();
+                                        }}
+                                        className="flex items-center overflow-hidden"
+                                    >
+                                        <CodeXml className="size-4 shrink-0 " />
+                                        <span className="text-sm">Setting Dev</span>
                                     </SidebarMenuButton>
                                 </TooltipTrigger>
                                 <TooltipContent side="right" align="center" hidden={state !== "collapsed" || isMobile}>
-                                    <p>Setting</p>
+                                    <p>Setting Dev</p>
                                 </TooltipContent>
                             </Tooltip>
                         </SidebarMenuItem>

@@ -1,13 +1,14 @@
-import { clickCloseAll } from "@/javascript-string/logic-farm";
+import { clickCloseAll, TClickCloseAll } from "@/javascript-string/logic-farm";
 import { TOrderRes } from "@/types/order.type";
 import { toast } from "sonner";
 import { tryJSONparse } from "./function.helper";
 
 export type THandleCloseAll = {
     webview: Electron.WebviewTag;
+    selector: TClickCloseAll["selector"];
 };
 
-export const handleCloseAll = async ({ webview }: THandleCloseAll) => {
+export const handleCloseAll = async ({ webview, selector }: THandleCloseAll) => {
     try {
         const waitForOrder = new Promise<TOrderRes>((resolve) => {
             const handler = (event: any) => {
@@ -22,7 +23,7 @@ export const handleCloseAll = async ({ webview }: THandleCloseAll) => {
             webview.addEventListener("ipc-message", handler);
         });
 
-        const stringCloseAll = clickCloseAll();
+        const stringCloseAll = clickCloseAll({ selector });
         // console.log('Open Order string: ', stringCloseAll);
         await webview.executeJavaScript(stringCloseAll);
         const result: TOrderRes = await waitForOrder;

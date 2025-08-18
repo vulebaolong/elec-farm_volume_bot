@@ -3,15 +3,15 @@ import { taskQueueOrder } from "@/helpers/task-queue-order.helper";
 import { changedLaveragelist } from "@/helpers/white-list.helper";
 import { useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
-import { THandleEntry } from "@/types/entry.type";
 import { TSocketRoi } from "@/types/socket-roi.type";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useSocket } from "./socket.hook";
+import { THandleCloseEntry } from "@/types/entry.type";
 
 export type TUseSocketRoi = {
     webviewRef: React.RefObject<Electron.WebviewTag | null>;
-    handleCloseEntry: (payload: THandleEntry) => Promise<void>;
+    handleCloseEntry: (payload: THandleCloseEntry) => Promise<void>;
 };
 
 export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) => {
@@ -23,6 +23,7 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
     const stopLoss = useAppSelector((state) => state.user.info?.SettingUsers.stopLoss);
     const timeoutMs = useAppSelector((state) => state.user.info?.SettingUsers.timeoutMs);
     const timeoutEnabled = useAppSelector((state) => state.user.info?.SettingUsers.timeoutEnabled);
+    const uiSelector = useAppSelector((state) => state.bot.uiSelector);
 
     const latestRef = useRef({
         isStart,
@@ -32,6 +33,7 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
         stopLoss,
         timeoutMs,
         timeoutEnabled,
+        uiSelector,
         handleCloseEntry,
     });
 
@@ -44,12 +46,13 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
             stopLoss,
             timeoutMs,
             timeoutEnabled,
+            uiSelector,
             handleCloseEntry,
         };
-    }, [isStart, whitelistResetInProgress, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, handleCloseEntry]);
+    }, [isStart, whitelistResetInProgress, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, uiSelector, handleCloseEntry]);
 
     const handleRoi = useCallback(async (data: TSocketRes<TSocketRoi>) => {
-        const { isStart, whitelistResetInProgress, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, handleCloseEntry } =
+        const { isStart, whitelistResetInProgress, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, uiSelector, handleCloseEntry } =
             latestRef.current;
 
         console.log("handleRoi", {
@@ -63,6 +66,12 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
         });
 
         if (!isStart || whitelistResetInProgress || !webviewRef.current) return;
+
+        const selectorWrapperPositionBlocks = uiSelector?.find((item) => item.code === "wrapperPositionBlocks")?.selectorValue;
+        if (!selectorWrapperPositionBlocks) {
+            console.log(`Not found selector`, { selectorWrapperPositionBlocks });
+            return;
+        }
 
         if (
             takeProfit == null ||
@@ -117,12 +126,15 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
             const reason = isTP ? "🟢Profit" : isSL ? "🔴Loss" : `⏰Timeout - ${timeoutMs}`;
             const side = mode === "dual_long" ? "long" : "short";
 
-            const payload: THandleEntry = {
+            const payload: THandleCloseEntry = {
                 webview,
                 payload: {
                     size: size.toString(),
                     symbol,
                     side,
+                },
+                selector: {
+                    wrapperPositionBlocks: selectorWrapperPositionBlocks,
                 },
             };
 

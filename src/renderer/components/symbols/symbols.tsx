@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { TSocketRes } from "@/types/base.type";
 import { checkSize } from "@/helpers/function.helper";
 import { useAppSelector } from "@/redux/store";
+import { cn } from "@/lib/utils";
 
 type TProps = {
     open: boolean;
@@ -24,7 +25,7 @@ export default function Symbols({ open, onOpenChange: setOpen }: TProps) {
         if (!socket) return;
 
         const handleSymbols = (data: TSocketRes<TSymbols>) => {
-            console.log("symbols", data);
+            // console.log("symbols", data);
 
             const sortedSymbols = Object.values(data.data).sort((a, b) => a.symbol.localeCompare(b.symbol));
 
@@ -49,7 +50,6 @@ export default function Symbols({ open, onOpenChange: setOpen }: TProps) {
                         <div className="flex-1 h-auto w-full px-4 overflow-y-auto">
                             <Accordion type="multiple" className="space-y-2 w-full">
                                 {symbols.map((item) => {
-
                                     const isQualified =
                                         item.flags?.isDepth &&
                                         item.flags?.isSpreadPercent &&
@@ -60,27 +60,47 @@ export default function Symbols({ open, onOpenChange: setOpen }: TProps) {
                                         <AccordionItem
                                             key={item.symbol}
                                             value={item.symbol}
-                                            className={isQualified ? "border border-green-500 shadow-md rounded-md" : ""}
+                                            className={cn(isQualified ? "border border-green-500 shadow-md rounded-md" : "", "border-b-0")}
                                         >
                                             <AccordionTrigger className="flex justify-between items-center px-4 py-2 rounded-md border shadow-sm bg-muted">
                                                 <div className="flex items-center gap-1 text-xs font-medium">
                                                     <span>{item.symbol}</span>
                                                     <div className="flex gap-1">
                                                         <Badge
-                                                        variant={item.flags?.entryBySettingUserId?.[settingUserId]?.isLong ? "default" : "outline"}
-                                                        className={item.flags?.entryBySettingUserId?.[settingUserId]?.isLong ? "bg-green-500 text-white" : ""}
+                                                            variant={
+                                                                item.flags?.entryBySettingUserId?.[settingUserId]?.isLong ? "default" : "outline"
+                                                            }
+                                                            className={
+                                                                item.flags?.entryBySettingUserId?.[settingUserId]?.isLong
+                                                                    ? "bg-green-500 text-white"
+                                                                    : ""
+                                                            }
                                                         >
                                                             Long
                                                         </Badge>
                                                         <Badge
-                                                        variant={item.flags?.entryBySettingUserId?.[settingUserId]?.isShort ? "default" : "outline"}
-                                                        className={item.flags?.entryBySettingUserId?.[settingUserId]?.isShort ? "bg-red-500 text-white" : ""}
+                                                            variant={
+                                                                item.flags?.entryBySettingUserId?.[settingUserId]?.isShort ? "default" : "outline"
+                                                            }
+                                                            className={
+                                                                item.flags?.entryBySettingUserId?.[settingUserId]?.isShort
+                                                                    ? "bg-red-500 text-white"
+                                                                    : ""
+                                                            }
                                                         >
                                                             Short
                                                         </Badge>
                                                         <Badge variant={item.flags?.isDepth ? "default" : "outline"}>Depth</Badge>
                                                         <Badge variant={item.flags?.isSpreadPercent ? "default" : "outline"}>Spread</Badge>
-                                                        <Badge variant={checkSize(item.flags?.entryBySettingUserId?.[settingUserId]?.size) ? "default" : "outline"}>Size</Badge>
+                                                        <Badge
+                                                            variant={
+                                                                checkSize(item.flags?.entryBySettingUserId?.[settingUserId]?.size)
+                                                                    ? "default"
+                                                                    : "outline"
+                                                            }
+                                                        >
+                                                            Size
+                                                        </Badge>
                                                     </div>
                                                 </div>
                                             </AccordionTrigger>
@@ -92,7 +112,13 @@ export default function Symbols({ open, onOpenChange: setOpen }: TProps) {
 
                                                 <div className="flex items-center gap-2 text-sm">
                                                     <span className="text-sm text-muted-foreground">Size:</span>
-                                                    <Badge variant={checkSize(item.flags?.entryBySettingUserId?.[settingUserId]?.size) ? "default" : "outline"}>{item.flags?.entryBySettingUserId?.[settingUserId]?.size}</Badge>
+                                                    <Badge
+                                                        variant={
+                                                            checkSize(item.flags?.entryBySettingUserId?.[settingUserId]?.size) ? "default" : "outline"
+                                                        }
+                                                    >
+                                                        {item.flags?.entryBySettingUserId?.[settingUserId]?.size}
+                                                    </Badge>
                                                 </div>
                                                 <div className="flex items-center gap-2 text-sm">
                                                     <span className="text-sm text-muted-foreground">Spread %:</span>

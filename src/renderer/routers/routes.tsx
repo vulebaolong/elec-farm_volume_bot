@@ -10,6 +10,7 @@ import { Register } from "@/components/register/register";
 import { useEffect } from "react";
 import { useNavigate, useRoutes } from "react-router-dom";
 import Setting from "@/components/setting/setting";
+import SettingDev from "@/components/setting-dev/setting-dev";
 
 export const routes = [
     {
@@ -23,6 +24,10 @@ export const routes = [
             {
                 path: ROUTER.SETTING,
                 element: <Setting />,
+            },
+            {
+                path: ROUTER.SETTING_DEV,
+                element: <SettingDev />,
             },
         ],
     },

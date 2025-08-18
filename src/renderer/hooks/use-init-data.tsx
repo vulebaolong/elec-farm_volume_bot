@@ -5,11 +5,13 @@ import { TSettingSystemsSocket } from "@/types/setting-system.type";
 import { useEffect } from "react";
 import { useSocket } from "./socket.hook";
 import { useGetInfoMutation } from "@/api/tanstack/auth.tanstack";
+import { useGetUiSelector } from "@/api/tanstack/selector.tanstack";
 
 export const useInitData = () => {
     const socket = useSocket();
     const dispatch = useAppDispatch();
     const getInfoMoutation = useGetInfoMutation();
+    useGetUiSelector()
 
     useEffect(() => {
         if (!socket?.socket) return;

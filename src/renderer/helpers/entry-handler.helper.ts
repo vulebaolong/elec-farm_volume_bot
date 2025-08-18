@@ -1,11 +1,11 @@
 import { closeOrder, openOrder, TOpenOrder } from "@/javascript-string/logic-farm";
-import { THandleEntry } from "@/types/entry.type";
+import { TRespnoseGate } from "@/types/base.type";
+import { THandleCloseEntry, THandleOpenEntry } from "@/types/entry.type";
 import { TOrderRes } from "@/types/order.type";
 import { tryJSONparse } from "./function.helper";
 import { cancelAndRemoveTask_QueueOrder } from "./task-queue-order.helper";
-import { TRespnoseGate } from "@/types/base.type";
 
-export const handleOpenEntry = async ({ webview, payload }: THandleEntry) => {
+export const handleOpenEntry = async ({ webview, payload, selector }: THandleOpenEntry) => {
     try {
         const waitForOrder = new Promise((resolve: (value: TRespnoseGate<any>) => void) => {
             const handler = (event: any) => {
@@ -23,6 +23,7 @@ export const handleOpenEntry = async ({ webview, payload }: THandleEntry) => {
         const payloadForOpenOrder: TOpenOrder = {
             symbol: payload.symbol,
             size: payload.side === "long" ? payload.size : `-${payload.size}`,
+            selector: selector,
         };
 
         const stringOrder = openOrder(payloadForOpenOrder);
@@ -38,7 +39,7 @@ export const handleOpenEntry = async ({ webview, payload }: THandleEntry) => {
     }
 };
 
-export const handleCloseEntry = async ({ webview, payload, flag }: THandleEntry) => {
+export const handleCloseEntry = async ({ webview, payload, flag, selector }: THandleCloseEntry) => {
     try {
         const waitForOrder = new Promise((resolve: (value: TRespnoseGate<any>) => void) => {
             const handler = (event: any) => {
@@ -56,6 +57,7 @@ export const handleCloseEntry = async ({ webview, payload, flag }: THandleEntry)
         const stringOrder = closeOrder({
             symbol: payload.symbol,
             side: payload.side,
+            selector,
         });
 
         // console.log('Close Order string: ', stringOrder);

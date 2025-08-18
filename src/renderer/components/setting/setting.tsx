@@ -7,7 +7,6 @@ export default function setting() {
     return (
         <div>
             <PageTitle title="Setting" icon={Settings} size="md" />
-            <ScrollOnMount offset={80} />
 
             <div className="flex gap-5 w-full p-5">
                 <SettingAdminUser type="admin" />

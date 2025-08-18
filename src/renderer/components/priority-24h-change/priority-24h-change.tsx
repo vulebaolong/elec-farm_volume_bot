@@ -44,13 +44,15 @@ export default function Priority24hChange() {
 
     // 3) render: chỉ đọc từ query data
     return (
-        <WhitelistSentiment
-            isLoading={getPriority24Change.isLoading}
-            green={getPriority24Change.data?.countGreen ?? 0}
-            red={getPriority24Change.data?.countRed ?? 0}
-            total={getPriority24Change.data?.countTotalWhiteList ?? 0}
-            thresholdLong={max24hChangeGreen}
-            thresholdShort={max24hChangeRed}
-        />
+        <div className="px-5">
+            <WhitelistSentiment
+                isLoading={getPriority24Change.isLoading}
+                green={getPriority24Change.data?.countGreen ?? 0}
+                red={getPriority24Change.data?.countRed ?? 0}
+                total={getPriority24Change.data?.countTotalWhiteList ?? 0}
+                thresholdLong={max24hChangeGreen}
+                thresholdShort={max24hChangeRed}
+            />
+        </div>
     );
 }

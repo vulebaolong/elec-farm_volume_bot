@@ -1,9 +1,18 @@
+import { TCloseOrder, TOpenOrder } from "@/javascript-string/logic-farm";
 import { TSide } from "./base.type";
 
-export type THandleEntry = {
+export type THandleOpenEntry = {
     webview: Electron.WebviewTag;
     payload: TPayloadClickOpenEntry;
     flag?: string
+    selector: TOpenOrder["selector"];
+};
+
+export type THandleCloseEntry = {
+    webview: Electron.WebviewTag;
+    payload: TPayloadClickOpenEntry;
+    flag?: string
+    selector: TCloseOrder["selector"];
 };
 
 export type TPayloadClickOpenEntry = {

@@ -49,7 +49,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
     const form = useForm<z.infer<typeof FormSchema>>({
         resolver: zodResolver(FormSchema),
         defaultValues: {
-            email: IS_PRODUCTION ? `` : `admin@gmail.com`,
+            email: IS_PRODUCTION ? `` : `admin-dev@gmail.com`,
             password: IS_PRODUCTION ? `` : `Admin@123`,
         },
     });

@@ -47,4 +47,8 @@ export const ENDPOINT = {
     PRIORITY_24h_CHANGE: {
         GET_PRIORITY_24h_CHANGE: "priority-24h-change",
     },
+    UI_SELECTOR: {
+        GET_UI_SELECTOR: "ui-selector",
+        UPSERT_UI_SELECTOR: "ui-selector/upsert",
+    },
 };

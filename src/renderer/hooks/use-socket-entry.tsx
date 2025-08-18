@@ -4,19 +4,19 @@ import { addTaskTo_QueueOrder, Task_QueueOrder, taskQueueOrder } from "@/helpers
 
 import { changeLeverageHandler } from "@/helpers/change-leverage-handler.helper";
 import { checkSize } from "@/helpers/function.helper";
+import { pickSideByPriority } from "@/helpers/priority-24h-change-handle";
 import { useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
-import { THandleEntry } from "@/types/entry.type";
+import { TPriority } from "@/types/priority-change.type";
 import { SymbolState } from "@/types/symbol.type";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useSocket } from "./socket.hook";
-import { pickSideByPriority } from "@/helpers/priority-24h-change-handle";
-import { TPriority } from "@/types/priority-change.type";
+import { THandleOpenEntry } from "@/types/entry.type";
 
 export type TUseWebSocketHandler = {
     webviewRef: React.RefObject<Electron.WebviewTag | null>;
-    handleOpenEntry: (payload: THandleEntry) => Promise<void>;
+    handleOpenEntry: (payload: THandleOpenEntry) => Promise<void>;
 };
 
 export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSocketHandler) => {
@@ -27,6 +27,7 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
     const settingSystem = useAppSelector((state) => state.bot.settingSystem);
     const SettingUsers = useAppSelector((state) => state.user.info?.SettingUsers);
     const priority = useAppSelector((state) => state.bot.priority);
+    const uiSelector = useAppSelector((state) => state.bot.uiSelector);
 
     const latestRef = useRef({
         isStart,
@@ -35,6 +36,7 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
         SettingUsers,
         webviewRef,
         priority,
+        uiSelector,
         handleOpenEntry,
     });
 
@@ -46,16 +48,24 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
             SettingUsers,
             webviewRef,
             priority,
+            uiSelector,
             handleOpenEntry,
         };
-    }, [isStart, webviewRef, settingSystem, SettingUsers, whitelistResetInProgress, priority, handleOpenEntry]);
+    }, [isStart, webviewRef, settingSystem, SettingUsers, whitelistResetInProgress, priority, uiSelector, handleOpenEntry]);
 
     const handleEntry = useCallback(async ({ data }: TSocketRes<SymbolState[]>) => {
         // console.log({ handleEntry: data });
 
-        const { isStart, webviewRef, SettingUsers, whitelistResetInProgress, priority, handleOpenEntry } = latestRef.current;
+        const { isStart, webviewRef, SettingUsers, whitelistResetInProgress, priority, uiSelector, handleOpenEntry } = latestRef.current;
         if (!isStart || whitelistResetInProgress || !webviewRef.current || !SettingUsers) {
             console.log({ isStart, whitelistResetInProgress, webviewRef, SettingUsers });
+            return;
+        }
+
+        const selectorInputAmount = uiSelector?.find((item) => item.code === "inputAmount")?.selectorValue;
+        const selectorButtonLong = uiSelector?.find((item) => item.code === "buttonLong")?.selectorValue;
+        if (!selectorInputAmount || !selectorButtonLong) {
+            console.log(`Not found selector`, { selectorInputAmount, selectorButtonLong });
             return;
         }
 
@@ -76,7 +86,6 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
             const side = pickSideByPriority(isLong, isShort, priority as TPriority);
             if (!side) {
                 // không phù hợp priority -> bỏ
-                console.log(`Can't find side for ${symbol}: `, side);
                 continue;
             }
 
@@ -114,7 +123,14 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
                 resultPosition: null,
                 handle: async (task: Task_QueueOrder) => {
                     const { side, symbol, delay, size } = task;
-                    const payload: THandleEntry = { webview, payload: { side, symbol, size } };
+                    const payload: THandleOpenEntry = {
+                        webview,
+                        payload: { side, symbol, size },
+                        selector: {
+                            inputAmount: selectorInputAmount,
+                            buttonLong: selectorButtonLong,
+                        },
+                    };
                     await handleOpenEntry(payload)
                         .then(() => {
                             const status = `Open Postion`;

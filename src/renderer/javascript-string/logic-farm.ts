@@ -62,6 +62,10 @@ export const setLocalStorageScript = `
 export type TOpenOrder = {
     symbol: string;
     size: string;
+    selector: {
+        inputAmount: string;
+        buttonLong: string;
+    };
 };
 export const openOrder = (payload: TOpenOrder) => {
     return `
@@ -70,7 +74,7 @@ window.state = Object.assign(window.state || {}, {...window.state, symbol: '${pa
 
 (async () => {
   try {
-      const input = document.querySelector('#order-position');
+      const input = document.querySelector('${payload.selector.inputAmount}');
       if (!input) throw new Error('Input not found');
 
       input.focus();
@@ -89,7 +93,7 @@ window.state = Object.assign(window.state || {}, {...window.state, symbol: '${pa
       log.push({ message: 'Input value', data: input.value });
       console.info({ message: 'Input value', data: input.value });
 
-      const btn = document.querySelector('#buyButton');
+      const btn = document.querySelector('${payload.selector.buttonLong}');
       if (!btn) {
         console.info({ message: 'Buy button not found', data: null });
         throw new Error('Buy button not found');
@@ -100,7 +104,7 @@ window.state = Object.assign(window.state || {}, {...window.state, symbol: '${pa
       log.push({ message: 'Buy button clicked', data: null });
 
       return log;
-  } catch (e) {
+  } catch (err) {
       console.info('⚠️ openOrder script error:', err.message || err);
       throw err;
   }
@@ -111,6 +115,9 @@ window.state = Object.assign(window.state || {}, {...window.state, symbol: '${pa
 export type TCloseOrder = {
     symbol: string;
     side: TSide;
+    selector: {
+        wrapperPositionBlocks: string;
+    };
 };
 export const closeOrder = (payload: TCloseOrder) => {
     return `
@@ -119,7 +126,7 @@ export const closeOrder = (payload: TCloseOrder) => {
       const matchSide = '${payload.side}' === 'long' ? 'Long' : 'Short';
       const expectedSymbol = '${payload.symbol}'.replace('_', '');
 
-      const wrapper = document.querySelector("div.tr-px-4.tr-pb-4.table-scroll-window");
+      const wrapper = document.querySelector("${payload.selector.wrapperPositionBlocks}");
       if (!wrapper) throw new Error('Wrapper not found');
 
       const positionBlocks = Array.from(wrapper.children);
@@ -170,11 +177,16 @@ try {
 `;
 };
 
-export const clickCloseAll = () => {
+export type TClickCloseAll = {
+    selector: {
+        buttonCloseAll: string;
+    };
+};
+export const clickCloseAll = ({ selector }: TClickCloseAll) => {
     return `
 (async () => {
   try {
-    const btn = document.querySelector('button[data-collect-params*="close_all"]');
+    const btn = document.querySelector('${selector.buttonCloseAll}');
     if (!btn) throw new Error('❌ Close All button not found');
 
     btn.click();

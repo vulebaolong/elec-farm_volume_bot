@@ -5,11 +5,11 @@ import { analyzePositions, tryJSONparse } from "@/helpers/function.helper";
 import { useWebSocketHandler } from "@/hooks/use-socket-entry";
 import { useSocketRoi } from "@/hooks/use-socket-roi";
 import { TSaveAccountReq } from "@/types/account.type";
-import { useEffect, useRef, useState } from "react";
-import ButtonStartStop from "./button-start-stop/button-start-stop";
-import { PageTitle } from "../title-page/title-page";
 import { BotIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import Priority24hChange from "../priority-24h-change/priority-24h-change";
+import { PageTitle } from "../title-page/title-page";
+import Controll from "./controll";
 
 export default function Bot() {
     const [isReady, setIsReady] = useState(false);
@@ -95,17 +95,17 @@ export default function Bot() {
         <div className="">
             <PageTitle title="Bot" icon={BotIcon} size="md" />
 
-            <div className="flex flex-col gap-4 h-full p-2 pb-10 ">
-                <div className="flex items-center gap-2">
-                    <ButtonStartStop isReady={isReady} webviewRef={webviewRef} />
-                </div>
+            <div className="flex flex-col gap-5 h-full pb-10">
+                <Controll isReady={isReady} webviewRef={webviewRef} />
 
                 <Priority24hChange />
 
-                <div className="p-1 h-full border border-border shadow-lg rounded-2xl aspect-[6/5]">
-                    <div className="flex-1 overflow-auto rounded-2xl w-full h-full">
-                        <div className="min-w-[1280px] h-full">
-                            {wvPreload && <Webview webviewRef={webviewRef} setIsReady={setIsReady} wvPreload={wvPreload} />}
+                <div className="px-5">
+                    <div className="p-1 h-full border border-border shadow-lg rounded-2xl">
+                        <div className="flex-1 overflow-auto rounded-2xl w-full h-full">
+                            <div className="min-w-[1280px] h-full aspect-[6/5]">
+                                {wvPreload && <Webview webviewRef={webviewRef} setIsReady={setIsReady} wvPreload={wvPreload} />}
+                            </div>
                         </div>
                     </div>
                 </div>
