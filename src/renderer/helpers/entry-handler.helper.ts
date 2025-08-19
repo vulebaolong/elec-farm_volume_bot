@@ -1,11 +1,11 @@
-import { closeOrder, openOrder, TOpenOrder } from "@/javascript-string/logic-farm";
+import { closeOrder, openOrder, openOrderPostOnly, TOpenOrder, TOpenOrderPostOnly } from "@/javascript-string/logic-farm";
 import { TRespnoseGate } from "@/types/base.type";
-import { THandleCloseEntry, THandleOpenEntry } from "@/types/entry.type";
+import { THandleCloseEntry, THandleOpenEntry, THandleOpenPostOnlyEntry } from "@/types/entry.type";
 import { TOrderRes } from "@/types/order.type";
 import { tryJSONparse } from "./function.helper";
 import { cancelAndRemoveTask_QueueOrder } from "./task-queue-order.helper";
 
-export const handleOpenEntry = async ({ webview, payload, selector }: THandleOpenEntry) => {
+export const handleOpenEntry = async ({ webview, payload, selector }: THandleOpenPostOnlyEntry) => {
     try {
         const waitForOrder = new Promise((resolve: (value: TRespnoseGate<any>) => void) => {
             const handler = (event: any) => {
@@ -20,13 +20,29 @@ export const handleOpenEntry = async ({ webview, payload, selector }: THandleOpe
             webview.addEventListener("ipc-message", handler);
         });
 
-        const payloadForOpenOrder: TOpenOrder = {
+        // const payloadForOpenOrder: TOpenOrder = {
+        //     symbol: payload.symbol,
+        //     size: payload.side === "long" ? payload.size : `-${payload.size}`,
+        //     selector: selector,
+        // };
+
+        // const stringOrder = openOrder(payloadForOpenOrder);
+
+        const payloadForOpenOrder: TOpenOrderPostOnly = {
             symbol: payload.symbol,
-            size: payload.side === "long" ? payload.size : `-${payload.size}`,
-            selector: selector,
+            size: payload.size,
+            price: payload.price,
+            reduce_only: payload.reduce_only,
+            selector: {
+                buttonLong: selector.buttonLong,
+                inputPrice: selector.inputPrice,
+                inputPosition: selector.inputPosition,
+            },
         };
 
-        const stringOrder = openOrder(payloadForOpenOrder);
+        console.log("payloadForOpenOrder: ", payloadForOpenOrder);
+
+        const stringOrder = openOrderPostOnly(payloadForOpenOrder);
         // console.log('Open Order string: ', stringOrder);
         await webview.executeJavaScript(stringOrder);
         const result: TOrderRes = await waitForOrder;

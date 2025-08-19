@@ -1,10 +1,11 @@
 import { TSide } from "@/types/base.type";
 import { TPayloadLeverage } from "@/types/leverage.type";
 
+// "future-order-type-usdt": "market",
 export const setLocalStorageScript = `
 (function () {
   const desiredSettings = {
-    "future-order-type-usdt": "market",
+    "future-order-type-usdt": "prolimit",
     "similar.introduction": "false",
     "f-usdt-unit-type-pro": "unit",
     "future_no_noty_all_orders": "false",
@@ -112,19 +113,112 @@ window.state = Object.assign(window.state || {}, {...window.state, symbol: '${pa
 `;
 };
 
+export type TOpenOrderPostOnly = {
+    symbol: string;
+    price: string; // giá đã làm tròn đúng tick
+    size: string; // số lượng/amount
+    reduce_only: boolean;
+    selector: {
+        inputPrice: string;
+        inputPosition: string;
+        buttonLong: string;
+    };
+};
+
+export const openOrderPostOnly = (payload: TOpenOrderPostOnly) => {
+    return `
+window.log = [];
+window.state = Object.assign(window.state || {}, {
+  ...window.state,
+  symbol: ${JSON.stringify(payload.symbol)},
+  pricePayload: '${payload.price}',
+  size: JSON.stringify(${payload.size}),
+  reduce_only: ${payload.reduce_only},
+});
+
+(async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  // hàm set value an toàn cho input controlled (React/Vue)
+  const setValue = (el, value) => {
+    const proto = Object.getPrototypeOf(el);
+    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+    const setter = desc && desc.set;
+    if (setter) setter.call(el, value);
+    else el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  try {
+    const inputPrice = document.querySelector(${JSON.stringify(payload.selector.inputPrice)});
+    if (!inputPrice) throw new Error('inputPrice not found');
+
+    const inputPosition = document.querySelector(${JSON.stringify(payload.selector.inputPosition)});
+    if (!inputPosition) throw new Error('inputPosition not found');
+
+    const btn = document.querySelector(${JSON.stringify(payload.selector.buttonLong)});
+    if (!btn) throw new Error('Buy button not found');
+
+    // --- set PRICE ---
+    inputPrice.focus();
+    // clear
+    setValue(inputPrice, '');
+    // set price
+    setValue(inputPrice, window.state.price);
+    log.push({ message: 'Set inputPrice value', data: window.state.price });
+    console.info({ message: 'Set inputPrice value', data: window.state.price });
+
+    await sleep(10);
+
+    // --- set AMOUNT/POSITION ---
+    inputPosition.focus();
+    // clear
+    setValue(inputPosition, '');
+    // set amount
+    setValue(inputPosition, window.state.amount);
+    log.push({ message: 'Set inputPosition value', data: window.state.amount });
+    console.info({ message: 'Set inputPosition value', data: window.state.amount });
+
+    await sleep(10);
+
+    // --- click BUY ---
+    btn.removeAttribute('disabled');
+    btn.click();
+    log.push({ message: 'Buy button clicked', data: null });
+
+    return log;
+  } catch (err) {
+    console.info('⚠️ openOrder script error:', err?.message || err);
+    throw err;
+  }
+})();
+`;
+};
+
 export type TCloseOrder = {
     symbol: string;
     side: TSide;
     selector: {
         wrapperPositionBlocks: string;
+        buttonTabPosition: string;
     };
 };
 export const closeOrder = (payload: TCloseOrder) => {
     return `
 (async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
   try {
       const matchSide = '${payload.side}' === 'long' ? 'Long' : 'Short';
       const expectedSymbol = '${payload.symbol}'.replace('_', '');
+
+      const buttonTabPosition = document.querySelector("${payload.selector.buttonTabPosition}");
+      if (!buttonTabPosition) throw new Error('buttonTabPosition not found');
+
+      buttonTabPosition.click();
+
+      await sleep(100);
 
       const wrapper = document.querySelector("${payload.selector.wrapperPositionBlocks}");
       if (!wrapper) throw new Error('Wrapper not found');

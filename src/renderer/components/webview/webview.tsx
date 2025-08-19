@@ -9,22 +9,22 @@ type TProps = {
 
 export default function Webview({ setIsReady, webviewRef, wvPreload }: TProps) {
     // open dev tools
-    // useEffect(() => {
-    //     const webview = webviewRef.current;
-    //     if (!webview) return;
+    useEffect(() => {
+        const webview = webviewRef.current;
+        if (!webview) return;
 
-    //     const handleDomReady = async () => {
-    //         try {
-    //             webview.openDevTools();
-    //         } catch {}
-    //     };
+        const handleDomReady = async () => {
+            try {
+                webview.openDevTools();
+            } catch {}
+        };
 
-    //     webview.addEventListener("dom-ready", handleDomReady);
+        webview.addEventListener("dom-ready", handleDomReady);
 
-    //     return () => {
-    //         webview.removeEventListener("dom-ready", handleDomReady);
-    //     };
-    // }, []);
+        return () => {
+            webview.removeEventListener("dom-ready", handleDomReady);
+        };
+    }, []);
 
     useEffect(() => {
         const webview = webviewRef.current;

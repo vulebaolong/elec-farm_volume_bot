@@ -3,20 +3,22 @@ import { MAX_DELAY, MIN_DELAY } from "@/constant/app.constant";
 import { addTaskTo_QueueOrder, Task_QueueOrder, taskQueueOrder } from "@/helpers/task-queue-order.helper";
 
 import { changeLeverageHandler } from "@/helpers/change-leverage-handler.helper";
-import { checkSize } from "@/helpers/function.helper";
+import { checkSize, computePostOnlyPrice } from "@/helpers/function.helper";
+import { closeOrderMap, openOrderMap } from "@/helpers/order-map";
 import { pickSideByPriority } from "@/helpers/priority-24h-change-handle";
 import { useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
+import { THandleOpenPostOnlyEntry } from "@/types/entry.type";
 import { TPriority } from "@/types/priority-change.type";
 import { SymbolState } from "@/types/symbol.type";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useSocket } from "./socket.hook";
-import { THandleOpenEntry } from "@/types/entry.type";
 
 export type TUseWebSocketHandler = {
     webviewRef: React.RefObject<Electron.WebviewTag | null>;
-    handleOpenEntry: (payload: THandleOpenEntry) => Promise<void>;
+    // handleOpenEntry: (payload: THandleOpenEntry) => Promise<void>;
+    handleOpenEntry: (payload: THandleOpenPostOnlyEntry) => Promise<void>;
 };
 
 export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSocketHandler) => {
@@ -54,18 +56,19 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
     }, [isStart, webviewRef, settingSystem, SettingUsers, whitelistResetInProgress, priority, uiSelector, handleOpenEntry]);
 
     const handleEntry = useCallback(async ({ data }: TSocketRes<SymbolState[]>) => {
-        // console.log({ handleEntry: data });
+        console.log({ handleEntry: data, taskQueueOrder, openOrderMap, closeOrderMap });
 
         const { isStart, webviewRef, SettingUsers, whitelistResetInProgress, priority, uiSelector, handleOpenEntry } = latestRef.current;
         if (!isStart || whitelistResetInProgress || !webviewRef.current || !SettingUsers) {
-            console.log({ isStart, whitelistResetInProgress, webviewRef, SettingUsers });
+            console.log(`Input Invalid`, { isStart, whitelistResetInProgress, webviewRef, SettingUsers });
             return;
         }
 
-        const selectorInputAmount = uiSelector?.find((item) => item.code === "inputAmount")?.selectorValue;
+        const selectorInputPosition = uiSelector?.find((item) => item.code === "inputPosition")?.selectorValue;
+        const selectorInputPrice = uiSelector?.find((item) => item.code === "inputPrice")?.selectorValue;
         const selectorButtonLong = uiSelector?.find((item) => item.code === "buttonLong")?.selectorValue;
-        if (!selectorInputAmount || !selectorButtonLong) {
-            console.log(`Not found selector`, { selectorInputAmount, selectorButtonLong });
+        if (!selectorInputPosition || !selectorButtonLong || !selectorInputPrice) {
+            console.log(`Not found selector`, { selectorInputPosition, selectorButtonLong, selectorInputPrice });
             return;
         }
 
@@ -107,10 +110,7 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
 
             // Đổi leverage trước khi vào lệnh
             const ok = await changeLeverageHandler({ symbol, leverageNumber, webview });
-            if (!ok) {
-                console.log(`Can't change leverage for ${symbol}`);
-                continue;
-            }
+            if (!ok) continue;
 
             const delay = Math.floor(Math.random() * (MAX_DELAY - MIN_DELAY + 1)) + MIN_DELAY;
 
@@ -123,11 +123,29 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
                 resultPosition: null,
                 handle: async (task: Task_QueueOrder) => {
                     const { side, symbol, delay, size } = task;
-                    const payload: THandleOpenEntry = {
+
+                    const priceStr = computePostOnlyPrice(side, item, 1);
+
+                    console.log({
+                        symbol,
+                        askBest: item.askBest,
+                        bidBest: item.bidBest,
+                        orderPriceRound: item.orderPriceRound,
+                        price: priceStr,
+                    });
+
+                    const payload: THandleOpenPostOnlyEntry = {
                         webview,
-                        payload: { side, symbol, size },
+                        payload: {
+                            side,
+                            symbol,
+                            size: side === "long" ? size : `-${size}`,
+                            price: priceStr,
+                            reduce_only: false,
+                        },
                         selector: {
-                            inputAmount: selectorInputAmount,
+                            inputPosition: selectorInputPosition,
+                            inputPrice: selectorInputPrice,
                             buttonLong: selectorButtonLong,
                         },
                     };
@@ -139,6 +157,7 @@ export const useWebSocketHandler = ({ webviewRef, handleOpenEntry }: TUseWebSock
                             });
                         })
                         .catch((err) => {
+                            console.log({ err });
                             const status = `Open Postion`;
                             toast.error(`[ERROR] ${status}`, {
                                 description: <DescriptionOpenEntry symbol={task.symbol} size={size} delay={task.delay} side={task.side} />,

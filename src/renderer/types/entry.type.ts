@@ -1,4 +1,4 @@
-import { TCloseOrder, TOpenOrder } from "@/javascript-string/logic-farm";
+import { TCloseOrder, TOpenOrder, TOpenOrderPostOnly } from "@/javascript-string/logic-farm";
 import { TSide } from "./base.type";
 
 export type THandleOpenEntry = {
@@ -6,6 +6,13 @@ export type THandleOpenEntry = {
     payload: TPayloadClickOpenEntry;
     flag?: string
     selector: TOpenOrder["selector"];
+};
+
+export type THandleOpenPostOnlyEntry = {
+    webview: Electron.WebviewTag;
+    payload: TPayloadClickOpenPostOnlyEntry;
+    flag?: string
+    selector: TOpenOrderPostOnly["selector"];
 };
 
 export type THandleCloseEntry = {
@@ -19,6 +26,14 @@ export type TPayloadClickOpenEntry = {
     symbol: string;
     size: string;
     side: TSide;
+};
+
+export type TPayloadClickOpenPostOnlyEntry = {
+    symbol: string;
+    size: string;
+    side: TSide;
+    price: string;
+    reduce_only: boolean
 };
 
 export type TSocketEntry = {

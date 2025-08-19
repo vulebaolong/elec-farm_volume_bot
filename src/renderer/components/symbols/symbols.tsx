@@ -17,31 +17,12 @@ type TProps = {
 };
 
 export default function Symbols({ open, onOpenChange: setOpen }: TProps) {
-    const socket = useSocket();
-    const [symbols, setSymbols] = useState<SymbolState[]>([]);
     const settingUserId = useAppSelector((state) => state.user.info?.SettingUsers.id);
-
-    useEffect(() => {
-        if (!socket) return;
-
-        const handleSymbols = (data: TSocketRes<TSymbols>) => {
-            // console.log("symbols", data);
-
-            const sortedSymbols = Object.values(data.data).sort((a, b) => a.symbol.localeCompare(b.symbol));
-
-            setSymbols(sortedSymbols);
-        };
-
-        socket.socket?.on("symbols", handleSymbols);
-
-        return () => {
-            socket.socket?.off("symbols", handleSymbols);
-        };
-    }, [socket]);
+    const symbolsState = useAppSelector((state) => state.bot.symbolsState);
 
     return (
         <>
-            {settingUserId && (
+            {settingUserId && symbolsState && (
                 <Sheet open={open} onOpenChange={setOpen}>
                     <SheetContent className="w-[500px] !max-w-full gap-0">
                         <SheetHeader>
@@ -49,7 +30,7 @@ export default function Symbols({ open, onOpenChange: setOpen }: TProps) {
                         </SheetHeader>
                         <div className="flex-1 h-auto w-full px-4 overflow-y-auto">
                             <Accordion type="multiple" className="space-y-2 w-full">
-                                {symbols.map((item) => {
+                                {symbolsState.map((item) => {
                                     const isQualified =
                                         item.flags?.isDepth &&
                                         item.flags?.isSpreadPercent &&
@@ -128,11 +109,11 @@ export default function Symbols({ open, onOpenChange: setOpen }: TProps) {
                                                 </div>
                                                 <div className="flex items-center gap-2 text-sm">
                                                     <span className="text-sm text-muted-foreground">Bid USD:</span>
-                                                    <Badge variant={"outline"}>{item.bidUSD}</Badge>
+                                                    <Badge variant={"outline"}>{item.bidSumDepth}</Badge>
                                                 </div>
                                                 <div className="flex items-center gap-2 text-sm">
                                                     <span className="text-sm text-muted-foreground">Ask USD:</span>
-                                                    <Badge variant={"outline"}>{item.askUSD}</Badge>
+                                                    <Badge variant={"outline"}>{item.askSumDepth}</Badge>
                                                 </div>
                                                 <div className="flex items-center gap-2 text-sm">
                                                     <span className="text-sm text-muted-foreground">Imbalance Bid:</span>

@@ -1,5 +1,4 @@
 import { TPosition } from "@/types/position.type";
-import { addTaskTo_QueueOrder, taskQueueOrder } from "./task-queue-order.helper";
 
 export const resError = (error: any, defaultMes: string) => {
     const mes = error?.response?.data?.message;
@@ -21,76 +20,6 @@ export const tryJSONparse = (string: string) => {
     }
 };
 
-export const analyzePositions = (positions: TPosition[]) => {
-    // 1) Lọc position đang mở (size != 0)
-    const openPositionsList = positions.filter((pos) => Number(pos.size) !== 0);
-
-    // Nếu không có position mở: clear hết queue và thoát
-    if (openPositionsList.length === 0) {
-        if (taskQueueOrder.size > 0) {
-            taskQueueOrder.clear();
-        }
-        return;
-    }
-
-    // 2) Tạo set các symbol từ positions mở (để dùng xoá task thừa)
-    const openSymbols = new Set<string>();
-
-    // 3) Update/Create task tương ứng cho từng position đang mở
-    for (const pos of openPositionsList) {
-        const symbol = pos.contract.replace("/", "_");
-        openSymbols.add(symbol);
-
-        const taskExisted = taskQueueOrder.get(symbol);
-        if (taskExisted) {
-            // Update in-place: rẻ hơn tạo mới
-            taskExisted.resultPosition = pos;
-        } else {
-            // Khi mới mở app mà có lệnh treo từ trước -> tạo queue đồng bộ
-            addTaskTo_QueueOrder(symbol, {
-                createdAt: Date.now(),
-                symbol,
-                side: pos.mode === "dual_long" ? "long" : "short",
-                size: pos.size.toString(),
-                delay: 0,
-                resultPosition: pos,
-                handle: async () => {},
-            });
-        }
-    }
-
-    // 4) Xoá task nào KHÔNG còn trong danh sách position mở
-    //    (tránh memory leak, giữ queue “sạch”)
-    for (const key of taskQueueOrder.keys()) {
-        if (!openSymbols.has(key)) {
-            taskQueueOrder.delete(key);
-        }
-    }
-
-    // openPositionsList.forEach((pos) => {
-    //     const symbol = pos.contract.replace("/", "_");
-
-    //     const task = taskQueueOrder.get(symbol);
-    //     if (task) {
-    //         task.resultPosition = pos;
-    //     } else {
-    //         /**
-    //          * - khi mới mở ứng dụng mà vẫn còn đang có lệnh treo
-    //          * - thì tạo mới queue để đồng bộ
-    //          */
-    //         addTaskTo_QueueOrder(symbol, {
-    //             createdAt: Date.now(),
-    //             symbol,
-    //             side: pos.mode === "dual_long" ? "long" : "short",
-    //             size: pos.size.toString(),
-    //             delay: 0,
-    //             resultPosition: pos,
-    //             handle: async () => {},
-    //         });
-    //     }
-    // });
-};
-
 export const wait = (miliseconds: number) => {
     return new Promise(function (resolve) {
         setTimeout(resolve, miliseconds);
@@ -107,4 +36,60 @@ export function checkSize(size: string | null | undefined): boolean {
         return false;
     }
     return true; // Ngược lại thì hợp lệ
+}
+
+// tickInfo: lấy số chữ số thập phân & scale từ tick (hỗ trợ cả "1e-6")
+export const getTickInfo = (tick: number) => {
+    const s = String(tick);
+    let dec = 0;
+    if (s.includes("e-")) dec = Number(s.split("e-")[1]);
+    else {
+        const i = s.indexOf(".");
+        dec = i >= 0 ? s.length - i - 1 : 0;
+    }
+    const scale = 10 ** dec;
+    return { dec, scale };
+};
+
+// chuyển giá <-> tick (số nguyên)
+export const toTicks = (price: number, scale: number) => Math.round(price * scale);
+export const fromTicks = (ticks: number, scale: number, dec: number) => (ticks / scale).toFixed(dec); // trả về string chuẩn (không 1e-8)
+
+type Side = "long" | "short";
+
+export function computePostOnlyPrice(
+    side: Side,
+    item: { askBest: number; bidBest: number; orderPriceRound: number },
+    k = 5, // số tick muốn lệch
+) {
+    const { dec, scale } = getTickInfo(item.orderPriceRound);
+    const askTicks = toTicks(item.askBest, scale);
+    const bidTicks = toTicks(item.bidBest, scale);
+
+    // vì tick * scale = 1 tick = 1 đơn vị
+    let priceTicks = side === "long" ? askTicks - k : bidTicks + k;
+
+    // đảm bảo điều kiện Post Only tại thời điểm tính
+    if (side === "long" && priceTicks >= askTicks) priceTicks = askTicks - 1;
+    if (side === "short" && priceTicks <= bidTicks) priceTicks = bidTicks + 1;
+
+    return fromTicks(priceTicks, scale, dec); // string đã format đúng tick
+}
+
+export const toUnderscore = (s: string) => s.replace("/", "_");
+export const toSymbolKey = (pos: TPosition) => toUnderscore(pos.contract);
+
+function decimalsFromTick(tick: number) {
+    const s = String(tick);
+    if (s.includes("e-")) return Number(s.split("e-")[1]);
+    const i = s.indexOf(".");
+    return i >= 0 ? s.length - i - 1 : 0;
+}
+
+export function tpPrice(entry: number, tpPercent: number, side: "long" | "short", tick: number): string {
+    const factor = side === "long" ? 1 + tpPercent : 1 - tpPercent;
+    const raw = entry * factor;
+    const dec = decimalsFromTick(tick);
+    const rounded = Math.round(raw / tick) * tick;
+    return rounded.toFixed(dec); // trả về chuỗi đúng tick
 }

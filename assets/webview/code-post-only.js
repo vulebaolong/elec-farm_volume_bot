@@ -1,33 +1,3 @@
-// ---- Guard: tránh chạy 2 lần (do HMR hay render lại webview) ----
-if (!globalThis.__WV_PRELOAD_RAN__) {
-    Object.defineProperty(globalThis, "__WV_PRELOAD_RAN__", {
-        value: true,
-        configurable: false,
-        writable: false,
-        enumerable: false,
-    });
-}
-
-(() => {
-    const { ipcRenderer, webFrame } = require("electron");
-
-    // Helper: gửi về host (renderer chứa <webview>)
-    const sendToHost = (channel, data) => {
-        try {
-            ipcRenderer.sendToHost(channel, data);
-        } catch {}
-    };
-
-    // 1) Preload (isolated world) lắng nghe sự kiện từ MAIN WORLD
-    window.addEventListener("__WV_API__", (e) => {
-        // e.detail là payload do code bên main world gửi sang
-        sendToHost("api-response", e.detail);
-    });
-
-    // 2) Code sẽ được inject vào MAIN WORLD (worldId = 0)
-    //    - Patch XHR + fetch
-    //    - Gửi dữ liệu về preload qua CustomEvent('__WV_API__')
-    const code = `
 window.state = {
     amount: "1",
     price: "1",
@@ -225,16 +195,4 @@ window.log = [];
     }
 
     relay({ type: "ready", href: location.href, ts: Date.now() });
-})();
-`;
-
-    // 3) Thực thi code ở MAIN WORLD
-    webFrame.executeJavaScriptInIsolatedWorld(0, [{ code }]);
-
-    // 4) Ping từ preload để biết preload đã chạy
-    sendToHost("wv-ready", {
-        from: "preload",
-        href: location.href,
-        ts: Date.now(),
-    });
 })();

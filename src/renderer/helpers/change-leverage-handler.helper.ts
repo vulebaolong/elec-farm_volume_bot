@@ -11,6 +11,7 @@ type TChangeLeverageHandler = {
 };
 
 export const changeLeverageHandler = async ({ symbol, leverageNumber, webview }: TChangeLeverageHandler): Promise<boolean> => {
+    // console.log(`changedLaveragelist: ${symbol}`, changedLaveragelist, changedLaveragelist.has(symbol));
     if (!changedLaveragelist.has(symbol)) {
         try {
             const leverageString = leverageNumber.toString();
@@ -19,7 +20,7 @@ export const changeLeverageHandler = async ({ symbol, leverageNumber, webview }:
                 leverage: leverageString,
             });
             const result: TRespnoseGate<any> = await webview.executeJavaScript(stringOrder);
-            console.log({ reusltne: result });
+            // console.log({ reusltne: result });
 
             // Check response code
             if (result.code !== 200) {
@@ -47,6 +48,7 @@ export const changeLeverageHandler = async ({ symbol, leverageNumber, webview }:
             return false; // ⛔ Dừng hẳn, không vào lệnh
         }
     } else {
+        // console.log(`Đã tồn tại ${symbol} trong changedLaveragelist => bỏ qua`, changedLaveragelist);
         return false;
     }
 };

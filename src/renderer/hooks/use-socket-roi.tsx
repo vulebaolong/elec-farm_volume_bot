@@ -55,21 +55,22 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
         const { isStart, whitelistResetInProgress, webviewRef, takeProfit, stopLoss, timeoutMs, timeoutEnabled, uiSelector, handleCloseEntry } =
             latestRef.current;
 
-        console.log("handleRoi", {
-            taskQueueOrder: Array.from(taskQueueOrder.entries()),
-            "taskQueueOrder.size": taskQueueOrder.size,
-            changedLaveragelist,
-            takeProfit,
-            stopLoss,
-            timeoutMs,
-            timeoutEnabled,
-        });
+        // console.log("handleRoi", {
+        //     taskQueueOrder: Array.from(taskQueueOrder.entries()),
+        //     "taskQueueOrder.size": taskQueueOrder.size,
+        //     changedLaveragelist,
+        //     takeProfit,
+        //     stopLoss,
+        //     timeoutMs,
+        //     timeoutEnabled,
+        // });
 
         if (!isStart || whitelistResetInProgress || !webviewRef.current) return;
 
         const selectorWrapperPositionBlocks = uiSelector?.find((item) => item.code === "wrapperPositionBlocks")?.selectorValue;
-        if (!selectorWrapperPositionBlocks) {
-            console.log(`Not found selector`, { selectorWrapperPositionBlocks });
+        const selectorbuttonTabPosition = uiSelector?.find((item) => item.code === "buttonTabPosition")?.selectorValue;
+        if (!selectorWrapperPositionBlocks || !selectorbuttonTabPosition) {
+            console.log(`Not found selector`, { selectorWrapperPositionBlocks, selectorbuttonTabPosition });
             return;
         }
 
@@ -115,15 +116,16 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
             const unrealizedPnL = (lastPrice - entryPrice) * size * quanto_multiplier;
             const returnPercent = (unrealizedPnL / initialMargin) * 100;
 
-            const isTP = returnPercent >= takeProfit;
+            // const isTP = returnPercent >= takeProfit;
             const isSL = returnPercent <= -stopLoss;
             const timedOut = timeoutEnabled ? now - createdAt >= timeoutMs : false; // ✅ chỉ check khi bật
 
             console.log(`[${symbol}] ${returnPercent} |${takeProfit} | ${stopLoss}`);
 
-            if (!isTP && !isSL && !timedOut) continue; // ✅ Không thỏa mãn điều kiện nào
+            // if (!isTP && !isSL && !timedOut) continue; // ✅ Không thỏa mãn điều kiện nào
+            if (!isSL && !timedOut) continue; // ✅ Không thỏa mãn điều kiện nào
 
-            const reason = isTP ? "🟢Profit" : isSL ? "🔴Loss" : `⏰Timeout - ${timeoutMs}`;
+            const reason = isSL ? "🔴Loss" : `⏰Timeout - ${timeoutMs}`;
             const side = mode === "dual_long" ? "long" : "short";
 
             const payload: THandleCloseEntry = {
@@ -135,6 +137,7 @@ export const useSocketRoi = ({ webviewRef, handleCloseEntry }: TUseSocketRoi) =>
                 },
                 selector: {
                     wrapperPositionBlocks: selectorWrapperPositionBlocks,
+                    buttonTabPosition: selectorbuttonTabPosition,
                 },
             };
 

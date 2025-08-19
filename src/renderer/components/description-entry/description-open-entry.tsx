@@ -4,7 +4,7 @@ type TProps = {
     symbol: string;
     size: string;
     side: string;
-    delay: number;
+    delay?: number;
 };
 export default function DescriptionOpenEntry({ symbol, size, side, delay }: TProps) {
     const takeProfit = useAppSelector((state) => state.user.info?.SettingUsers.takeProfit); // ví dụ: 0.5 (số)

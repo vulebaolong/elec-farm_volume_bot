@@ -5,8 +5,11 @@ export interface SymbolState {
     spreadPercent: number;
     imbalanceBidPercent: number;
     imbalanceAskPercent: number;
-    bidUSD: number;
-    askUSD: number;
+    bidSumDepth: number;
+    askSumDepth: number;
+    bidBest: number;
+    askBest: number;
+    orderPriceRound: number;
     lastPrice: number;
     flags: TFlags;
 }

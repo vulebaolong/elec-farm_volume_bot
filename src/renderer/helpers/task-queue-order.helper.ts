@@ -1,5 +1,8 @@
 import { TSide } from "@/types/base.type";
 import { TPosition } from "@/types/position.type";
+import { toSymbolKey } from "./function.helper";
+import { ensureCloseForPosition } from "./order-map";
+import { SymbolState } from "@/types/symbol.type";
 
 export type Task_QueueOrder = {
     symbol: string;
@@ -57,4 +60,54 @@ export const process_QueueOrder = async () => {
     }
 
     isProcessing = false;
+};
+
+export const analyzePositions = (positions: TPosition[]) => {
+    // console.log({ positions, symbolsState, takeProfit });
+    // 1) Lọc position đang mở (size != 0)
+    const openPositionsList = positions.filter((pos) => Number(pos.size) !== 0);
+
+    // Nếu không có position mở: clear hết queue và thoát
+    if (openPositionsList.length === 0) {
+        if (taskQueueOrder.size > 0) {
+            taskQueueOrder.clear();
+        }
+        return;
+    }
+
+    // 2) Tạo set các symbol từ positions mở (để dùng xoá task thừa)
+    const openSymbols = new Set<string>();
+
+    // 3) Update/Create task tương ứng cho từng position đang mở
+    for (const pos of openPositionsList) {
+        const symbol = toSymbolKey(pos);
+        openSymbols.add(symbol);
+
+        const taskExisted = taskQueueOrder.get(symbol);
+        if (taskExisted) {
+            // Update in-place: rẻ hơn tạo mới
+            taskExisted.resultPosition = pos;
+        } else {
+            // Khi mới mở app mà có lệnh treo từ trước -> tạo queue đồng bộ
+            addTaskTo_QueueOrder(symbol, {
+                createdAt: Date.now(),
+                symbol,
+                side: pos.mode === "dual_long" ? "long" : "short",
+                size: pos.size.toString(),
+                delay: 0,
+                resultPosition: pos,
+                handle: async () => {},
+            });
+        }
+    }
+
+    // 4) Xoá task nào KHÔNG còn trong danh sách position mở
+    //    (tránh memory leak, giữ queue “sạch”)
+    for (const key of taskQueueOrder.keys()) {
+        if (!openSymbols.has(key)) {
+            taskQueueOrder.delete(key);
+        }
+    }
+
+    return openPositionsList;
 };
