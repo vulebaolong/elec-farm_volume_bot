@@ -1,3 +1,4 @@
+import { IS_PRODUCTION } from "@/constant/app.constant";
 import { setLocalStorageScript } from "@/javascript-string/logic-farm";
 import { useEffect } from "react";
 
@@ -11,7 +12,7 @@ export default function Webview({ setIsReady, webviewRef, wvPreload }: TProps) {
     // open dev tools
     useEffect(() => {
         const webview = webviewRef.current;
-        if (!webview) return;
+        if (!webview || IS_PRODUCTION) return;
 
         const handleDomReady = async () => {
             try {

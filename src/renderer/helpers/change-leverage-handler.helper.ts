@@ -49,6 +49,6 @@ export const changeLeverageHandler = async ({ symbol, leverageNumber, webview }:
         }
     } else {
         // console.log(`Đã tồn tại ${symbol} trong changedLaveragelist => bỏ qua`, changedLaveragelist);
-        return false;
+        return true;
     }
 };

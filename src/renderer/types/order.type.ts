@@ -1,11 +1,18 @@
-export interface TOrderRes {
+export interface TGetOrderOpenRes {
   method: string
   message: string
   code: number
-  data: Data
+  data: TOrderOpen[] | null
 }
 
-export interface Data {
+export interface TEntryOrderOpenRes {
+  method: string
+  message: string
+  code: number
+  data: TOrderOpen | null
+}
+
+export type TOrderOpen = {
   refu: number
   tkfr: string
   mkfr: string

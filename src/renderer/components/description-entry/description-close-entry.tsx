@@ -1,9 +1,9 @@
 type TProps = {
     symbol: string;
-    reason: string;
-    returnPercent?: number;
     tp: number;
     sl: number;
+    returnPercent?: number;
+    reason?: string;
 };
 export default function DescriptionCloseEntry({ symbol, reason, returnPercent, tp, sl }: TProps) {
     return (

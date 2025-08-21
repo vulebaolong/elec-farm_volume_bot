@@ -24,13 +24,6 @@ export const useInitData = () => {
         };
         socket.socket.on("setting-system", handleSettingSystem);
 
-        // cập nhật setting user - chỉ cần getinfo lại
-        const handleSettingUser = ({ data }: TSocketRes<TSettingSystemsSocket>) => {
-            console.log({ handleSettingUser: data });
-            getInfoMoutation.mutate();
-        };
-        socket.socket.on("setting-user", handleSettingUser);
-
         // tránh vào lệnh trong khi đang reset whitelist
         const handleBlockEntryDuringWhitelistReset = ({ data }: TSocketRes<boolean>) => {
             console.log({ handleBlockEntryDuringWhitelistReset: data });
@@ -39,7 +32,7 @@ export const useInitData = () => {
         socket.socket.on("white-list-reset-in-progress", handleBlockEntryDuringWhitelistReset);
 
         const handleSymbols = (data: TSocketRes<TSymbols>) => {
-            console.log("symbols", data);
+            // console.log("symbols", data);
             const sortedSymbols = Object.values(data.data).sort((a, b) => a.symbol.localeCompare(b.symbol));
             dispatch(SET_SYMBOLS_STATE(sortedSymbols));
         };
@@ -47,7 +40,6 @@ export const useInitData = () => {
 
         return () => {
             socket.socket?.off("setting-system", handleSettingSystem);
-            socket.socket?.off("setting-user", handleSettingUser);
             socket.socket?.off("white-list-reset-in-progress", handleBlockEntryDuringWhitelistReset);
             socket.socket?.off("symbols", handleSymbols);
         };

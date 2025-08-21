@@ -292,3 +292,35 @@ export const clickCloseAll = ({ selector }: TClickCloseAll) => {
 })();
 `;
 };
+
+export const createCodeStringGetOrderOpens = () => {
+    return `
+(async () => {
+  try {
+    const dataDraw = await fetch("https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open")
+    const data = await dataDraw.json()
+    console.info({createCodeStringGetOrderOpens: data})
+    return data;
+  } catch (err) {
+    console.info('⚠️ clickCloseAll script error:', err.message || err);
+    throw err;
+  }
+})();
+`;
+};
+
+export const createCodeStringGetPositions = () => {
+    return `
+(async () => {
+  try {
+    const dataDraw = await fetch("https://www.gate.com/apiw/v2/futures/usdt/positions")
+    const data = await dataDraw.json()
+    console.info({getPosition: data})
+    return data;
+  } catch (err) {
+    console.info('⚠️ clickCloseAll script error:', err.message || err);
+    throw err;
+  }
+})();
+`;
+};

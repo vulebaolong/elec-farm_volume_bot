@@ -2,7 +2,7 @@ import { useAppSelector } from "@/redux/store";
 
 type TProps = {
     symbol: string;
-    size: string;
+    size: string | number;
     side: string;
     delay?: number;
 };

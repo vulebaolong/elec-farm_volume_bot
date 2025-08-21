@@ -68,7 +68,6 @@ export default function SettingSelector() {
         console.log({ SettingSelector: raw });
         upsertUiSelector.mutate(raw, {
             onSuccess: (data) => {
-                queryClient.invalidateQueries({ queryKey: [`get-ui-selector`] });
                 toast.success(`Update Ui Selector successfully`);
             },
             onError: (error) => {

@@ -51,4 +51,7 @@ export const ENDPOINT = {
         GET_UI_SELECTOR: "ui-selector",
         UPSERT_UI_SELECTOR: "ui-selector/upsert",
     },
+    CONTRACT: {
+        GET_CONTRACT: "contract",
+    }
 };

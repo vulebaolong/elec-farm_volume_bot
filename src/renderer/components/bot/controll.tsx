@@ -4,24 +4,28 @@ import { handleCloseAll } from "@/helpers/close-all-handler.helper";
 import { SET_IS_START } from "@/redux/slices/bot.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { toast } from "sonner";
+import { Bot } from "./logic/class-bot";
 
 type TProps = {
     isReady: boolean;
     webviewRef: React.RefObject<Electron.WebviewTag | null>;
+    botRef: React.RefObject<Bot | null>;
 };
 
-export default function Controll({ isReady, webviewRef }: TProps) {
+export default function Controll({ isReady, webviewRef, botRef }: TProps) {
     const isStart = useAppSelector((state) => state.bot.isStart);
     const uiSelector = useAppSelector((state) => state.bot.uiSelector);
     const dispatch = useAppDispatch();
 
     const start = () => {
         dispatch(SET_IS_START(true));
+        botRef.current?.setIsHandle(true);
         console.log("[WS] Started listening to entry");
     };
 
     const stop = () => {
         dispatch(SET_IS_START(false));
+        botRef.current?.setIsHandle(false);
         if (!webviewRef.current) {
             toast.warning(`Webview not found`);
             return;
@@ -48,10 +52,10 @@ export default function Controll({ isReady, webviewRef }: TProps) {
                     <CardTitle className="text-base">Controll</CardTitle>
                 </CardHeader>
                 <CardContent className="flex gap-2 items-center">
-                    <Button disabled={!isReady || isStart} onClick={start} size="sm">
+                    <Button disabled={!isReady || isStart || !botRef.current} onClick={start} size="sm">
                         Start
                     </Button>
-                    <Button disabled={!isReady || !isStart} onClick={stop} size="sm">
+                    <Button disabled={!isReady || !isStart || !botRef.current} onClick={stop} size="sm">
                         Stop
                     </Button>
                 </CardContent>

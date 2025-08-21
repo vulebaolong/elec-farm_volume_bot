@@ -24,14 +24,12 @@ export type THandleCloseEntry = {
 
 export type TPayloadClickOpenEntry = {
     symbol: string;
-    size: string;
     side: TSide;
 };
 
 export type TPayloadClickOpenPostOnlyEntry = {
     symbol: string;
     size: string;
-    side: TSide;
     price: string;
     reduce_only: boolean
 };

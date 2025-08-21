@@ -7,6 +7,7 @@ import { useGetPriority24Change } from "@/api/tanstack/priority-24h-change.tanst
 import { TPayload24Change } from "@/types/priority-change.type";
 import { WhitelistSentiment } from "./whitelist-sentiment/whitelist-sentiment";
 import { useAppSelector } from "@/redux/store";
+import { TSocketRes } from "@/types/base.type";
 
 export default function Priority24hChange() {
     const socket = useSocket();
@@ -18,29 +19,29 @@ export default function Priority24hChange() {
     const getPriority24Change = useGetPriority24Change();
 
     // 2) nạp live bằng socket -> ghi vào cache
-    useEffect(() => {
-        if (!socket?.socket) return;
+    // useEffect(() => {
+    //     if (!socket?.socket) return;
 
-        const handle24hChange = ({ data: incoming }: { data: TPayload24Change }) => {
-            queryClient.setQueryData<TPayload24Change>(["get-priority-24h-chang"], (prev) => {
-                // nếu chưa có, nhận luôn
-                if (!prev) return incoming;
+    //     const handle24hChange = ({ data: incoming }: TSocketRes<TPayload24Change>) => {
+    //         queryClient.setQueryData<TPayload24Change>(["get-priority-24h-chang"], (prev) => {
+    //             // nếu chưa có, nhận luôn
+    //             if (!prev) return incoming;
 
-                const same =
-                    prev.countGreen === incoming.countGreen &&
-                    prev.countRed === incoming.countRed &&
-                    prev.countTotalWhiteList === incoming.countTotalWhiteList;
-                if (same) return prev;
+    //             const same =
+    //                 prev.countGreen === incoming.countGreen &&
+    //                 prev.countRed === incoming.countRed &&
+    //                 prev.countTotalWhiteList === incoming.countTotalWhiteList;
+    //             if (same) return prev;
 
-                return incoming;
-            });
-        };
+    //             return incoming;
+    //         });
+    //     };
 
-        socket.socket.on("24hChange", handle24hChange);
-        return () => {
-            socket.socket?.off("24hChange", handle24hChange);
-        };
-    }, [socket?.socket, queryClient]);
+    //     socket.socket.on("24hChange", handle24hChange);
+    //     return () => {
+    //         socket.socket?.off("24hChange", handle24hChange);
+    //     };
+    // }, [socket?.socket, queryClient]);
 
     // 3) render: chỉ đọc từ query data
     return (
