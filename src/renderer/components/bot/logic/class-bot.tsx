@@ -198,18 +198,26 @@ export class Bot {
                             this.log("Create Close: no positions");
                         }
                         this.log("🟡🟡🟡🟡🟡 Create Close");
+                        console.log("\n\n");
 
                         // ===== 2) OPEN =====
                         this.log("🔵🔵🔵🔵🔵 Open");
-                        if (this.isCheckwhitelistEntry()) {
+                        if (this.isCheckwhitelistEntryEmty() && this.isCheckMaxOpenPO()) {
                             for (const whitelistItem of Object.values(this.whitelistEntry)) {
                                 const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
+
+                                // nếu đã max thì không vào thoát vòng lặp
+                                if (!this.isCheckMaxOpenPO()) {
+                                    this.log(`Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
+                                    break;
+                                }
 
                                 // nếu symbol đó đã tồn tại trong orderOpens -> bỏ qua
                                 if (this.isOrderExitsByContract(symbol)) {
                                     this.log(`Open: skip ${symbol} (already exists)`);
                                     continue;
                                 }
+
                                 this.log(`Open: ${symbol} ok (not exists)`);
                                 this.log(`Open: side=${side}`);
                                 this.log(`Open: sizeStr=${sizeStr}`);
@@ -268,7 +276,7 @@ export class Bot {
                                 this.log("✅ Open: done for symbol", symbol);
                             }
                         } else {
-                            this.log("Open: skipped by guard");
+                            this.log(`Open: skipped by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
                         }
                         this.log("🔵🔵🔵🔵🔵 Open");
                         console.log("\n\n");
@@ -746,11 +754,15 @@ export class Bot {
         for (const p of list) this.setPosition(p);
     }
 
-    isCheckwhitelistEntry() {
+    isCheckwhitelistEntryEmty() {
         if (this.whitelistEntry.length <= 0) {
             console.log(`whitelistEntry rỗng => không xử lý whitelistEntry`, this.whitelistEntry.length);
             return false;
         }
+        return true;
+    }
+
+    isCheckMaxOpenPO() {
         if (this.getLengthOrderInOrderOpensAndPosition() >= this.configBot.settingUser.maxTotalOpenPO) {
             console.log(`Đã đạt giới hạn maxTotalOpenPO >= không xử lý whitelistEntry`, {
                 maxTotalOpenPO: this.configBot.settingUser.maxTotalOpenPO,
@@ -758,8 +770,6 @@ export class Bot {
             });
             return false;
         }
-
-        console.log(`Thoả điều kiện tiến hành xử lý từng item trong whitelistEntry`);
         return true;
     }
 
@@ -786,10 +796,10 @@ export class Bot {
 
     isOrderExitsByContract(contract: string): boolean {
         const isExitsOrderOpens = !!this.orderOpens.find((item) => item.contract === contract.replace("_", "/") && !item.is_reduce_only);
-        // if (isExitsOrderOpens) console.log(`${contract} đã tồn tại trong orderOpens => bỏ qua | isExitsOrderOpens: ${isExitsOrderOpens}`);
+        if (isExitsOrderOpens) console.log(`${contract} đã tồn tại trong orderOpens => bỏ qua | isExitsOrderOpens: ${isExitsOrderOpens}`);
 
         const isExitsPosition = this.positions.has(contract);
-        // if (isExitsPosition) console.log(`${contract} tồn tại trong position => bỏ qua | isExitsPosition: ${isExitsPosition}`);
+        if (isExitsPosition) console.log(`${contract} tồn tại trong position => bỏ qua | isExitsPosition: ${isExitsPosition}`);
 
         const isExits = isExitsOrderOpens || isExitsPosition;
 
