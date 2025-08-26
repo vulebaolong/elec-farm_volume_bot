@@ -104,7 +104,7 @@ export default function Bot() {
             <div className="flex flex-col gap-5 h-full pb-10">
                 <Controll botRef={botRef} isReady={isReady} webviewRef={webviewRef} />
 
-                <Priority24hChange  botRef={botRef} />
+                <Priority24hChange botRef={botRef} />
 
                 <div className="px-5">
                     <div className="p-1 h-full border border-border shadow-lg rounded-2xl">

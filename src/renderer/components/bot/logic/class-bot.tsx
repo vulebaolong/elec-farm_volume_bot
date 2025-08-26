@@ -16,14 +16,13 @@ import {
 } from "@/javascript-string/logic-farm";
 import { TRes } from "@/types/app.type";
 import { TRespnoseGate, TSide } from "@/types/base.type";
-import { TContract, TGetInfoContractRes } from "@/types/contract.type";
+import { TGetInfoContractRes } from "@/types/contract.type";
 import { TPayloadClickOpenEntry, TPayloadClickOpenPostOnlyEntry } from "@/types/entry.type";
 import { Book, TGetMyTradesRes, TMyTrade } from "@/types/my-trade.type";
 import { TEntryOrderOpenRes, TGetOrderOpenRes, TOrderOpen } from "@/types/order.type";
 import { TPosition, TPositionRes } from "@/types/position.type";
 import { TPayload24Change, TPriority } from "@/types/priority-change.type";
 import { TSettingUsers } from "@/types/setting-user.type";
-import { TSymbols } from "@/types/symbol.type";
 import { TUiSelector } from "@/types/ui-selector.type";
 import { TWhiteList, TWhitelistEntry, TWhiteListItem } from "@/types/white-list.type";
 import { toast } from "sonner";
