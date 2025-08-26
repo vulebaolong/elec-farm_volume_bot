@@ -1,6 +1,8 @@
+import api from "@/api/axios/app.axios";
 import DescriptionCloseEntry from "@/components/description-entry/description-close-entry";
 import DescriptionOpenEntry from "@/components/description-entry/description-open-entry";
 import { IS_PRODUCTION } from "@/constant/app.constant";
+import { ENDPOINT } from "@/constant/endpoint.constant";
 import { changeLeverageHandler } from "@/helpers/change-leverage-handler.helper";
 import { tryJSONparse } from "@/helpers/function.helper";
 import {
@@ -12,8 +14,9 @@ import {
     TCloseOrder,
     TOpenOrderPostOnly,
 } from "@/javascript-string/logic-farm";
+import { TRes } from "@/types/app.type";
 import { TRespnoseGate, TSide } from "@/types/base.type";
-import { TContract } from "@/types/contract.type";
+import { TContract, TGetInfoContractRes } from "@/types/contract.type";
 import { TPayloadClickOpenEntry, TPayloadClickOpenPostOnlyEntry } from "@/types/entry.type";
 import { Book, TGetMyTradesRes, TMyTrade } from "@/types/my-trade.type";
 import { TEntryOrderOpenRes, TGetOrderOpenRes, TOrderOpen } from "@/types/order.type";
@@ -40,7 +43,7 @@ export type TBotConfig = {
     uiSelector: TUiSelector[];
     settingUser: TSettingUsers;
     priority24hChange: TPayload24Change;
-    contracts: Map<string, TContract>;
+    // contracts: Map<string, TContract>;
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -74,8 +77,8 @@ export class Bot {
         return orderOpens;
     }
 
-    static async getMyTrades(webview: Electron.WebviewTag, start_time: number) {
-        const stringMyTrades = createCodeStringGetMyTrades(start_time);
+    static async getMyTrades(webview: Electron.WebviewTag, contract?: string, start_time?: number, role?: "taker" | "maker") {
+        const stringMyTrades = createCodeStringGetMyTrades(contract, start_time, role);
         const { data: myTrades, code: codeMyTrades, message: messageMyTrades }: TGetMyTradesRes = await webview.executeJavaScript(stringMyTrades);
         if (codeMyTrades >= 400) throw new Error(`Lỗi code >= 400 khi gọi createCodeStringGetmyTrades: ${messageMyTrades}`);
         console.log({ "getMyTrades hoàn thành": myTrades });
@@ -89,8 +92,6 @@ export class Bot {
     }
 
     private count = 0;
-    private cursorTimeSeconds = Math.floor(Date.now() / 1000);
-    private seenTradeIds = new Set<string>();
     private configBot: TBotConfig;
     private webview: Electron.WebviewTag;
 
@@ -98,7 +99,7 @@ export class Bot {
     private orderOpens: TOrderOpen[];
     private whitelistEntry: TWhitelistEntry[] = []; // chỉ chứa các symbol vào lệnh
     private whiteList: TWhiteList = {};
-    private symbolForClosePosition: TSymbols = {}; // chứa các symbol để có thông tin thoát lệnh, hiện tại đang cần lastPrice
+    private infoContract = new Map<string, TGetInfoContractRes>();
 
     private isHandle: boolean = false;
 
@@ -134,71 +135,53 @@ export class Bot {
 
                 try {
                     if (this.isHandle) {
-                        // ===== 1) CREATE CLOSE =====
-                        // this.log("🟡🟡🟡🟡🟡 Create Close");
-                        // const orderOpenFilled = await this.openFillWatcher();
-                        // if (orderOpenFilled && orderOpenFilled.length > 0) {
-                        //     for (const openFilled of orderOpenFilled) {
-                        //         const tickSize = this.configBot.contracts.get(openFilled.contract.replace("/", "_"))?.order_price_round;
-                        //         if (!tickSize) continue;
-
-                        //         const sideFortpPrice = openFilled.size >= 0 ? "long" : "short";
-                        //         const price = this.tpPrice(Number(openFilled.price), this.settingUser.takeProfit / 100, sideFortpPrice, tickSize);
-
-                        //         const payload = {
-                        //             symbol: openFilled.contract.replace("/", "_"),
-                        //             size: openFilled.size > 0 ? String(-openFilled.size) : String(openFilled.size),
-                        //             price: price,
-                        //             reduce_only: true, // true là lệnh close
-                        //         };
-                        //         console.log(`openFilled`, openFilled);
-                        //         this.log("Create Close: openEntry()", payload);
-                        //         await this.withTimeout(this.openEntry(payload), 10_000, `Create Close: openEntry(Create Close ${payload.symbol})`);
-                        //     }
-
-                        //     this.log("Create Close: refresh orderOpens");
-                        //     const oo = await this.withTimeout(Bot.getOrderOpens(this.webview), 10_000, "Create Close: getOrderOpens");
-                        //     this.setOrderOpens(oo);
-
-                        //     this.log("Create Close: refresh positions");
-                        //     const pos = await this.withTimeout(Bot.getPositions(this.webview), 10_000, "Create Close: getPositions");
-                        //     this.replacePositions(pos);
-
-                        //     this.log("✅ Create Close: done build payloads…");
-                        // } else {
-                        //     this.log("Create Close: no positions");
-                        // }
-                        // this.log("🟡🟡🟡🟡🟡 Create Close");
-                        // console.log("\n\n");
-
                         let isRefresh = true;
 
                         // ===== 1) CREATE CLOSE =====
                         this.log("🟡🟡🟡🟡🟡 Create Close");
-                        if (this.positions.size > 0) {
-                            const payloads = this.getCloseOrderPayloads(); // 1 bước: tính + build payload
-
-                            for (const p of payloads) {
-                                console.log("Đặt close order:", p);
-                                await this.withTimeout(this.openEntry(p), 10_000, `Create Close: openEntry(Create Close ${p.symbol})`);
-                                // refresh để lần lặp sau không đặt trùng
-                                this.log("Create Close: refresh orderOpens");
-                                const oo = await this.withTimeout(Bot.getOrderOpens(this.webview), 10_000, "Create Close: getOrderOpens");
-                                this.setOrderOpens(oo);
-
-                                this.log("Create Close: refresh positions");
-                                const pos = await this.withTimeout(Bot.getPositions(this.webview), 10_000, "Create Close: getPositions");
-                                this.replacePositions(pos);
+                        const orderOpenFilled = await this.openFillWatcher();
+                        if (orderOpenFilled && orderOpenFilled.length > 0) {
+                            for (const payloadFromOpenFilled of orderOpenFilled) {
+                                const payload = {
+                                    symbol: payloadFromOpenFilled.symbol,
+                                    size: payloadFromOpenFilled.size,
+                                    price: payloadFromOpenFilled.price,
+                                    reduce_only: true, // true là lệnh close
+                                };
+                                this.log("Create Close: openEntry()", payload);
+                                await this.withTimeout(this.openEntry(payload), 10_000, `Create Close: openEntry(Create Close ${payload.symbol})`);
                             }
 
-                            this.log("✅ Create Close: done build payloads…");
+                            await this.refreshSnapshot("Create Close");
 
-                            isRefresh = false;
+                            this.log("✅ Create Close: done build payloads…");
                         } else {
                             this.log("Create Close: no positions");
                         }
                         this.log("🟡🟡🟡🟡🟡 Create Close");
                         console.log("\n\n");
+
+                        // ===== 1) CREATE CLOSE =====
+                        // this.log("🟡🟡🟡🟡🟡 Create Close");
+                        // if (this.positions.size > 0) {
+                        //     const payloads = this.getCloseOrderPayloads(); // 1 bước: tính + build payload
+
+                        //     for (const p of payloads) {
+                        //         console.log("Đặt close order:", p);
+                        //         await this.withTimeout(this.openEntry(p), 10_000, `Create Close: openEntry(Create Close ${p.symbol})`);
+
+                        //         // refresh để lần lặp sau không đặt trùng
+                        //         await this.refreshSnapshot("Close");
+                        //     }
+
+                        //     this.log("✅ Create Close: done build payloads…");
+
+                        //     isRefresh = false;
+                        // } else {
+                        //     this.log("Create Close: no positions");
+                        // }
+                        // this.log("🟡🟡🟡🟡🟡 Create Close");
+                        // console.log("\n\n");
 
                         // ===== 2) OPEN =====
                         this.log("🔵🔵🔵🔵🔵 Open");
@@ -265,18 +248,12 @@ export class Bot {
                                 }
 
                                 // refresh để lần lặp sau không đặt trùng
-                                this.log("Open: refresh orderOpens");
-                                const oo = await this.withTimeout(Bot.getOrderOpens(this.webview), 10_000, "Open: getOrderOpens");
-                                this.setOrderOpens(oo);
-
-                                this.log("Open: refresh positions");
-                                const pos = await this.withTimeout(Bot.getPositions(this.webview), 10_000, "Open: getPositions");
-                                this.replacePositions(pos);
+                                await this.refreshSnapshot("Open");
 
                                 this.log("✅ Open: done for symbol", symbol);
                             }
                         } else {
-                            this.log(`Open: skipped by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
+                            this.log(`Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
                         }
                         this.log("🔵🔵🔵🔵🔵 Open");
                         console.log("\n\n");
@@ -287,13 +264,7 @@ export class Bot {
                             await this.handleRoi();
 
                             // refresh để lần lặp sau không đặt trùng
-                            this.log("Roi: refresh orderOpens");
-                            const oo = await this.withTimeout(Bot.getOrderOpens(this.webview), 10_000, "Roi: getOrderOpens");
-                            this.setOrderOpens(oo);
-
-                            this.log("Roi: refresh positions");
-                            const po = await this.withTimeout(Bot.getPositions(this.webview), 10_000, "Roi: getPositions");
-                            this.replacePositions(po);
+                            await this.refreshSnapshot("Roi");
 
                             this.log("✅ Roi: done");
 
@@ -305,13 +276,7 @@ export class Bot {
                         console.log("\n\n");
 
                         if (isRefresh) {
-                            this.log("Refresh: refresh orderOpens");
-                            const oo = await this.withTimeout(Bot.getOrderOpens(this.webview), 10_000, "Refresh: getOrderOpens");
-                            this.setOrderOpens(oo);
-
-                            this.log("Refresh: refresh positions");
-                            const po = await this.withTimeout(Bot.getPositions(this.webview), 10_000, "Refresh: getPositions");
-                            this.replacePositions(po);
+                            await this.refreshSnapshot("Refresh");
 
                             this.log("✅ Refresh End: done");
                         }
@@ -321,6 +286,8 @@ export class Bot {
                         this.log("isHandle=false → skip all work");
                     }
                 } catch (err) {
+                    await this.refreshSnapshot("Err");
+
                     this.log("❌❌❌❌❌ ITER ERROR =====", err);
                 }
 
@@ -478,135 +445,148 @@ export class Bot {
         }
     }
 
-    async openFillWatcher2() {
-        const myTrades = await Bot.getMyTrades(this.webview, this.cursorTimeSeconds);
-        console.log("myTrades: ", myTrades);
+    /** Làm mới orderOpens kèm timeout & log */
+    private async refreshOrderOpens(ctx = "Refresh", timeoutMs = 10_000): Promise<void> {
+        this.log(`${ctx}: refresh orderOpens`);
+        const oo = await this.withTimeout(Bot.getOrderOpens(this.webview), timeoutMs, `${ctx}: getOrderOpens`);
+        this.setOrderOpens(oo);
+    }
 
-        if (!myTrades) return;
+    /** Làm mới positions kèm timeout & log */
+    private async refreshPositions(ctx = "Refresh", timeoutMs = 10_000): Promise<void> {
+        this.log(`${ctx}: refresh positions`);
+        const pos = await this.withTimeout(Bot.getPositions(this.webview), timeoutMs, `${ctx}: getPositions`);
+        this.replacePositions(pos);
+    }
 
-        const openOrderFill = myTrades?.filter((myTrade) => {
-            const isOpenOrderFill = myTrade.close_size === 0;
-            const isMaker = myTrade.role === "Maker";
-            const isWeb = myTrade.text === "web";
-            return isOpenOrderFill && isMaker && isWeb;
-        });
+    /** Combo: làm mới cả orderOpens & positions (tuần tự để tránh đè webview) */
+    private async refreshSnapshot(ctx = "Refresh", timeoutMs = 10_000): Promise<void> {
+        await this.refreshOrderOpens(ctx, timeoutMs);
+        await this.refreshPositions(ctx, timeoutMs);
+        this.log(`✅ ${ctx}: snapshot updated`);
+    }
 
-        const openOrderFillGroup = this.groupByOrderIdSumSize(openOrderFill);
-        console.log(`openOrderFillGroup: `, openOrderFillGroup);
-
-        // lọc ra các lệnh close đã mở
-        const closedInOpenOrder = this.orderOpens.filter((or) => {
-            return or.is_reduce_only;
-        });
-
-        console.log(`closedInOpenOrder: `, closedInOpenOrder);
-
-        const listShouldClose = openOrderFillGroup.filter((item) => {
-            const hasMatch = closedInOpenOrder.some((or) => {
-                const isSameSymbol = or.contract === item.contract;
-
-                const tickSize = this.configBot.contracts.get(item.contract.replace("/", "_"))?.order_price_round;
-                if (!tickSize) return false;
-                const sideFortpPrice = item.size >= 0 ? "long" : "short";
-                const price = this.tpPrice(Number(item.price), this.settingUser.takeProfit / 100, sideFortpPrice, tickSize);
-                const isSamePrice = or.price === price;
-
-                const isSameSize = this.isOppositeSameAbs(or.size, item.size);
-                return isSameSymbol && isSameSize && isSamePrice;
-            });
-
-            return !hasMatch;
-        });
-
-        listShouldClose.sort((a, b) => {
-            return a.create_time - b.create_time;
-        });
-
-        if (listShouldClose.length === 0) {
-            this.cursorTimeSeconds = Math.floor(Date.now() / 1000);
+    /** Bản “an toàn”: không quăng lỗi ra ngoài, chỉ log */
+    private async tryRefreshSnapshot(ctx = "Refresh", timeoutMs = 10_000): Promise<void> {
+        try {
+            await this.refreshSnapshot(ctx, timeoutMs);
+        } catch (e) {
+            this.log(`${ctx}: refresh failed`, e);
         }
-
-        console.log("listShouldClose: ", listShouldClose);
-        return listShouldClose;
     }
 
     async openFillWatcher() {
-        const myTrades = await Bot.getMyTrades(this.webview, this.cursorTimeSeconds);
-        if (!myTrades?.length) return [];
+        let payloadCloses: { symbol: string; size: string; price: string }[] = [];
+        const oepnFillInPositions = this.positions;
 
-        // 1) lấy các open-fill (Maker + web)
-        const openOrderFill = myTrades.filter((t) => t.close_size === 0 && t.role === "Maker" && t.text === "web");
+        for (const [contract, oepnFillInPosition] of oepnFillInPositions) {
+            console.log("oepnFillInPosition: ", oepnFillInPosition);
+            // 1) lấy các lệnh open đã được fill (close_size === 0)
+            // dựa vào thời gian mở lệnh của position để lấy ra history lệnh trong myTrade
+            let openFillInMyTrades = await Bot.getMyTrades(this.webview, contract.replace("/", "_"), oepnFillInPosition.open_time, "maker");
+            console.log("1) openFillInMyTrades: ", openFillInMyTrades);
+            if (!openFillInMyTrades?.length) return [];
 
-        // 2) gộp theo order_id (cộng size, giữ field khác từ record đầu)
-        const openOrderFillGroup = this.groupByOrderIdSumSize(openOrderFill);
-        console.log("openOrderFillGroup:", openOrderFillGroup);
+            // 2) lọc và chỉ lấy lệnh open (close_size = 0)
+            openFillInMyTrades = openFillInMyTrades.filter((openFillInMyTrade) => openFillInMyTrade.close_size === 0);
+            // console.log("2) openFillInMyTrades: ", openFillInMyTrades);
 
-        // 3) bucket các lệnh close đang mở (reduce_only)
-        const closedInOpenOrder = this.orderOpens.filter((or) => or.is_reduce_only);
-        console.log("closedInOpenOrder:", closedInOpenOrder);
+            // 3) nếu ra lịch sử lớn hơn 5 nghĩa là có lệnh rời, phải gộp lại theo order_id
+            if (openFillInMyTrades.length > 5) {
+                openFillInMyTrades = this.groupByOrderIdSumSize(openFillInMyTrades);
+                console.log("3) Lấy ra lịch sử lệnh fill lớn hơn 5 => gộp lệnh theo order_id:", openFillInMyTrades);
+            }
 
-        // bucket theo contract: mỗi phần tử là {price, size}
-        const closeBuckets = new Map<string, Array<{ price: string; size: number }>>();
-        for (const or of closedInOpenOrder) {
-            const arr = closeBuckets.get(or.contract) ?? [];
-            arr.push({ price: String(or.price), size: Number(or.size) });
-            closeBuckets.set(or.contract, arr);
-        }
-
-        // 4) sắp xếp open theo thời gian cũ -> mới để khớp ổn định
-        const sorted = [...openOrderFillGroup].sort((a, b) => a.create_time - b.create_time);
-
-        const listShouldClose: typeof openOrderFillGroup = [];
-        let maxTs = this.cursorTimeSeconds;
-
-        for (const item of sorted) {
-            const contract = item.contract; // "AAA/USDT"
-            const itemSize = Number(item.size); // >0 long, <0 short
-            const bucket = closeBuckets.get(contract) || [];
-
-            // nếu không tìm thấy tickSize -> coi như chưa có close tương ứng (push luôn)
-            const tickSize = this.configBot.contracts.get(contract.replace("/", "_"))?.order_price_round;
-            if (!tickSize) {
-                listShouldClose.push(item);
-                if (item.create_time > maxTs) maxTs = item.create_time;
+            const infoContract = await this.getInfoContract(contract.replace("/", "_"));
+            if (!infoContract) {
+                console.log(`❌ 5) Không tìm thấy hoặc infoContract: `, infoContract);
                 continue;
             }
+            const { order_price_round } = infoContract;
 
-            // tính giá TP mục tiêu (giữ đúng logic giá bạn đang dùng)
-            const sideFortpPrice = itemSize >= 0 ? "long" : "short";
-            const targetPrice = this.tpPrice(Number(item.price), this.settingUser.takeProfit / 100, sideFortpPrice, tickSize);
+            // 4) dựa vào tab Order Open để lấy ra các lệnh close chưa được mở
+            openFillInMyTrades = openFillInMyTrades.filter((openFillInMyTrade) => {
+                const price = this.tpPrice(
+                    Number(openFillInMyTrade.price),
+                    this.settingUser.takeProfit / 100,
+                    openFillInMyTrade.size > 0 ? "long" : "short",
+                    order_price_round,
+                );
 
-            // tìm 1 close trong bucket có: khác dấu & cùng |size| & cùng giá
-            const idx = bucket.findIndex(
-                (or) => or.size * itemSize < 0 && Math.abs(or.size) === Math.abs(itemSize) && String(or.price) === targetPrice,
-            );
+                const isMatch = this.orderOpens.find((or) => {
+                    const isClose = or.is_reduce_only; // lệnh close là true
+                    const isContract = or.contract === openFillInMyTrade.contract;
+                    const isSide = this.isOpposite(openFillInMyTrade.size, or.size);
+                    const isPrice = or.price === price;
+                    console.log(`isClose: ${isClose}, isContract: ${isContract}, isSide: ${isSide}, isPrice: ${isPrice}`);
+                    return isClose && isContract && isSide && isPrice;
+                });
 
-            if (idx >= 0) {
-                // đã có close tương ứng -> tiêu thụ phần tử này khỏi bucket
-                bucket.splice(idx, 1);
-                // (không push vào listShouldClose)
-            } else {
-                // chưa có close tương ứng -> cần tạo close
-                listShouldClose.push(item);
+                // nếu tìm thấy có lệnh đã mở rồi thì isMatch sẽ có giá trị
+                // nếu isMatch có giá trị thì return false, bỏ qua không lấy
+                if (isMatch) {
+                    return false;
+                } else {
+                    return true;
+                }
+            });
+            console.log(`4) Dựa vào tab Order Open lọc ra các lệnh close chưa mở: `, openFillInMyTrades);
+
+            // 5) tạo payload cho lệnh close
+
+            for (const openFillInMyTrade of openFillInMyTrades) {
+                const sideFortpPrice = openFillInMyTrade.size > 0 ? "long" : "short";
+                const price = this.tpPrice(Number(openFillInMyTrade.price), this.settingUser.takeProfit / 100, sideFortpPrice, order_price_round);
+
+                payloadCloses.push({
+                    symbol: openFillInMyTrade.contract.replace("/", "_"),
+                    size: this.flipSignStr(openFillInMyTrade.size),
+                    price: price, // price chưa tính ra tp
+                });
             }
-
-            closeBuckets.set(contract, bucket);
-            if (item.create_time > maxTs) maxTs = item.create_time;
         }
 
-        // 5) cập nhật cursor:
-        // - nếu KHÔNG còn thiếu -> tiến cursor đến maxTs của batch
-        // - nếu CÒN thiếu -> giữ nguyên cursor để vòng sau không bỏ sót
-        if (listShouldClose.length === 0) {
-            // this.cursorTimeSeconds = Math.max(this.cursorTimeSeconds, maxTs);
-            this.cursorTimeSeconds = Math.floor(Date.now() / 1000);
-        }
-
-        console.log("listShouldClose:", listShouldClose);
-        return listShouldClose;
+        console.log(`Tạo payload để vào lệnh close: `, payloadCloses);
+        return payloadCloses;
     }
 
-    getCloseOrderPayloads(): TPayloadClickOpenPostOnlyEntry[] {
+    async getOrderPriceRound(contract: string) {}
+
+    flipSignStr(n: number | string): string {
+        const x = Number(n);
+        if (!Number.isFinite(x)) throw new Error("size không hợp lệ");
+        const y = -x;
+        // tránh "-0"
+        return (Object.is(y, -0) ? 0 : y).toString();
+    }
+
+    /**
+     * contract: BTC_USDT
+     */
+    async getInfoContract(contract: string) {
+        const infoContract = this.infoContract.get(contract);
+        if (!infoContract) {
+            try {
+                const { data } = await api.get<TRes<TGetInfoContractRes>>(`${ENDPOINT.CONTRACT.GET_INFO_CONTRACT}?contract=${contract}&source=gate`);
+                this.infoContract.set(contract, data.data);
+            } catch (error) {
+                console.log("getInfoCalContract: ", error);
+            }
+        }
+        return infoContract;
+    }
+
+    async getLastPrice(contract: string) {
+        try {
+            const { data } = await api.get<TRes<number>>(`${ENDPOINT.HELPER.LAST_PRICE}/${contract}`);
+            // console.log("getLastPrice: ", data);
+            return data.data;
+        } catch (error) {
+            console.log("getLastPrice: ", error);
+        }
+    }
+
+    async getCloseOrderPayloads(): Promise<TPayloadClickOpenPostOnlyEntry[]> {
         const payloads: TPayloadClickOpenPostOnlyEntry[] = [];
 
         for (const [, pos] of this.positions) {
@@ -619,8 +599,12 @@ export class Bot {
             const contractSlash = pos.contract; // "PI/USDT"
             const contract = contractSlash.replace("/", "_"); // "PI_USDT"
 
-            const tickSize = this.configBot.contracts.get(contract)?.order_price_round;
-            if (!tickSize) continue;
+            const infoContract = await this.getInfoContract(contract);
+            if (!infoContract) {
+                console.log(`getCloseOrderPayloads: infoContract not found: ${contract}`);
+                continue;
+            }
+            const tickSize = infoContract.order_price_round;
 
             // tính TP theo phía của POSITION (long -> +%, short -> -%)
             const entry_price = Number(pos.entry_price);
@@ -646,9 +630,15 @@ export class Bot {
         return x !== 0 && y !== 0 && x * y < 0 && Math.abs(x) === Math.abs(y);
     };
 
-    newCursorTimeSeconds() {
-        this.cursorTimeSeconds = Math.floor(Date.now() / 1000);
-    }
+    /**
+     * hàm chỉ so sánh DẤU của 2 số a và b phải khác dấu thì trả ra true, ngược lại là false
+     * không so sánh số
+     */
+    isOpposite = (a: number | string, b: number | string) => {
+        const x = Number(a),
+            y = Number(b);
+        return x !== 0 && y !== 0 && x * y < 0;
+    };
 
     groupByOrderIdSumSize(trades: TMyTrade[]): TMyTrade[] {
         const map = new Map<string, TMyTrade>();
@@ -685,12 +675,17 @@ export class Bot {
     async handleRoi() {
         for (const [, pos] of this.positions) {
             const symbol = pos.contract.replace("/", "_");
+            const infoContract = await this.getInfoContract(symbol);
+            if (!infoContract) {
+                console.log("handleRoi: infoContract not found");
+                continue;
+            }
             const size = pos.size;
             const entryPrice = Number(pos.entry_price);
             const leverage = Number(pos.leverage);
             const mode = pos.mode;
-            const quanto_multiplier = this.configBot.contracts.get(symbol)?.quanto_multiplier;
-            const lastPrice = this.symbolForClosePosition?.[symbol]?.lastPrice;
+            const quanto_multiplier = infoContract.quanto_multiplier;
+            const lastPrice = await this.getLastPrice(symbol);
             const nowMs = Date.now(); // = now ở đơn vị ms
 
             console.log({
@@ -865,9 +860,7 @@ export class Bot {
                 imbalanceAskPercent == null ||
                 imbalanceAskPercent == undefined ||
                 imbalanceBidPercent == null ||
-                imbalanceBidPercent == undefined ||
-                lastPrice == null ||
-                lastPrice == undefined
+                imbalanceBidPercent == undefined
             ) {
                 continue;
             }
@@ -966,10 +959,6 @@ export class Bot {
         this.configBot.priority24hChange = priority24hChange;
     }
 
-    setSymbolsForClosePosition(symbolForClosePosition: TSymbols) {
-        this.symbolForClosePosition = symbolForClosePosition;
-    }
-
     getOrderSide(o: TOrderOpen): TSide {
         return o.size >= 0 ? "long" : "short";
     }
@@ -979,7 +968,7 @@ export class Bot {
         return this.getPosSide(pos) === "long" ? "short" : "long";
     }
 
-    getCloseOrderPayloadsByPosition(): TPayloadClickOpenPostOnlyEntry[] {
+    async getCloseOrderPayloadsByPosition(): Promise<TPayloadClickOpenPostOnlyEntry[]> {
         const payloads: TPayloadClickOpenPostOnlyEntry[] = [];
 
         for (const [, pos] of this.positions) {
@@ -992,8 +981,12 @@ export class Bot {
             const contractSlash = pos.contract; // "PI/USDT"
             const contract = contractSlash.replace("/", "_"); // "PI_USDT"
 
-            const tickSize = this.configBot.contracts.get(contract)?.order_price_round;
-            if (!tickSize) continue;
+            const infoContract = await this.getInfoContract(contract);
+            if (!infoContract) {
+                console.log(`getCloseOrderPayloadsByPosition: infoContract not found: ${contract}`);
+                continue;
+            }
+            const tickSize = infoContract.order_price_round;
 
             // tính TP theo phía của POSITION (long -> +%, short -> -%)
             const entry_price = Number(pos.entry_price);

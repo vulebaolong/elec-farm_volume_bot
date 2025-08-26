@@ -23,7 +23,7 @@ export const changeLeverageHandler = async ({ symbol, leverageNumber, webview }:
             // console.log({ reusltne: result });
 
             // Check response code
-            if (result.code !== 200) {
+            if (result.code >= 400) {
                 throw new Error(`Change leverage failed: ${result.message}`);
             }
 

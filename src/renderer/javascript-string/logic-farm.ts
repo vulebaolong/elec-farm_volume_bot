@@ -325,11 +325,14 @@ export const createCodeStringGetPositions = () => {
 `;
 };
 
-export const createCodeStringGetMyTrades = (start_time: number) => {
+/**
+ * contract: BTC_USDT (dùng dấu gạch dưới _)
+ */
+export const createCodeStringGetMyTrades = (contract?: string, start_time?: number, role?: "taker" | "maker") => {
     return `
 (async () => {
   try {
-    const dataDraw = await fetch("https://www.gate.com/apiw/v2/futures/usdt/my_trades?contract=&limit=50&offset=0&start_time=${start_time}")
+    const dataDraw = await fetch("https://www.gate.com/apiw/v2/futures/usdt/my_trades?contract=${contract ? contract : ""}&limit=50&offset=0&start_time=${start_time ? start_time : ""}&role=${role ? role : ""}")
     const data = await dataDraw.json()
     console.info({createCodeStringGetMyTrade: data})
     return data;

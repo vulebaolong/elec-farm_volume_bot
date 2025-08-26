@@ -53,5 +53,9 @@ export const ENDPOINT = {
     },
     CONTRACT: {
         GET_CONTRACT: "contract",
+        GET_INFO_CONTRACT: "contract/get-info-cal-contract",
+    },
+    HELPER: {
+        LAST_PRICE: "helper/last-price-by-contract",
     }
 };

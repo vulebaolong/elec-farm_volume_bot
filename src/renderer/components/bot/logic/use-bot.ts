@@ -7,10 +7,8 @@ import { SET_INFO } from "@/redux/slices/user.slice";
 import { useAppDispatch } from "@/redux/store";
 import { TRes } from "@/types/app.type";
 import { TSocketRes } from "@/types/base.type";
-import { TContract } from "@/types/contract.type";
 import { TPayload24Change } from "@/types/priority-change.type";
 import { TSettingUsers } from "@/types/setting-user.type";
-import { TSymbols } from "@/types/symbol.type";
 import { TUiSelector } from "@/types/ui-selector.type";
 import { TUser } from "@/types/user.type";
 import { TWhiteList } from "@/types/white-list.type";
@@ -52,28 +50,21 @@ export function useBot(webview: Electron.WebviewTag | null) {
             });
             botRef.current?.setPriority24hChange(data);
         };
-        const handleSymbolsForClosePosition = ({ data }: TSocketRes<TSymbols>) => {
-            botRef.current?.setSymbolsForClosePosition(data);
-        };
 
         let cancelled = false;
 
         (async () => {
             try {
                 // fetch song song để giảm thời gian chờ
-                const [{ data: uiSelector }, { data: settingUser }, { data: priority24hChange }, { data: contractsArray }] = await Promise.all([
+                const [{ data: uiSelector }, { data: settingUser }, { data: priority24hChange }] = await Promise.all([
                     api.get<TRes<TUiSelector[]>>(ENDPOINT.UI_SELECTOR.GET_UI_SELECTOR),
                     api.get<TRes<TUser>>(ENDPOINT.AUTH.GET_INFO),
                     api.get<TRes<TPayload24Change>>(ENDPOINT.PRIORITY_24h_CHANGE.GET_PRIORITY_24h_CHANGE),
-                    api.get<TRes<TContract[]>>(ENDPOINT.CONTRACT.GET_CONTRACT),
                 ]);
                 if (cancelled) return;
 
                 dispatch(SET_UI_SELECTOR(uiSelector.data));
                 dispatch(SET_INFO(settingUser.data));
-
-                const contracts = new Map<string, TContract>();
-                contractsArray.data.forEach((c) => contracts.set(c.symbol, c));
 
                 const [positions, orderOpens] = await Promise.all([Bot.getPositions(webview), Bot.getOrderOpens(webview)]);
                 if (cancelled) return;
@@ -82,7 +73,6 @@ export function useBot(webview: Electron.WebviewTag | null) {
                     uiSelector: uiSelector.data,
                     settingUser: settingUser.data.SettingUsers,
                     priority24hChange: priority24hChange.data,
-                    contracts,
                 };
 
                 // ✅ không tạo mới nếu đã có
@@ -98,13 +88,11 @@ export function useBot(webview: Electron.WebviewTag | null) {
                 io.off("ui-selector", handleUiSelector);
                 io.off("entry", handleEntry);
                 io.off("24hChange", handle24hChange);
-                io.off("symbols-for-close-position", handleSymbolsForClosePosition);
 
                 io.on("setting-user", handleSettingUser);
                 io.on("ui-selector", handleUiSelector);
                 io.on("entry", handleEntry);
                 io.on("24hChange", handle24hChange);
-                io.on("symbols-for-close-position", handleSymbolsForClosePosition);
             } catch (e) {
                 console.error("❌ start bot error:", e);
             }
@@ -117,7 +105,6 @@ export function useBot(webview: Electron.WebviewTag | null) {
             io.off("ui-selector", handleUiSelector);
             io.off("entry", handleEntry);
             io.off("24hChange", handle24hChange);
-            io.off("symbols-for-close-position", handleSymbolsForClosePosition);
             // ✅ stop bot nếu bạn đang tạo mới theo lifecycle (tránh zombie loop)
             botRef.current?.stop?.();
         };
