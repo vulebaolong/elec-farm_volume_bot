@@ -1,7 +1,6 @@
 import { Settings } from "lucide-react";
 import { PageTitle } from "../title-page/title-page";
 import SettingAdminUser from "./setting-admin-user";
-import { ScrollOnMount } from "../scroll-to-top/scroll-on-mount";
 
 export default function setting() {
     return (

@@ -3,19 +3,16 @@
 import { BadgeDollarSign, CodeXml, House, Info, Palette, Settings } from "lucide-react";
 
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
+import { ROUTER } from "@/constant/router.constant";
 import { navigateTo } from "@/helpers/navigate.helper";
 import { useAppSelector } from "@/redux/store";
 import { useState } from "react";
 import DialogInfo from "../dialog/dialog-info";
-import Symbols from "../symbols/symbols";
 import ThemeToggleV2 from "../theme-toggle/theme-toggle-v2";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { ROUTER } from "@/constant/router.constant";
 
 export function NavMain() {
     const { isMobile, state } = useSidebar();
-    const [openSymbol, setOpenSymbol] = useState(false);
-    const [openSetting, setOpenSetting] = useState(false);
     const [openAbout, setOpenAbout] = useState(false);
     const info = useAppSelector((state) => state.user.info);
 
@@ -70,7 +67,7 @@ export function NavMain() {
                     </SidebarMenuItem>
 
                     {/* whitelist */}
-                    <SidebarMenuItem>
+                    {/* <SidebarMenuItem>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <SidebarMenuButton onClick={() => setOpenSymbol(true)} className="flex items-center overflow-hidden">
@@ -82,7 +79,7 @@ export function NavMain() {
                                 <p>White List</p>
                             </TooltipContent>
                         </Tooltip>
-                    </SidebarMenuItem>
+                    </SidebarMenuItem> */}
 
                     {/* setting - amin */}
                     {(info?.Roles?.id === 3 || info?.Roles?.id === 1) && (
@@ -146,7 +143,6 @@ export function NavMain() {
                 </SidebarMenu>
             </SidebarGroup>
 
-            <Symbols open={openSymbol} onOpenChange={setOpenSymbol} />
             <DialogInfo open={openAbout} onOpenChange={setOpenAbout} />
         </>
     );

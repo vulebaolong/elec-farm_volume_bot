@@ -2,8 +2,6 @@ import { useSaveAccount } from "@/api/tanstack/account.tanstack";
 import Webview from "@/components/webview/webview";
 import { tryJSONparse } from "@/helpers/function.helper";
 import { TSaveAccountReq } from "@/types/account.type";
-import { TGetOrderOpenRes } from "@/types/order.type";
-import { TPosition } from "@/types/position.type";
 import { BotIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import Priority24hChange from "../priority-24h-change/priority-24h-change";
@@ -66,25 +64,25 @@ export default function Bot() {
                         }
                         break;
 
-                    case "/apiw/v2/futures/usdt/positions":
-                        try {
-                            const dataFull: TPosition[] = tryJSONparse(data.bodyPreview)?.data;
-                            const openPositionsList = dataFull.filter((pos) => Number(pos.size) !== 0);
+                    // case "/apiw/v2/futures/usdt/positions":
+                    //     try {
+                    //         const dataFull: TPosition[] = tryJSONparse(data.bodyPreview)?.data;
+                    //         const openPositionsList = dataFull.filter((pos) => Number(pos.size) !== 0);
 
-                            if (!openPositionsList) return;
+                    //         if (!openPositionsList) return;
 
-                            botRef.current?.clearPositions();
-                            for (const pos of openPositionsList) {
-                                botRef.current?.setPosition(pos);
-                            }
-                        } catch (error) {}
-                        break;
+                    //         botRef.current?.clearPositions();
+                    //         for (const pos of openPositionsList) {
+                    //             botRef.current?.setPosition(pos);
+                    //         }
+                    //     } catch (error) {}
+                    //     break;
 
-                    case "/apiw/v2/futures/usdt/orders?contract=&status=open":
-                        const dataFull: TGetOrderOpenRes["data"] = tryJSONparse(data.bodyPreview)?.data;
-                        console.log({ dayne: dataFull });
-                        botRef.current?.setOrderOpens(dataFull);
-                        break;
+                    // case "/apiw/v2/futures/usdt/orders?contract=&status=open":
+                    //     const dataFull: TGetOrderOpenRes["data"] = tryJSONparse(data.bodyPreview)?.data;
+                    //     console.log({ dayne: dataFull });
+                    //     botRef.current?.setOrderOpens(dataFull);
+                    //     break;
 
                     default:
                         break;
@@ -106,7 +104,7 @@ export default function Bot() {
             <div className="flex flex-col gap-5 h-full pb-10">
                 <Controll botRef={botRef} isReady={isReady} webviewRef={webviewRef} />
 
-                <Priority24hChange />
+                <Priority24hChange  botRef={botRef} />
 
                 <div className="px-5">
                     <div className="p-1 h-full border border-border shadow-lg rounded-2xl">

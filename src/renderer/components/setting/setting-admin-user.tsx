@@ -44,6 +44,9 @@ export const FormSchema = z.object({
     timeoutEnabled: z.boolean(),
     max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
     max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
+    minSpreadPercent: numberRange(0, 100, "Min Spread %"),
+    maxSpreadPercent: numberRange(0, 100, "Max Spread %"),
+    maxDepth: positiveNumber("Max Depth"),
 });
 
 type FormInput = z.input<typeof FormSchema>; // kiểu dữ liệu TRƯỚC khi Zod parse ('' | string | number)
@@ -79,6 +82,9 @@ export default function SettingAdminUser({ type }: TProps) {
             timeoutEnabled: false,
             max24hChangeGreen: "",
             max24hChangeRed: "",
+            minSpreadPercent: "",
+            maxSpreadPercent: "",
+            maxDepth: "",
         },
     });
 
@@ -97,6 +103,9 @@ export default function SettingAdminUser({ type }: TProps) {
                 timeoutEnabled: setting.timeoutEnabled ?? false,
                 max24hChangeGreen: setting.max24hChangeGreen ?? "",
                 max24hChangeRed: setting.max24hChangeRed ?? "",
+                minSpreadPercent: setting.minSpreadPercent ?? "",
+                maxSpreadPercent: setting.maxSpreadPercent ?? "",
+                maxDepth: setting.maxDepth ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form]);
@@ -118,6 +127,9 @@ export default function SettingAdminUser({ type }: TProps) {
             timeoutEnabled: data.timeoutEnabled,
             max24hChangeGreen: data.max24hChangeGreen,
             max24hChangeRed: data.max24hChangeRed,
+            minSpreadPercent: data.minSpreadPercent,
+            maxSpreadPercent: data.maxSpreadPercent,
+            maxDepth: data.maxDepth,
         };
         console.log({ updateSettingUser: payload });
         updateSettingUser.mutate(payload, {
@@ -395,6 +407,80 @@ export default function SettingAdminUser({ type }: TProps) {
                             suffix="%"
                             min={0}
                             step={0.1}
+                            clampBehavior="strict"
+                        />
+                    )}
+                />
+
+                {/* minSpreadPercent */}
+                <Controller
+                    name="minSpreadPercent"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Min Spread %"
+                            placeholder="Min Spread %"
+                            inputWrapperOrder={["label", "input", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.minSpreadPercent?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix="%"
+                            min={0}
+                            step={0.1}
+                            clampBehavior="strict"
+                        />
+                    )}
+                />
+
+                {/* maxSpreadPercent */}
+                <Controller
+                    name="maxSpreadPercent"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Max Spread %"
+                            placeholder="Max Spread %"
+                            inputWrapperOrder={["label", "input", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.maxSpreadPercent?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix="%"
+                            min={0}
+                            step={0.1}
+                            clampBehavior="strict"
+                        />
+                    )}
+                />
+
+                {/* maxDepth */}
+                <Controller
+                    name="maxDepth"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Max Depth"
+                            placeholder="Max Depth"
+                            inputWrapperOrder={["label", "input", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.maxDepth?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            min={0}
+                            step={1}
                             clampBehavior="strict"
                         />
                     )}

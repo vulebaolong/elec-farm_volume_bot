@@ -18,6 +18,7 @@ import { pathToFileURL } from "node:url";
 import { setupUpdaterIPC } from "./updater";
 import { installExtension, REDUX_DEVTOOLS } from "electron-devtools-installer";
 import { IS_PRODUCTION } from "@/constant/app.constant";
+import { registerMetricsIPC } from "./metrics";
 
 class AppUpdater {
     constructor() {
@@ -89,6 +90,7 @@ const createWindow = async () => {
     });
 
     setupUpdaterIPC();
+    registerMetricsIPC()
 
     mainWindow.loadURL(resolveHtmlPath("index.html"));
 

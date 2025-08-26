@@ -302,7 +302,7 @@ export const createCodeStringGetOrderOpens = () => {
     console.info({createCodeStringGetOrderOpens: data})
     return data;
   } catch (err) {
-    console.info('⚠️ clickCloseAll script error:', err.message || err);
+    console.info('⚠️ createCodeStringGetOrderOpens script error:', err.message || err);
     throw err;
   }
 })();
@@ -318,7 +318,23 @@ export const createCodeStringGetPositions = () => {
     console.info({getPosition: data})
     return data;
   } catch (err) {
-    console.info('⚠️ clickCloseAll script error:', err.message || err);
+    console.info('⚠️ createCodeStringGetPositions script error:', err.message || err);
+    throw err;
+  }
+})();
+`;
+};
+
+export const createCodeStringGetMyTrades = (start_time: number) => {
+    return `
+(async () => {
+  try {
+    const dataDraw = await fetch("https://www.gate.com/apiw/v2/futures/usdt/my_trades?contract=&limit=50&offset=0&start_time=${start_time}")
+    const data = await dataDraw.json()
+    console.info({createCodeStringGetMyTrade: data})
+    return data;
+  } catch (err) {
+    console.info('⚠️ createCodeStringGetMyTrade script error:', err.message || err);
     throw err;
   }
 })();

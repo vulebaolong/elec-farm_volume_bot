@@ -10,12 +10,13 @@ import { TSocketRes } from "@/types/base.type";
 import { TContract } from "@/types/contract.type";
 import { TPayload24Change } from "@/types/priority-change.type";
 import { TSettingUsers } from "@/types/setting-user.type";
-import { SymbolState, TSymbols } from "@/types/symbol.type";
+import { TSymbols } from "@/types/symbol.type";
 import { TUiSelector } from "@/types/ui-selector.type";
 import { TUser } from "@/types/user.type";
+import { TWhiteList } from "@/types/white-list.type";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { Bot, TBotConfig, TNewBot } from "./class-bot";
+import { Bot, TBotConfig } from "./class-bot";
 
 export function useBot(webview: Electron.WebviewTag | null) {
     const botRef = useRef<Bot>(null);
@@ -25,33 +26,29 @@ export function useBot(webview: Electron.WebviewTag | null) {
     const queryClient = useQueryClient();
 
     // 1) Tải dữ liệu khởi tạo (chỉ chạy một lần)
+    // useBot.ts
     useEffect(() => {
         if (!webview || !socket?.socket) return;
+        const io = socket.socket; // ✅ bắt giữ instance
 
         const handleSettingUser = ({ data }: TSocketRes<TSettingUsers>) => {
-            // console.log({ handleSettingUser: data });
             getInfoMoutation.mutate();
             botRef.current?.setSettingUser(data);
         };
         const handleUiSelector = ({ data }: TSocketRes<TUiSelector[]>) => {
-            // console.log({ handleUiSelector: data });
             dispatch(SET_UI_SELECTOR(data));
             botRef.current?.setUiSelector(data);
         };
-        const handleEntry = ({ data }: TSocketRes<SymbolState[]>) => {
+        const handleEntry = ({ data }: TSocketRes<TWhiteList>) => {
             // console.log({ handleEntry: data });
-            botRef.current?.setSymbolEntry(data);
+            botRef.current?.setWhitelist(data);
         };
         const handle24hChange = ({ data }: TSocketRes<TPayload24Change>) => {
-            queryClient.setQueryData<TPayload24Change>(["get-priority-24h-chang"], (prev) => {
-                // nếu chưa có, nhận luôn
+            queryClient.setQueryData<TPayload24Change>(["get-priority-24h-change"], (prev) => {
                 if (!prev) return data;
-
                 const same =
                     prev.countGreen === data.countGreen && prev.countRed === data.countRed && prev.countTotalWhiteList === data.countTotalWhiteList;
-                if (same) return prev;
-
-                return data;
+                return same ? prev : data;
             });
             botRef.current?.setPriority24hChange(data);
         };
@@ -59,63 +56,70 @@ export function useBot(webview: Electron.WebviewTag | null) {
             botRef.current?.setSymbolsForClosePosition(data);
         };
 
-        (async () => {
-            console.log(11111);
-            try {
-                const { data: uiSelector } = await api.get<TRes<TUiSelector[]>>(ENDPOINT.UI_SELECTOR.GET_UI_SELECTOR);
-                console.log({ "uiSelector hoàn thành": uiSelector });
-                dispatch(SET_UI_SELECTOR(uiSelector.data));
+        let cancelled = false;
 
-                const { data: settingUser } = await api.get<TRes<TUser>>(ENDPOINT.AUTH.GET_INFO);
-                console.log({ "settingUser hoàn thành": settingUser });
+        (async () => {
+            try {
+                // fetch song song để giảm thời gian chờ
+                const [{ data: uiSelector }, { data: settingUser }, { data: priority24hChange }, { data: contractsArray }] = await Promise.all([
+                    api.get<TRes<TUiSelector[]>>(ENDPOINT.UI_SELECTOR.GET_UI_SELECTOR),
+                    api.get<TRes<TUser>>(ENDPOINT.AUTH.GET_INFO),
+                    api.get<TRes<TPayload24Change>>(ENDPOINT.PRIORITY_24h_CHANGE.GET_PRIORITY_24h_CHANGE),
+                    api.get<TRes<TContract[]>>(ENDPOINT.CONTRACT.GET_CONTRACT),
+                ]);
+                if (cancelled) return;
+
+                dispatch(SET_UI_SELECTOR(uiSelector.data));
                 dispatch(SET_INFO(settingUser.data));
 
-                const { data: priority24hChange } = await api.get<TRes<TPayload24Change>>(ENDPOINT.PRIORITY_24h_CHANGE.GET_PRIORITY_24h_CHANGE);
-                console.log({ "priority24hChange hoàn thành": priority24hChange });
-
-                const { data: contractsArray } = await api.get<TRes<TContract[]>>(ENDPOINT.CONTRACT.GET_CONTRACT);
-                console.log({ "contractsArray hoàn thành": contractsArray });
                 const contracts = new Map<string, TContract>();
-                contractsArray.data.forEach((contract) => {
-                    contracts.set(contract.symbol, contract);
-                })
+                contractsArray.data.forEach((c) => contracts.set(c.symbol, c));
 
-                const positions = await Bot.getPositions(webview);
-                const orderOpens = await Bot.getOrderOpens(webview);
+                const [positions, orderOpens] = await Promise.all([Bot.getPositions(webview), Bot.getOrderOpens(webview)]);
+                if (cancelled) return;
 
                 const initConfigBot: TBotConfig = {
                     uiSelector: uiSelector.data,
                     settingUser: settingUser.data.SettingUsers,
                     priority24hChange: priority24hChange.data,
-                    contracts: contracts,
+                    contracts,
                 };
 
-                const newBot: TNewBot = {
-                    configBot: initConfigBot,
-                    webview,
-                    orderOpens,
-                    positions,
-                };
+                // ✅ không tạo mới nếu đã có
+                if (botRef.current) {
+                    botRef.current.update?.(initConfigBot);
+                } else {
+                    botRef.current = new Bot({ configBot: initConfigBot, webview, orderOpens, positions });
+                    botRef.current.start();
+                }
 
-                botRef.current = new Bot(newBot);
-                botRef.current.start();
+                // ✅ đăng ký trên đúng instance io
+                io.off("setting-user", handleSettingUser);
+                io.off("ui-selector", handleUiSelector);
+                io.off("entry", handleEntry);
+                io.off("24hChange", handle24hChange);
+                io.off("symbols-for-close-position", handleSymbolsForClosePosition);
 
-                socket?.socket?.on("setting-user", handleSettingUser);
-                socket?.socket?.on("ui-selector", handleUiSelector);
-                socket?.socket?.on("entry", handleEntry);
-                socket?.socket?.on("24hChange", handle24hChange);
-                socket?.socket?.on("symbols-for-close-position", handleSymbolsForClosePosition);
-            } catch (error) {
-                console.error("❌ Lỗi trong qúa trình start bot =====>", error);
+                io.on("setting-user", handleSettingUser);
+                io.on("ui-selector", handleUiSelector);
+                io.on("entry", handleEntry);
+                io.on("24hChange", handle24hChange);
+                io.on("symbols-for-close-position", handleSymbolsForClosePosition);
+            } catch (e) {
+                console.error("❌ start bot error:", e);
             }
         })();
 
         return () => {
-            socket.socket?.off("setting-user", handleSettingUser);
-            socket.socket?.off("ui-selector", handleUiSelector);
-            socket.socket?.off("entry", handleEntry);
-            socket.socket?.off("24hChange", handle24hChange);
-            socket.socket?.off("symbols-for-close-position", handleSymbolsForClosePosition);
+            cancelled = true;
+            // ✅ gỡ listeners trên đúng io
+            io.off("setting-user", handleSettingUser);
+            io.off("ui-selector", handleUiSelector);
+            io.off("entry", handleEntry);
+            io.off("24hChange", handle24hChange);
+            io.off("symbols-for-close-position", handleSymbolsForClosePosition);
+            // ✅ stop bot nếu bạn đang tạo mới theo lifecycle (tránh zombie loop)
+            botRef.current?.stop?.();
         };
     }, [webview, socket?.socket]);
 

@@ -15,6 +15,9 @@ export type TSettingUsers = {
     timeoutMs: number;
     max24hChangeGreen: number;
     max24hChangeRed: number;
+    minSpreadPercent: number;
+    maxSpreadPercent: number;
+    maxDepth: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;
