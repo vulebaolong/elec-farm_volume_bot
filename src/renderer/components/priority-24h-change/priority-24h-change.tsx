@@ -4,12 +4,14 @@ import { useGetPriority24Change } from "@/api/tanstack/priority-24h-change.tanst
 import { useAppSelector } from "@/redux/store";
 import { Bot } from "../bot/logic/class-bot";
 import { WhitelistSentiment } from "./whitelist-sentiment/whitelist-sentiment";
+import { TWhitelistUi } from "@/types/white-list.type";
 
 type TProps = {
     botRef: React.RefObject<Bot | null>;
+    whitelistUi: TWhitelistUi[]
 };
 
-export default function Priority24hChange({ botRef }: TProps) {
+export default function Priority24hChange({ botRef, whitelistUi }: TProps) {
     const max24hChangeGreen = useAppSelector((state) => state.user.info?.SettingUsers.max24hChangeGreen);
     const max24hChangeRed = useAppSelector((state) => state.user.info?.SettingUsers.max24hChangeRed);
 
@@ -27,6 +29,7 @@ export default function Priority24hChange({ botRef }: TProps) {
                 thresholdLong={max24hChangeGreen}
                 thresholdShort={max24hChangeRed}
                 botRef={botRef}
+                whitelistUi={whitelistUi}
             />
         </div>
     );

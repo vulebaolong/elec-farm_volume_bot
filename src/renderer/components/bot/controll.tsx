@@ -38,12 +38,12 @@ export default function Controll({ isReady, webviewRef, botRef }: TProps) {
             return;
         }
 
-        handleCloseAll({
-            webview,
-            selector: {
-                buttonCloseAll: selectorbuttonCloseAll,
-            },
-        });
+        // handleCloseAll({
+        //     webview,
+        //     selector: {
+        //         buttonCloseAll: selectorbuttonCloseAll,
+        //     },
+        // });
     };
     return (
         <div className="px-5 sticky top-0 z-[1]">

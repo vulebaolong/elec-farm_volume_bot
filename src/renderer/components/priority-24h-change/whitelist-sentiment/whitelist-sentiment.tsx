@@ -10,6 +10,7 @@ import { useAppDispatch } from "@/redux/store";
 import { SET_PRIORITY } from "@/redux/slices/bot.slice";
 import Whitelist from "@/components/whitelist/whitelist";
 import { Bot } from "@/components/bot/logic/class-bot";
+import { TWhitelistUi } from "@/types/white-list.type";
 
 type Props = {
     total?: number;
@@ -20,10 +21,11 @@ type Props = {
     lastUpdated?: string;
     isLoading?: boolean;
     botRef: React.RefObject<Bot | null>;
+    whitelistUi: TWhitelistUi[]
 };
 
 export function WhitelistSentiment({
-    botRef,
+    whitelistUi,
     total = 100,
     green = 0,
     red = 0,
@@ -129,7 +131,12 @@ export function WhitelistSentiment({
                     {lastUpdated && <div className="text-xs text-muted-foreground">Last updated: {lastUpdated}</div>}
                 </CardContent>
             </Card>
-            <Whitelist priority={priority} totalWhitelist={total} whitelist={botRef.current?.getWhitelist()} open={openWhitelist} onOpenChange={setOpenWhitelist} />
+            <Whitelist
+                totalWhitelist={total}
+                whitelistUi={whitelistUi}
+                open={openWhitelist}
+                onOpenChange={setOpenWhitelist}
+            />
         </>
     );
 }

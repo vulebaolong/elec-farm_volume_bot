@@ -37,3 +37,16 @@ export type TWhitelistEntry = {
     bidBest: number;
     order_price_round: number;
 };
+
+export type TWhitelistUi = {
+    symbol: string;
+    sizeStr: string | null;
+    side: TSide | null;
+    isSpread: boolean;
+    isDepth: boolean;
+    isSize: boolean;
+    qualified: boolean;
+    core: TCore;
+    isLong: boolean;
+    isShort: boolean;
+};

@@ -11,9 +11,9 @@ import { TPayload24Change } from "@/types/priority-change.type";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TUiSelector } from "@/types/ui-selector.type";
 import { TUser } from "@/types/user.type";
-import { TWhiteList } from "@/types/white-list.type";
+import { TWhiteList, TWhitelistUi } from "@/types/white-list.type";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bot, TBotConfig } from "./class-bot";
 
 export function useBot(webview: Electron.WebviewTag | null) {
@@ -22,6 +22,7 @@ export function useBot(webview: Electron.WebviewTag | null) {
     const getInfoMoutation = useGetInfoMutation();
     const socket = useSocket();
     const queryClient = useQueryClient();
+    const [whitelistUi, setWhitelistUi] = useState<TWhitelistUi[]>([]);
 
     // 1) Tải dữ liệu khởi tạo (chỉ chạy một lần)
     // useBot.ts
@@ -73,13 +74,14 @@ export function useBot(webview: Electron.WebviewTag | null) {
                     uiSelector: uiSelector.data,
                     settingUser: settingUser.data.SettingUsers,
                     priority24hChange: priority24hChange.data,
+                    roleId: settingUser.data.roleId,
                 };
 
                 // ✅ không tạo mới nếu đã có
                 if (botRef.current) {
                     botRef.current.update?.(initConfigBot);
                 } else {
-                    botRef.current = new Bot({ configBot: initConfigBot, webview, orderOpens, positions });
+                    botRef.current = new Bot({ configBot: initConfigBot, webview, orderOpens, positions, stateSetWhitelistUi: setWhitelistUi });
                     botRef.current.start();
                 }
 
@@ -112,5 +114,6 @@ export function useBot(webview: Electron.WebviewTag | null) {
 
     return {
         botRef,
+        whitelistUi,
     };
 }

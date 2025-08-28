@@ -1,5 +1,4 @@
 import { clickCloseAll, TClickCloseAll } from "@/javascript-string/logic-farm";
-import { TOrderRes } from "@/types/order.type";
 import { toast } from "sonner";
 import { tryJSONparse } from "./function.helper";
 
@@ -10,7 +9,7 @@ export type THandleCloseAll = {
 
 export const handleCloseAll = async ({ webview, selector }: THandleCloseAll) => {
     try {
-        const waitForOrder = new Promise<TOrderRes>((resolve) => {
+        const waitForOrder = new Promise<any>((resolve) => {
             const handler = (event: any) => {
                 const chanel = event.channel;
                 const data = event.args?.[0];
@@ -26,7 +25,7 @@ export const handleCloseAll = async ({ webview, selector }: THandleCloseAll) => 
         const stringCloseAll = clickCloseAll({ selector });
         // console.log('Open Order string: ', stringCloseAll);
         await webview.executeJavaScript(stringCloseAll);
-        const result: TOrderRes = await waitForOrder;
+        const result: any = await waitForOrder;
         console.log(`✅ Close All Result`, result);
         toast.success(`Close All success`);
     } catch (err: any) {

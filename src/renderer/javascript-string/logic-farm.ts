@@ -75,6 +75,8 @@ window.state = Object.assign(window.state || {}, {...window.state, symbol: '${pa
 
 (async () => {
   try {
+      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
       const input = document.querySelector('${payload.selector.inputAmount}');
       if (!input) throw new Error('Input not found');
 
@@ -85,14 +87,20 @@ window.state = Object.assign(window.state || {}, {...window.state, symbol: '${pa
       // clear input
       nativeInputValueSetter?.call(input, '');
 
+      await sleep(100)
+
       // set value
       nativeInputValueSetter?.call(input, window.state.amount);
       log.push({ message: 'Set input value', data: window.state.amount });
       console.info({ message: 'Set input value', data: window.state.amount });
 
+      await sleep(50)
+
       input.dispatchEvent(new Event('input', { bubbles: true }));
       log.push({ message: 'Input value', data: input.value });
       console.info({ message: 'Input value', data: input.value });
+
+      await sleep(100)
 
       const btn = document.querySelector('${payload.selector.buttonLong}');
       if (!btn) {
@@ -338,6 +346,114 @@ export const createCodeStringGetMyTrades = (contract?: string, start_time?: numb
     return data;
   } catch (err) {
     console.info('⚠️ createCodeStringGetMyTrade script error:', err.message || err);
+    throw err;
+  }
+})();
+`;
+};
+
+export type TCreateCodeStringClickTabOpenOrder = {
+    buttonTabOpenOrder: string;
+};
+export const createCodeStringClickTabOpenOrder = (payload: TCreateCodeStringClickTabOpenOrder) => {
+    return `
+(async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  try {
+      const buttonTabOpenOrder = document.querySelector("${payload.buttonTabOpenOrder}");
+      if (!buttonTabOpenOrder) throw new Error('buttonTabOpenOrder not found');
+
+      buttonTabOpenOrder.click();
+
+      await sleep(100);
+
+      return true;
+  } catch (err) {
+      console.info('⚠️ closeOrder script error:', err.message || err);
+      throw err;
+  }
+})();
+`;
+};
+
+type TCreateCodeStringClickCancelAllOpen = {
+    contract: string;
+    tableOrderPanel: string;
+};
+export type TClickCancelAllOpenRes = {
+    ok: boolean;
+    scanned: number;
+    clicked: number;
+    skipped: number;
+    contract: string;
+};
+
+/**
+ * contract: FLOCKUSDT (không có dấu ở giữa)
+ */
+export const createCodeStringClickCancelAllOpen = ({ contract, tableOrderPanel }: TCreateCodeStringClickCancelAllOpen) => {
+    return `
+(() => {
+  try {
+    const NO_WORDS = new Set(["no","否","không","нет","non","não","tidak","いいえ","لا","ні"]);
+
+    const table = document.querySelector('${tableOrderPanel}');
+    if (!table) throw new Error('❌ Orders table not found: table.trade__table');
+    const rows = table.querySelectorAll('tbody tr[role="row"], tbody tr');
+
+    let scanned = 0, clicked = 0, skipped = 0;
+    for (const row of rows) {
+      scanned++;
+
+      // 1) Lấy CONTRACT ở cột đầu (normalize về "SYMBOLUSDT")
+      const contractNorm = row.innerText.split('\\n').at(0)
+
+      // Nếu có chỉ định contract mà khác thì bỏ qua
+      if (contractNorm !== "${contract}") { skipped++; continue; }
+
+      // 2) Kiểm tra Reduce-Only = No (đa ngôn ngữ)
+      //    Tìm trong các cell của hàng xem có cell nào text đúng 1 trong số "No"/dịch của nó
+      const textReduceOnly = (Array.from(row.children).at(8).textContent || "").trim().toLowerCase();
+      if (!NO_WORDS.has(textReduceOnly)) { skipped++; continue; }
+
+      // 3) Tìm nút Cancel trong cột Action và click
+      //    Ưu tiên button có chữ "Cancel" (case-insensitive); nếu không có thì lấy button cuối cùng trong ô cuối.
+      let btn = Array.from(row.children).at(-1).querySelectorAll("button")[1];
+
+      if (btn) {
+        btn.click();
+        clicked++;
+      } else {
+        console.info('⚠️ Không tìm thấy nút Cancel cho', contractNorm, row);
+        skipped++;
+      }
+      // (tuỳ chọn) delay nhẹ để tránh spam click nếu cần:
+      // await new Promise(r => setTimeout(r, 30));
+    }
+
+    return { ok: true, scanned, clicked, skipped, contract: "${contract}" };
+  } catch (err) {
+    console.info('⚠️ clickCancelOpenByContract script error:', err?.message || err);
+    throw err;
+  }
+})();
+`;
+};
+
+/**
+ * contract: PENGU_USDT
+ */
+export const createCodeStringGetBidsAsks = (contract: string, limit: number | undefined = 10) => {
+    return `
+(async () => {
+  try {
+    const dataDraw = await fetch("https://www.gate.com/apiw/v2/futures/usdt/order_book?limit=${limit}&contract=${contract}")
+    const data = await dataDraw.json()
+    console.info({createCodeStringGetBidsAsks: data})
+    return data;
+  } catch (err) {
+    console.info('⚠️ createCodeStringGetBidsAsks script error:', err.message || err);
     throw err;
   }
 })();

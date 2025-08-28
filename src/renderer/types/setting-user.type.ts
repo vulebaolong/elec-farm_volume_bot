@@ -18,6 +18,7 @@ export type TSettingUsers = {
     minSpreadPercent: number;
     maxSpreadPercent: number;
     maxDepth: number;
+    timeoutClearOpenSecond: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

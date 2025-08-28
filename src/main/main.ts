@@ -8,17 +8,18 @@
  * When running `npm run build` or `npm run build:main`, this file is compiled to
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
-import path from "path";
-import { app, BrowserWindow, shell, ipcMain, powerMonitor } from "electron";
-import { autoUpdater } from "electron-updater";
-import log from "electron-log";
-import MenuBuilder from "./menu";
-import { resolveHtmlPath } from "./util";
-import { pathToFileURL } from "node:url";
-import { setupUpdaterIPC } from "./updater";
-import { installExtension, REDUX_DEVTOOLS } from "electron-devtools-installer";
 import { IS_PRODUCTION } from "@/constant/app.constant";
+import { app, BrowserWindow, ipcMain, powerMonitor, shell, WebContentsView } from "electron";
+import { installExtension, REDUX_DEVTOOLS } from "electron-devtools-installer";
+import log from "electron-log";
+import { autoUpdater } from "electron-updater";
+import { pathToFileURL } from "node:url";
+import path from "path";
+import MenuBuilder from "./menu";
 import { registerMetricsIPC } from "./metrics";
+import { setupUpdaterIPC } from "./updater";
+import { resolveHtmlPath } from "./util";
+import { ensureGateView } from "./gate-view";
 
 class AppUpdater {
     constructor() {
@@ -90,7 +91,8 @@ const createWindow = async () => {
     });
 
     setupUpdaterIPC();
-    registerMetricsIPC()
+    registerMetricsIPC();
+    // ensureGateView(mainWindow, isDebug);
 
     mainWindow.loadURL(resolveHtmlPath("index.html"));
 
@@ -170,15 +172,6 @@ app.whenReady()
         });
     })
     .catch(console.log);
-
-// ipcMain.handle('run-gate-macro', async () => {
-//   try {
-//     await runGateMacro();
-//     return { success: true };
-//   } catch (err: any) {
-//     return { success: false, error: err.message };
-//   }
-// });
 
 ipcMain.handle("get-webview-preload-url", () => {
     // Dev: đọc thẳng trong thư mục dự án

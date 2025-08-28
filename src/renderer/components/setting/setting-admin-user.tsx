@@ -47,6 +47,7 @@ export const FormSchema = z.object({
     minSpreadPercent: numberRange(0, 100, "Min Spread %"),
     maxSpreadPercent: numberRange(0, 100, "Max Spread %"),
     maxDepth: positiveNumber("Max Depth"),
+    timeoutClearOpenSecond: positiveNumber("Timeout Clear Open"),
 });
 
 type FormInput = z.input<typeof FormSchema>; // kiểu dữ liệu TRƯỚC khi Zod parse ('' | string | number)
@@ -85,6 +86,7 @@ export default function SettingAdminUser({ type }: TProps) {
             minSpreadPercent: "",
             maxSpreadPercent: "",
             maxDepth: "",
+            timeoutClearOpenSecond: "",
         },
     });
 
@@ -106,6 +108,7 @@ export default function SettingAdminUser({ type }: TProps) {
                 minSpreadPercent: setting.minSpreadPercent ?? "",
                 maxSpreadPercent: setting.maxSpreadPercent ?? "",
                 maxDepth: setting.maxDepth ?? "",
+                timeoutClearOpenSecond: setting.timeoutClearOpenSecond ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form]);
@@ -130,6 +133,7 @@ export default function SettingAdminUser({ type }: TProps) {
             minSpreadPercent: data.minSpreadPercent,
             maxSpreadPercent: data.maxSpreadPercent,
             maxDepth: data.maxDepth,
+            timeoutClearOpenSecond: data.timeoutClearOpenSecond,
         };
         console.log({ updateSettingUser: payload });
         updateSettingUser.mutate(payload, {
@@ -479,6 +483,31 @@ export default function SettingAdminUser({ type }: TProps) {
                             error={form.formState.errors.maxDepth?.message}
                             decimalSeparator="."
                             thousandSeparator=","
+                            min={0}
+                            step={1}
+                            clampBehavior="strict"
+                        />
+                    )}
+                />
+
+                {/* timeoutClearOpenSecond */}
+                <Controller
+                    name="timeoutClearOpenSecond"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Time Out Clear Open (second)"
+                            placeholder="Time Out Clear Open (second)"
+                            inputWrapperOrder={["label", "input", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.maxDepth?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix="s"
                             min={0}
                             step={1}
                             clampBehavior="strict"

@@ -7,24 +7,30 @@ import { changeLeverageHandler } from "@/helpers/change-leverage-handler.helper"
 import { tryJSONparse } from "@/helpers/function.helper";
 import {
     closeOrder,
+    createCodeStringClickCancelAllOpen,
+    createCodeStringClickTabOpenOrder,
+    createCodeStringGetBidsAsks,
     createCodeStringGetMyTrades,
     createCodeStringGetOrderOpens,
     createCodeStringGetPositions,
     openOrderPostOnly,
+    TClickCancelAllOpenRes,
     TCloseOrder,
     TOpenOrderPostOnly,
 } from "@/javascript-string/logic-farm";
 import { TRes } from "@/types/app.type";
+import { TGateApiRes } from "@/types/base-gate.type";
 import { TRespnoseGate, TSide } from "@/types/base.type";
+import { TBidsAsks } from "@/types/bids-asks.type";
 import { TGetInfoContractRes } from "@/types/contract.type";
 import { TPayloadClickOpenEntry, TPayloadClickOpenPostOnlyEntry } from "@/types/entry.type";
 import { Book, TGetMyTradesRes, TMyTrade } from "@/types/my-trade.type";
-import { TEntryOrderOpenRes, TGetOrderOpenRes, TOrderOpen } from "@/types/order.type";
+import { TOrderOpen } from "@/types/order.type";
 import { TPosition, TPositionRes } from "@/types/position.type";
 import { TPayload24Change, TPriority } from "@/types/priority-change.type";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TUiSelector } from "@/types/ui-selector.type";
-import { TWhiteList, TWhitelistEntry, TWhiteListItem } from "@/types/white-list.type";
+import { TCore, TWhiteList, TWhitelistEntry, TWhiteListItem, TWhitelistUi } from "@/types/white-list.type";
 import { toast } from "sonner";
 
 /**
@@ -33,15 +39,11 @@ import { toast } from "sonner";
  *  - false: lệnh open
  */
 
-type TaskInfo = {
-    type: string;
-    contract: string;
-};
-
 export type TBotConfig = {
     uiSelector: TUiSelector[];
     settingUser: TSettingUsers;
     priority24hChange: TPayload24Change;
+    roleId: number;
     // contracts: Map<string, TContract>;
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -51,6 +53,7 @@ export type TNewBot = {
     webview: Electron.WebviewTag;
     orderOpens: TOrderOpen[] | null;
     positions: TPosition[];
+    stateSetWhitelistUi: React.Dispatch<React.SetStateAction<TWhitelistUi[]>>;
 };
 
 export class Bot {
@@ -70,7 +73,7 @@ export class Bot {
             data: orderOpens,
             code: codeOrderOpen,
             message: messageOrderOpen,
-        }: TGetOrderOpenRes = await webview.executeJavaScript(stringOrderOpen);
+        }: TGateApiRes<TOrderOpen[] | null> = await webview.executeJavaScript(stringOrderOpen);
         if (codeOrderOpen >= 400) throw new Error(`Lỗi code >= 400 khi gọi createCodeStringGetOrderOpens: ${messageOrderOpen}`);
         console.log({ "orderOpen hoàn thành": orderOpens });
         return orderOpens;
@@ -97,6 +100,7 @@ export class Bot {
     private positions = new Map<string, TPosition>();
     private orderOpens: TOrderOpen[];
     private whitelistEntry: TWhitelistEntry[] = []; // chỉ chứa các symbol vào lệnh
+    private whitelistUi: TWhitelistUi[] = []; // list để show ra UI
     private whiteList: TWhiteList = {};
     private infoContract = new Map<string, TGetInfoContractRes>();
 
@@ -104,12 +108,15 @@ export class Bot {
 
     private running = false;
 
+    private stateSetWhitelistUi: React.Dispatch<React.SetStateAction<TWhitelistUi[]>> = () => {};
+
     constructor(newBot: TNewBot) {
         // copy để tránh bị mutate từ bên ngoài
         this.configBot = { ...newBot.configBot };
         this.webview = newBot.webview;
         this.orderOpens = newBot.orderOpens || [];
         this.replacePositions(newBot.positions);
+        this.stateSetWhitelistUi = newBot.stateSetWhitelistUi;
     }
 
     setIsHandle(isHandle: boolean) {
@@ -123,6 +130,7 @@ export class Bot {
     async start() {
         if (this.running) {
             this.log("start() ignored: already running");
+            console.log("start() ignored: already running");
             return;
         }
         this.running = true;
@@ -131,27 +139,50 @@ export class Bot {
             while (true) {
                 const iterStart = performance.now();
                 this.log("✅✅✅✅✅ ITER START =====", this.snapshot());
+                this.setWhitelistEntry();
 
                 try {
                     if (this.isHandle) {
                         let isRefresh = true;
 
                         // ===== 1) CREATE CLOSE =====
+                        // this.log("🟡🟡🟡🟡🟡 Create Close");
+                        // const orderOpenFilled = await this.openFillWatcher();
+                        // if (orderOpenFilled && orderOpenFilled.length > 0) {
+                        //     for (const payloadFromOpenFilled of orderOpenFilled) {
+                        //         const payload = {
+                        //             symbol: payloadFromOpenFilled.symbol,
+                        //             size: payloadFromOpenFilled.size,
+                        //             price: payloadFromOpenFilled.price,
+                        //             reduce_only: true, // true là lệnh close
+                        //         };
+                        //         this.log("Create Close: openEntry()", payload);
+                        //         await this.withTimeout(this.openEntry(payload), 10_000, `Create Close: openEntry(Create Close ${payload.symbol})`);
+                        //     }
+
+                        //     await this.refreshSnapshot("Create Close");
+                        //     isRefresh = false;
+
+                        //     this.log("✅ Create Close: done build payloads…");
+                        // } else {
+                        //     this.log("Create Close: no positions");
+                        // }
+                        // this.log("🟡🟡🟡🟡🟡 Create Close");
+                        // console.log("\n\n");
+
+                        // ===== 1) CREATE CLOSE =====
                         this.log("🟡🟡🟡🟡🟡 Create Close");
-                        const orderOpenFilled = await this.openFillWatcher();
-                        if (orderOpenFilled && orderOpenFilled.length > 0) {
-                            for (const payloadFromOpenFilled of orderOpenFilled) {
-                                const payload = {
-                                    symbol: payloadFromOpenFilled.symbol,
-                                    size: payloadFromOpenFilled.size,
-                                    price: payloadFromOpenFilled.price,
-                                    reduce_only: true, // true là lệnh close
-                                };
-                                this.log("Create Close: openEntry()", payload);
-                                await this.withTimeout(this.openEntry(payload), 10_000, `Create Close: openEntry(Create Close ${payload.symbol})`);
+                        if (this.positions.size > 0) {
+                            const payloads = await this.getCloseOrderPayloads(); // 1 bước: tính + build payload
+
+                            for (const p of payloads) {
+                                console.log("Create close order:", p);
+                                await this.withTimeout(this.openEntry(p, `TP: Close`), 10_000, `Create Close: openEntry(Create Close ${p.symbol})`);
                             }
 
-                            await this.refreshSnapshot("Create Close");
+                            await this.refreshSnapshot("Close");
+
+                            isRefresh = false;
 
                             this.log("✅ Create Close: done build payloads…");
                         } else {
@@ -160,62 +191,67 @@ export class Bot {
                         this.log("🟡🟡🟡🟡🟡 Create Close");
                         console.log("\n\n");
 
-                        // ===== 1) CREATE CLOSE =====
-                        // this.log("🟡🟡🟡🟡🟡 Create Close");
-                        // if (this.positions.size > 0) {
-                        //     const payloads = this.getCloseOrderPayloads(); // 1 bước: tính + build payload
+                        this.log("🟢🟢🟢🟢🟢 Clear Open");
+                        if (this.orderOpens.length > 0) {
+                            if (isRefresh) await this.refreshSnapshot("Clear Open");
 
-                        //     for (const p of payloads) {
-                        //         console.log("Đặt close order:", p);
-                        //         await this.withTimeout(this.openEntry(p), 10_000, `Create Close: openEntry(Create Close ${p.symbol})`);
+                            const contractsToCancel = this.contractsToCancelWithEarliest();
+                            console.log(`contractsToCancel`, contractsToCancel);
 
-                        //         // refresh để lần lặp sau không đặt trùng
-                        //         await this.refreshSnapshot("Close");
-                        //     }
+                            // lấy ra tất cả các lệnh open, với is_reduce_only = false
+                            for (const contract of contractsToCancel) {
+                                if (this.isTimedOutClearOpen(contract.earliest)) {
+                                    await this.withTimeout(
+                                        this.clickCanelAllOpen(contract.contract),
+                                        10_000,
+                                        `Clear Open: clickCanelAllOpen(${contract.contract})`,
+                                    );
+                                    isRefresh = false;
+                                }
+                            }
 
-                        //     this.log("✅ Create Close: done build payloads…");
+                            if (!isRefresh) await this.refreshSnapshot("Clear Open");
 
-                        //     isRefresh = false;
-                        // } else {
-                        //     this.log("Create Close: no positions");
-                        // }
-                        // this.log("🟡🟡🟡🟡🟡 Create Close");
-                        // console.log("\n\n");
+                            this.log("✅ Clear Open: done");
+                        } else {
+                            this.log("Clear Open: no order open");
+                        }
+                        this.log("🟢🟢🟢🟢🟢 Clear Open");
 
-                        // ===== 2) OPEN =====
-                        this.log("🔵🔵🔵🔵🔵 Open");
+                        // ===== 2) CREATE OPEN =====
+                        this.log("🔵🔵🔵🔵🔵 Create Open");
                         if (this.isCheckwhitelistEntryEmty() && this.isCheckMaxOpenPO()) {
                             for (const whitelistItem of Object.values(this.whitelistEntry)) {
                                 const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
 
                                 // nếu đã max thì không vào thoát vòng lặp
                                 if (!this.isCheckMaxOpenPO()) {
-                                    this.log(`Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
+                                    this.log(`Create Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
                                     break;
                                 }
 
                                 // nếu symbol đó đã tồn tại trong orderOpens -> bỏ qua
                                 if (this.isOrderExitsByContract(symbol)) {
-                                    this.log(`Open: skip ${symbol} (already exists)`);
+                                    this.log(`Create Open: skip ${symbol} (already exists)`);
                                     continue;
                                 }
 
-                                this.log(`Open: ${symbol} ok (not exists)`);
-                                this.log(`Open: side=${side}`);
-                                this.log(`Open: sizeStr=${sizeStr}`);
+                                this.log(`Create Open: ${symbol} ok (not exists)`);
+                                this.log(`Create Open: side=${side}`);
+                                this.log(`Create Open: sizeStr=${sizeStr}`);
 
                                 // Đổi leverage trước khi vào lệnh
-                                this.log("Open: change leverage…");
+                                this.log("Create Open: change leverage…");
                                 const ok = await this.withTimeout(
                                     changeLeverageHandler({ symbol, leverageNumber: this.settingUser.leverage, webview: this.webview }),
                                     10_000,
-                                    `Open: changeLeverage(${symbol})`,
+                                    `Create Open: changeLeverage(${symbol})`,
                                 );
                                 if (!ok) {
-                                    this.log("Open: change leverage failed");
+                                    this.log("Create Open: change leverage failed");
                                     continue;
                                 }
-                                this.log("Open: leverage ok");
+                                this.log("Create Open: leverage ok");
 
                                 console.log({
                                     bidBest: bidBest,
@@ -223,42 +259,46 @@ export class Bot {
                                     order_price_round: order_price_round,
                                 });
 
-                                const prices = this.ladderPrices(
-                                    side, // "long" hoặc "short"
-                                    {
-                                        bidBest: bidBest,
-                                        askBest: askBest,
-                                        order_price_round: order_price_round,
-                                    },
-                                    5,
-                                    5,
-                                );
-                                this.log(`Open: ${prices.length} ladder order(s)`, prices);
+                                const bidsAsks = await this.getBidsAsks(symbol);
+
+                                const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, 5 + 1);
+
+                                // const prices = this.ladderPrices(
+                                //     side, // "long" hoặc "short"
+                                //     {
+                                //         bidBest: bidBest,
+                                //         askBest: askBest,
+                                //         order_price_round: order_price_round,
+                                //     },
+                                //     5,
+                                //     5,
+                                // );
+                                this.log(`Create Open: ${prices.length} ladder order(s)`, prices);
 
                                 for (const price of prices) {
                                     const payloadOpenOrder: TPayloadClickOpenPostOnlyEntry = {
                                         symbol,
                                         size: side === "long" ? sizeStr : `-${sizeStr}`,
-                                        price: price,
+                                        price: price.p,
                                         reduce_only: false, // false là lệnh open
                                     };
-                                    this.log("Open: openEntry()", payloadOpenOrder);
-                                    await this.withTimeout(this.openEntry(payloadOpenOrder), 10_000, `Open: openEntry(open ${symbol})`);
+                                    this.log("Create Open: openEntry()", payloadOpenOrder);
+                                    await this.withTimeout(this.openEntry(payloadOpenOrder, `Open`), 10_000, `Open: openEntry(open ${symbol})`);
                                 }
 
                                 // refresh để lần lặp sau không đặt trùng
-                                await this.refreshSnapshot("Open");
+                                await this.refreshSnapshot("Create Open");
 
-                                this.log("✅ Open: done for symbol", symbol);
+                                this.log("✅ Create Open: done for symbol", symbol);
                             }
                         } else {
-                            this.log(`Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
+                            this.log(`Create Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
                         }
-                        this.log("🔵🔵🔵🔵🔵 Open");
+                        this.log("🔵🔵🔵🔵🔵 Create Open");
                         console.log("\n\n");
 
                         // ===== 3) SL / ROI =====
-                        this.log("🟣🟣🟣🟣🟣 SL/ROI");
+                        this.log("🟣🟣🟣🟣🟣 SL/Timeout");
                         if (this.positions.size > 0) {
                             await this.handleRoi();
 
@@ -269,14 +309,13 @@ export class Bot {
 
                             isRefresh = false;
                         } else {
-                            this.log("SL/ROI: no positions");
+                            this.log("SL/Timeout: no positions");
                         }
-                        this.log("🟣🟣🟣🟣🟣 SL/ROI");
+                        this.log("🟣🟣🟣🟣🟣 SL/Timeout");
                         console.log("\n\n");
 
                         if (isRefresh) {
                             await this.refreshSnapshot("Refresh");
-
                             this.log("✅ Refresh End: done");
                         }
 
@@ -306,7 +345,7 @@ export class Bot {
         this.running = false;
     }
 
-    async openEntry(payload: TPayloadClickOpenPostOnlyEntry) {
+    async openEntry(payload: TPayloadClickOpenPostOnlyEntry, label: string) {
         let handler: any;
 
         try {
@@ -348,7 +387,7 @@ export class Bot {
             const stringOrder = openOrderPostOnly(payloadForOpenOrder);
             // console.log('Open Order string: ', stringOrder);
             await this.webview.executeJavaScript(stringOrder);
-            const result: TEntryOrderOpenRes = await waitForOrder;
+            const result: TGateApiRes<TOrderOpen | null> = await waitForOrder;
             if (result.code >= 400) throw new Error(`${payload.symbol}: ${result.message}`);
 
             console.log(
@@ -357,22 +396,17 @@ export class Bot {
             );
 
             if (!result.data) return;
-            const status = `Create Order - ${payload.reduce_only ? "Close" : "Open"} ${this.getOrderSide(result.data)}`;
+            const status = `✅ ${result.data.contract} - ${label} ${this.getOrderSide(result.data)}`;
 
-            // nếu là lệnh đóng thì reset lại thời gian cursor
-            if (payload.reduce_only) {
-                // this.newCursorTimeSeconds();
-            }
-
-            toast.success(`✅ ${status}`, {
-                description: <DescriptionOpenEntry symbol={result.data.contract} size={result.data.size} side={this.getOrderSide(result.data)} />,
+            toast.success(status, {
+                description: <DescriptionOpenEntry symbol={result.data.contract} size={result.data.size} price={result.data.price} />,
             });
 
             return result.data;
         } catch (err: any) {
-            const status = `Create Order - ${payload.reduce_only ? "Close" : "Open"} ${Number(payload.size) >= 0 ? "long" : "short"}`;
-            console.error(`❌ ${status} ${payload.symbol}`, err);
-            toast.error(`❌ ${status} ${payload.symbol}`, { description: err.message });
+            const status = `❌ ${payload.symbol} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"}`;
+            console.error(status, err);
+            toast.error(status, { description: err.message });
             // throw err;
         } finally {
             if (handler) this.webview.removeEventListener("ipc-message", handler);
@@ -444,11 +478,62 @@ export class Bot {
         }
     }
 
+    /** 1) Gom open orders theo contract + lấy create_time sớm nhất (và đếm số lệnh) */
+    earliestOpenByContract() {
+        const m = new Map<string, { earliest: number; count: number }>();
+        for (const o of this.orderOpens) {
+            if (o.is_reduce_only) continue; // chỉ lấy lệnh OPEN (reduce_only = false)
+            const c = o.contract.replace("/", "_");
+            const rec = m.get(c);
+            if (!rec) {
+                m.set(c, { earliest: o.create_time, count: 1 });
+            } else {
+                if (o.create_time < rec.earliest) rec.earliest = o.create_time;
+            }
+        }
+        return [...m.entries()].map(([contract, v]) => ({ contract, earliest: v.earliest }));
+    }
+
+    /** 2) Các contract có OPEN nhưng KHÔNG có position, kèm thời điểm open sớm nhất */
+    contractsToCancelWithEarliest() {
+        const list = this.earliestOpenByContract();
+        return list.filter(({ contract }) => !this.positions.has(contract));
+    }
+
+    async clickCanelAllOpen(contract: string) {
+        this.clickTabOpenOrder();
+        const selectorTableOrderPanel = this.uiSelector?.find((item) => item.code === "tableOrderPanel")?.selectorValue;
+        if (!selectorTableOrderPanel) {
+            console.log(`Not found selector`, { selectorTableOrderPanel });
+            throw new Error(`Not found selector`);
+        }
+        const stringClickCanelAllOpen = createCodeStringClickCancelAllOpen({
+            contract: contract.replace("/", "").replace("_", ""),
+            tableOrderPanel: selectorTableOrderPanel,
+        });
+
+        // console.log("stringClickCanelAllOpen: ", stringClickCanelAllOpen);
+
+        const result: TClickCancelAllOpenRes = await this.webview.executeJavaScript(stringClickCanelAllOpen);
+        toast.success(`✅ ${result.contract} Cancel All Open: ${result.clicked}`);
+    }
+
+    async clickTabOpenOrder() {
+        const selectorButtonTabOpenOrder = this.uiSelector?.find((item) => item.code === "buttonTabOpenOrder")?.selectorValue;
+        if (!selectorButtonTabOpenOrder) {
+            console.log(`Not found selector`, { selectorButtonTabOpenOrder });
+            throw new Error(`Not found selector`);
+        }
+        const stringClickTabOpenOrder = createCodeStringClickTabOpenOrder({ buttonTabOpenOrder: selectorButtonTabOpenOrder });
+
+        await this.webview.executeJavaScript(stringClickTabOpenOrder);
+    }
+
     /** Làm mới orderOpens kèm timeout & log */
     private async refreshOrderOpens(ctx = "Refresh", timeoutMs = 10_000): Promise<void> {
         this.log(`${ctx}: refresh orderOpens`);
         const oo = await this.withTimeout(Bot.getOrderOpens(this.webview), timeoutMs, `${ctx}: getOrderOpens`);
-        this.setOrderOpens(oo);
+        this.setOrderOpens(oo || []);
     }
 
     /** Làm mới positions kèm timeout & log */
@@ -472,6 +557,28 @@ export class Bot {
         } catch (e) {
             this.log(`${ctx}: refresh failed`, e);
         }
+    }
+
+    async cancelOrder() {}
+
+    toSec(t: number | string) {
+        return Math.floor(Number(t));
+    }
+
+    isTimedOutClearOpen(
+        create_time_sec: number | string,
+        timeoutSec = this.settingUser.timeoutClearOpenSecond,
+        nowSec = Math.floor(Date.now() / 1000),
+    ) {
+        const created = this.toSec(create_time_sec);
+        if (!Number.isFinite(created)) return false; // hoặc throw nếu muốn nghiêm
+        console.log({
+            nowSec,
+            created,
+            timeEnd: nowSec - created,
+            timeoutSec,
+        });
+        return nowSec - created >= timeoutSec;
     }
 
     async openFillWatcher() {
@@ -517,7 +624,7 @@ export class Bot {
                     const isContract = or.contract === openFillInMyTrade.contract;
                     const isSide = this.isOpposite(openFillInMyTrade.size, or.size);
                     const isPrice = or.price === price;
-                    console.log(`isClose: ${isClose}, isContract: ${isContract}, isSide: ${isSide}, isPrice: ${isPrice}`);
+                    // console.log(`isClose: ${isClose}, isContract: ${isContract}, isSide: ${isSide}, isPrice: ${isPrice}`);
                     return isClose && isContract && isSide && isPrice;
                 });
 
@@ -563,10 +670,11 @@ export class Bot {
      * contract: BTC_USDT
      */
     async getInfoContract(contract: string) {
-        const infoContract = this.infoContract.get(contract);
+        let infoContract = this.infoContract.get(contract);
         if (!infoContract) {
             try {
                 const { data } = await api.get<TRes<TGetInfoContractRes>>(`${ENDPOINT.CONTRACT.GET_INFO_CONTRACT}?contract=${contract}&source=gate`);
+                infoContract = data.data;
                 this.infoContract.set(contract, data.data);
             } catch (error) {
                 console.log("getInfoCalContract: ", error);
@@ -601,6 +709,7 @@ export class Bot {
             const infoContract = await this.getInfoContract(contract);
             if (!infoContract) {
                 console.log(`getCloseOrderPayloads: infoContract not found: ${contract}`);
+                toast.error(`[${contract}]: infoContract not found: `);
                 continue;
             }
             const tickSize = infoContract.order_price_round;
@@ -610,7 +719,15 @@ export class Bot {
             const takeProfit = this.configBot.settingUser.takeProfit;
             const sideFortpPrice = this.getPosSide(pos);
 
-            const price = this.tpPrice(entry_price, takeProfit / 100, sideFortpPrice, tickSize);
+            const lastPrice = await this.getLastPrice(contract);
+            if (!lastPrice) {
+                console.log(`getLastPrice: lastPrice not found: ${contract}`);
+                toast.error(`[${contract}]: lastPrice not found: `);
+                continue;
+            }
+            console.log(`getLastPrice: lastPrice: ${lastPrice}`);
+
+            const price = this.tpPrice(entry_price, takeProfit / 100, sideFortpPrice, tickSize, lastPrice);
 
             payloads.push({
                 symbol: contract,
@@ -723,13 +840,28 @@ export class Bot {
             if (!isSL && !timedOut) continue; // ✅ Không thỏa mãn điều kiện nào
 
             const reason = isSL ? "🔴Loss" : `⏰Timeout - ${timeoutMs}`;
+            console.log(symbol, reason);
 
-            const payload: TPayloadClickOpenEntry = {
+            const bidsAsks = await this.getBidsAsks(symbol);
+            const price = bidsAsks[size > 0 ? "bids" : "asks"][1];
+
+            const payload: TPayloadClickOpenPostOnlyEntry = {
                 symbol: symbol,
-                side: this.getPosSide(pos),
+                price: price.p,
+                size: this.flipSignStr(size),
+                reduce_only: true,
             };
-            await this.withTimeout(this.closeEntry(payload, returnPercent, reason), 10_000, `Roi: closeEntry(open ${symbol})`);
+            console.log(`Roi`, payload);
+            await this.withTimeout(this.openEntry(payload, `SL: Close`), 10_000, `Roi: openEntry(open ${symbol})`);
         }
+    }
+
+    async getBidsAsks(contract: string, limit?: number) {
+        const stringBidsAsks = createCodeStringGetBidsAsks(contract.replace("/", "_"), limit);
+        const { data, code, message }: TGateApiRes<TBidsAsks> = await this.webview.executeJavaScript(stringBidsAsks);
+        if (code >= 400) throw new Error(`Lỗi code >= 400 khi gọi getBidsAsks: ${message}`);
+        console.log({ "getBidsAsks hoàn thành": data });
+        return data;
     }
 
     toMs(t: number | string) {
@@ -792,6 +924,7 @@ export class Bot {
         const isExitsOrderOpens = !!this.orderOpens.find((item) => item.contract === contract.replace("_", "/") && !item.is_reduce_only);
         if (isExitsOrderOpens) console.log(`${contract} đã tồn tại trong orderOpens => bỏ qua | isExitsOrderOpens: ${isExitsOrderOpens}`);
 
+        // console.log("contract: ", contract);
         const isExitsPosition = this.positions.has(contract);
         if (isExitsPosition) console.log(`${contract} tồn tại trong position => bỏ qua | isExitsPosition: ${isExitsPosition}`);
 
@@ -808,7 +941,7 @@ export class Bot {
         this.positions.set(contract, value);
     }
 
-    setOrderOpens(orderOpens: TGetOrderOpenRes["data"]) {
+    setOrderOpens(orderOpens: TOrderOpen[]) {
         this.orderOpens = orderOpens || [];
     }
 
@@ -828,7 +961,6 @@ export class Bot {
 
     setWhitelist(whiteList: TWhiteList) {
         this.whiteList = whiteList;
-        this.setWhitelistEntry();
     }
 
     getWhitelist() {
@@ -839,67 +971,110 @@ export class Bot {
         return this.whitelistEntry;
     }
 
+    getWhitelistUi(): TWhitelistUi[] {
+        return [...(this.whitelistUi ?? [])];
+    }
+
     setWhitelistEntry() {
         const whiteListArr = Object.values(this.whiteList);
-        if (whiteListArr.length === 0) return;
-        this.whitelistEntry = [];
-        for (const whitelistItem of Object.values(this.whiteList)) {
+        if (whiteListArr.length === 0) {
+            this.whitelistEntry = [];
+            this.whitelistUi = [];
+            return;
+        }
+
+        this.whitelistEntry = []; // cho bot
+        const uiRows: TWhitelistUi[] = []; // tạm, cuối hàm mới gán vào this.whitelistUi
+
+        const priority = this.calPriority();
+
+        for (const whitelistItem of whiteListArr) {
             const { core, contractInfo } = whitelistItem;
-            const { askBest, askSumDepth, bidBest, bidSumDepth, imbalanceAskPercent, imbalanceBidPercent, lastPrice, spreadPercent, symbol } = core;
-            if (
+            const { askBest, askSumDepth, bidBest, bidSumDepth, imbalanceAskPercent, imbalanceBidPercent, lastPrice, spreadPercent, symbol } =
+                core ?? {};
+
+            const missing =
                 !symbol ||
                 spreadPercent == null ||
-                spreadPercent == undefined ||
                 bidSumDepth == null ||
-                bidSumDepth == undefined ||
                 askSumDepth == null ||
-                askSumDepth == undefined ||
                 lastPrice == null ||
-                lastPrice == undefined ||
                 imbalanceAskPercent == null ||
-                imbalanceAskPercent == undefined ||
-                imbalanceBidPercent == null ||
-                imbalanceBidPercent == undefined
-            ) {
-                continue;
-            }
-            const { order_price_round } = contractInfo;
+                imbalanceBidPercent == null;
 
-            if (!this.isSpreadPercent(spreadPercent)) {
-                // console.log(`[${symbol}] spreadPercent: ${spreadPercent} < ${this.settingUser.minSpreadPercent}`);
+            if (missing) {
+                if (this.configBot.roleId === 3) {
+                    toast.error(`[${symbol ?? "UNKNOWN"}] core thiếu field: ${JSON.stringify(core)}`, { duration: Infinity });
+                }
+                uiRows.push({
+                    symbol: symbol ?? "UNKNOWN",
+                    sizeStr: null,
+                    side: null,
+                    isSpread: false,
+                    isDepth: false,
+                    isSize: false,
+                    qualified: false,
+                    isLong: false,
+                    isShort: false,
+                    core: core ?? ({} as TCore),
+                });
                 continue;
             }
-            if (!this.isDepth(askSumDepth, bidSumDepth)) {
-                // console.log(
-                //     `[${symbol}] bidSumDepth: ${bidSumDepth} < ${this.settingUser.maxDepth} | askSumDepth: ${askSumDepth} < ${this.settingUser.maxDepth}`,
-                // );
-                continue;
-            }
+
+            const isSpread = this.isSpreadPercent(spreadPercent);
+            const isDepth = this.isDepth(askSumDepth, bidSumDepth);
 
             const sizeStr = this.handleSize(whitelistItem);
-            if (!Bot.checkSize(sizeStr)) {
-                // console.log(`[${symbol}] sizeStr: ${sizeStr}`);
-                continue;
-            }
+            const isSize = Bot.checkSize(sizeStr);
 
             const isLong = imbalanceBidPercent > this.settingUser.ifImbalanceBidPercent;
             const isShort = imbalanceAskPercent > this.settingUser.ifImbalanceAskPercent;
+            const side = this.pickSideByPriority(isLong, isShort, priority as TPriority);
 
-            const side = this.pickSideByPriority(isLong, isShort, this.calPriority() as TPriority);
-            if (!side) {
-                // console.log(`[${symbol}] side: ${side}`);
-                continue;
-            }
+            const qualified = isSpread && isDepth && isSize && !!side;
 
-            this.whitelistEntry.push({
+            // Thu thập cho UI
+            uiRows.push({
                 symbol,
-                sizeStr: sizeStr,
-                side,
-                askBest,
-                bidBest,
-                order_price_round,
+                sizeStr,
+                side: side ?? null,
+                isSpread,
+                isDepth,
+                isSize,
+                qualified,
+                isLong,
+                isShort,
+                core,
             });
+
+            // Thu thập cho bot nếu đủ điều kiện
+            if (qualified && side) {
+                const opr = contractInfo?.order_price_round; // cẩn thận null
+                if (opr == null) {
+                    // thiếu tick size thì vẫn show UI, nhưng không đưa vào bot
+                } else {
+                    this.whitelistEntry.push({
+                        symbol,
+                        sizeStr,
+                        side,
+                        askBest,
+                        bidBest,
+                        order_price_round: opr,
+                    });
+                }
+
+                // if (this.configBot.roleId === 3) {
+                //     toast.error(`Có whitelistEntry: ${JSON.stringify(this.whitelistEntry)}`);
+                // }
+            }
         }
+
+        // sort 1 lần ở cuối
+        uiRows.sort((a, b) => Number(b.qualified) - Number(a.qualified));
+
+        // gán cho state nội bộ + báo UI
+        this.whitelistUi = uiRows;
+        this.stateSetWhitelistUi(uiRows);
     }
 
     /**
@@ -1089,6 +1264,7 @@ export class Bot {
         return i >= 0 ? s.length - i - 1 : 0;
     }
 
+    // nếu giá vào không hợp lệ so với mark thì sẽ dùng mark làm base rồi tính tiếp tp
     tpPrice(entry: number, tpPercent: number, side: TSide, tick: number, mark?: number): string {
         const dec = this.decimalsFromTick(tick);
         const ceilTick = (p: number) => Math.ceil(p / tick) * tick;
@@ -1108,6 +1284,42 @@ export class Bot {
                 target = compute(mark as number);
             } else if (side === "short" && target >= (mark as number)) {
                 target = compute(mark as number);
+            }
+        }
+
+        return target.toFixed(dec);
+    }
+
+    // nếu giá vào không hợp lệ thì chọn giá sát với mark để chốt cho nhanh
+    tpPrice2(
+        entry: number,
+        tpPercent: number,
+        side: TSide, // "long" | "short"
+        tick: number,
+        mark?: number,
+        aggressiveTicks = 2, // số tick đẩy sát mark khi đã đạt TP
+    ): string {
+        const dec = this.decimalsFromTick(tick);
+        const ceilTick = (p: number) => Math.ceil(p / tick) * tick;
+        const floorTick = (p: number) => Math.floor(p / tick) * tick;
+
+        const factor = side === "long" ? 1 + tpPercent : 1 - tpPercent;
+        const roundDir = side === "long" ? ceilTick : floorTick;
+        const compute = (base: number) => roundDir(base * factor);
+
+        // 1) TP theo entry
+        let target = compute(entry);
+
+        // 2) Nếu đã đạt TP so với mark ⇒ đặt sát mark để khớp nhanh
+        if (Number.isFinite(mark)) {
+            const m = mark as number;
+            const alreadyHit = side === "long" ? target <= m : target >= m;
+
+            if (alreadyHit) {
+                target =
+                    side === "long"
+                        ? floorTick(m - aggressiveTicks * tick) // long: bán thấp hơn mark 1 chút
+                        : ceilTick(m + aggressiveTicks * tick); // short: mua cao hơn mark 1 chút
             }
         }
 
@@ -1219,6 +1431,8 @@ export class Bot {
             orderOpens_close: closeOpens,
             whitelistEntry: this.whitelistEntry,
             whitelistEntryLeng: this.whitelistEntry?.length ?? 0,
+            whitelistUi: this.whitelistUi,
+            infoContract: this.infoContract,
             // whitelist: this.whiteList,
             configBot: {
                 settingUser: this.configBot.settingUser,
