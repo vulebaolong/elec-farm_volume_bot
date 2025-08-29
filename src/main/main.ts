@@ -1,25 +1,17 @@
-/* eslint global-require: off, no-console: off, promise/always-return: off */
+import { startBotWorker, stopBotWorker } from "./workers";
 
-/**
- * This module executes inside of electron's main process. You can start
- * electron renderer process from here and communicate with the other processes
- * through IPC.
- *
- * When running `npm run build` or `npm run build:main`, this file is compiled to
- * `./src/main.js` using webpack. This gives us some performance wins.
- */
 import { IS_PRODUCTION } from "@/constant/app.constant";
-import { app, BrowserWindow, ipcMain, powerMonitor, shell, WebContentsView } from "electron";
+import { app, BrowserWindow, ipcMain, powerMonitor, shell } from "electron";
 import { installExtension, REDUX_DEVTOOLS } from "electron-devtools-installer";
 import log from "electron-log";
 import { autoUpdater } from "electron-updater";
 import { pathToFileURL } from "node:url";
 import path from "path";
+import { ensureGateView } from "./gate/gate-view";
 import MenuBuilder from "./menu";
 import { registerMetricsIPC } from "./metrics";
 import { setupUpdaterIPC } from "./updater";
 import { resolveHtmlPath } from "./util";
-import { ensureGateView } from "./gate-view";
 
 class AppUpdater {
     constructor() {
@@ -92,7 +84,7 @@ const createWindow = async () => {
 
     setupUpdaterIPC();
     registerMetricsIPC();
-    // ensureGateView(mainWindow, isDebug);
+    ensureGateView(mainWindow, isDebug);
 
     mainWindow.loadURL(resolveHtmlPath("index.html"));
 
@@ -148,10 +140,11 @@ const createWindow = async () => {
  * Add event listeners...
  */
 
-app.on("window-all-closed", () => {
+app.on("window-all-closed", async () => {
     // Respect the OSX convention of having the application in memory even
     // after all windows have been closed
     if (process.platform !== "darwin") {
+        await stopBotWorker();
         app.quit();
     }
 });
@@ -165,6 +158,7 @@ app.whenReady()
         }
 
         createWindow();
+        startBotWorker();
         app.on("activate", () => {
             // On macOS it's common to re-create a window in the app when the
             // dock icon is clicked and there are no other windows open.

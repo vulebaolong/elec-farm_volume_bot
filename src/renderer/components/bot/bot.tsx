@@ -106,7 +106,7 @@ export default function Bot() {
 
                 <Priority24hChange botRef={botRef} whitelistUi={whitelistUi} />
 
-                <div className="px-5">
+                {/* <div className="px-5">
                     <div className="p-1 h-full border border-border shadow-lg rounded-2xl">
                         <div className="flex-1 overflow-auto rounded-2xl w-full h-full">
                             <div className="min-w-[1280px] h-full aspect-[6/5]">
@@ -114,7 +114,7 @@ export default function Bot() {
                             </div>
                         </div>
                     </div>
-                </div>
+                </div> */}
             </div>
         </div>
     );

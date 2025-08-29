@@ -21,15 +21,16 @@ export function ensureGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     mainWindow.contentView.addChildView(gateView);
 
     // layout: để Gate chiếm bên phải, phần trái để app React hiển thị
-    const L_PANEL = 420; // px: độ rộng panel trái cho UI của bạn
+    const L_PANEL = 600; // px: độ rộng panel trái cho UI của bạn
+    const H_PANEL = 300;
     const layoutGateView = () => {
         if (!mainWindow) return;
         const { width, height } = mainWindow.getContentBounds();
         gateView.setBounds({
             x: L_PANEL,
-            y: 0,
+            y: H_PANEL,
             width: Math.max(0, width - L_PANEL),
-            height,
+            height: Math.max(0, height - H_PANEL),
         });
     };
 
@@ -44,7 +45,7 @@ export function ensureGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     });
 
     // load trang Gate
-    gateView.webContents.loadURL("https://www.gate.com/");
+    gateView.webContents.loadURL("https://www.gate.com/futures/USDT/BTC_USDT");
 
     // Debug DevTools riêng cho Gate (tùy chọn)
     if (isDebug) {
@@ -54,7 +55,7 @@ export function ensureGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     // Ví dụ: bạn có thể intercept request của Gate tại đây nếu cần
     // const sess = gateView.webContents.session;
     // sess.webRequest.onBeforeSendHeaders((details, callback) => {
-    //   // console.log("Gate request:", details.url);
+    //   console.log("Gate request:", details.url);
     //   callback({ cancel: false, requestHeaders: details.requestHeaders });
     // });
 }
