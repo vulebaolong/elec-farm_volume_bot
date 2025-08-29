@@ -13,6 +13,23 @@ type TProps = {
 };
 
 export default function Whitelist({ whitelistUi, open, onOpenChange: setOpen, totalWhitelist }: TProps) {
+    // const socket = useSocket();
+
+    // useEffect(() => {
+    //     if (!socket?.socket) return;
+    //     const io = socket.socket; // ✅ bắt giữ instance
+
+    //     const handleEntry = ({ data }: TSocketRes<TWhiteList>) => {
+    //         console.log({ handleEntry: data });
+    //     };
+
+    //     io.on("entry", handleEntry);
+
+    //     return () => {
+    //         io.off("entry", handleEntry);
+    //     };
+    // }, [socket?.socket]);
+
     return (
         <>
             {whitelistUi && (

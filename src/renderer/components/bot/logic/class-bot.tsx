@@ -57,7 +57,6 @@ export type TNewBot = {
     webview: Electron.WebviewTag;
     orderOpens: TOrderOpen[] | null;
     positions: TPosition[];
-    // stateSetWhitelistUi: React.Dispatch<React.SetStateAction<TWhitelistUi[]>>;
 };
 
 export class Bot {
@@ -112,15 +111,12 @@ export class Bot {
 
     private running = false;
 
-    private stateSetWhitelistUi: React.Dispatch<React.SetStateAction<TWhitelistUi[]>> = () => {};
-
     constructor(newBot: TNewBot) {
         // copy để tránh bị mutate từ bên ngoài
         this.configBot = { ...newBot.configBot };
         this.webview = newBot.webview;
         this.orderOpens = newBot.orderOpens || [];
         this.replacePositions(newBot.positions);
-        // this.stateSetWhitelistUi = newBot.stateSetWhitelistUi;
     }
 
     setIsHandle(isHandle: boolean) {
@@ -982,12 +978,10 @@ export class Bot {
         const whiteListArr = Object.values(this.whiteList);
         if (whiteListArr.length === 0) {
             this.whitelistEntry = [];
-            this.whitelistUi = [];
             return;
         }
 
         this.whitelistEntry = []; // cho bot
-        const uiRows: TWhitelistUi[] = []; // tạm, cuối hàm mới gán vào this.whitelistUi
 
         const priority = this.calPriority();
 
@@ -1009,18 +1003,6 @@ export class Bot {
                 if (this.configBot.roleId === 3) {
                     toast.error(`[${symbol ?? "UNKNOWN"}] core thiếu field: ${JSON.stringify(core)}`, { duration: Infinity });
                 }
-                uiRows.push({
-                    symbol: symbol ?? "UNKNOWN",
-                    sizeStr: null,
-                    side: null,
-                    isSpread: false,
-                    isDepth: false,
-                    isSize: false,
-                    qualified: false,
-                    isLong: false,
-                    isShort: false,
-                    core: core ?? ({} as TCore),
-                });
                 continue;
             }
 
@@ -1044,28 +1026,10 @@ export class Bot {
             //     isSize,
             // });
 
-            // Thu thập cho UI
-            uiRows.push({
-                symbol,
-                sizeStr,
-                side: side ?? null,
-                isSpread,
-                isDepth,
-                isSize,
-                qualified,
-                isLong,
-                isShort,
-                core,
-            });
-
             // Thu thập cho bot nếu đủ điều kiện
             if (qualified && side) {
-                // console.log("qualified: ", qualified, "side: ", side);
-
                 const opr = contractInfo?.order_price_round; // cẩn thận null
-                if (opr == null) {
-                    // thiếu tick size thì vẫn show UI, nhưng không đưa vào bot
-                } else {
+                if (opr) {
                     this.whitelistEntry.push({
                         symbol,
                         sizeStr,
@@ -1074,20 +1038,18 @@ export class Bot {
                         bidBest,
                         order_price_round: opr,
                     });
+                } else {
+                    toast.error(`[${symbol}] contractInfo order_price_round không hợp lệ: ${JSON.stringify(contractInfo)}`, { duration: Infinity });
                 }
-
-                // if (this.configBot.roleId === 3) {
-                //     toast.error(`Có whitelistEntry: ${JSON.stringify(this.whitelistEntry)}`);
-                // }
             }
         }
 
         // sort 1 lần ở cuối
-        uiRows.sort((a, b) => Number(b.qualified) - Number(a.qualified));
+        // uiRows.sort((a, b) => Number(b.qualified) - Number(a.qualified));
 
         // gán cho state nội bộ + báo UI
-        this.whitelistUi = uiRows;
-        this.stateSetWhitelistUi(uiRows);
+        // this.whitelistUi = uiRows;
+        // this.stateSetWhitelistUi(uiRows);
     }
 
     /**
