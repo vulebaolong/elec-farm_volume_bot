@@ -5,22 +5,20 @@ import { ROUTER } from "@/constant/router.constant";
 import { cn } from "@/lib/utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { z } from "zod";
 
 import { setAccessToken, setRefreshToken } from "@/api/auth/app.auth";
 import { useLoginForm } from "@/api/tanstack/auth.tanstack";
 import ThemeToggleV2 from "@/components/theme-toggle/theme-toggle-v2";
+import { Button } from "@/components/ui/button";
 import { ButtonLoading } from "@/components/ui/button-loading";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { PasswordInput } from "@/components/ui/password-input";
+import { IS_PRODUCTION } from "@/constant/app.constant";
+import { useAppSelector } from "@/redux/store";
 import { GalleryVerticalEnd } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { useAppSelector } from "@/redux/store";
-import { useEffect } from "react";
 import Version from "../dialog/version";
-import { IS_PRODUCTION } from "@/constant/app.constant";
 
 export const validatePassword = [
     { re: /[0-9]/, label: "Includes number." },
@@ -64,7 +62,7 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                 setAccessToken(data.data.accessToken);
                 setRefreshToken(data.data.refreshToken);
                 navigate(ROUTER.HOME);
-                toast.success(`Login successfully`);
+                // toast.success(`Login successfully`);
             },
         });
     }

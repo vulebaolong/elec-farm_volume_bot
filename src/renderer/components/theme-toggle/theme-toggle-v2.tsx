@@ -1,12 +1,12 @@
 "use client";
 
-import { useToggleTheme } from "@/hooks/use-toggle-theme";
 import { Moon, SunDim } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useAppTheme } from "../provider/app-theme.provider";
 import { Button } from "../ui/button";
 
 export default function ThemeToggleV2({ className }: { className?: string }) {
-    const { theme, setTheme } = useToggleTheme();
+    const { theme, setTheme } = useAppTheme();
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {

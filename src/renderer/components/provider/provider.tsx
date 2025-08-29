@@ -10,6 +10,7 @@ import ReduxProvider from "./redux.provider";
 import SocketProvider from "./socket-provider";
 import SonnerProvider from "./sonner.provider";
 import TanstackQueryProvider from "./tanstack-query.provider";
+import { AppThemeProvider } from "./app-theme.provider";
 
 dayjs.extend(relativeTime);
 dayjs.extend(duration);
@@ -25,11 +26,13 @@ export default function Provider({ children }: TProps) {
     return (
         <TanstackQueryProvider>
             <ReduxProvider>
-                <MantineProvider>
-                    <SocketProvider>
-                        <SonnerProvider>{children}</SonnerProvider>
-                    </SocketProvider>
-                </MantineProvider>
+                <AppThemeProvider>
+                    <MantineProvider>
+                        <SocketProvider>
+                            <SonnerProvider>{children}</SonnerProvider>
+                        </SocketProvider>
+                    </MantineProvider>
+                </AppThemeProvider>
             </ReduxProvider>
         </TanstackQueryProvider>
     );
