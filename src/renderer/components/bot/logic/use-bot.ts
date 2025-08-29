@@ -25,7 +25,6 @@ export function useBot(webview: Electron.WebviewTag | null) {
     // const [whitelistUi, setWhitelistUi] = useState<TWhitelistUi[]>([]);
 
     // 1) Tải dữ liệu khởi tạo (chỉ chạy một lần)
-    // useBot.ts
     useEffect(() => {
         if (!webview || !socket?.socket) return;
         const io = socket.socket; // ✅ bắt giữ instance

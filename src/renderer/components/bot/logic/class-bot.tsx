@@ -39,6 +39,10 @@ import { toast } from "sonner";
  *  - false: lệnh open
  */
 
+const RED = "\x1b[31m";
+const BOLD = "\x1b[1m";
+const RESET = "\x1b[0m";
+
 export type TBotConfig = {
     uiSelector: TUiSelector[];
     settingUser: TSettingUsers;
@@ -217,6 +221,7 @@ export class Bot {
                             this.log("Clear Open: no order open");
                         }
                         this.log("🟢🟢🟢🟢🟢 Clear Open");
+                        console.log("\n\n");
 
                         // ===== 2) CREATE OPEN =====
                         this.log("🔵🔵🔵🔵🔵 Create Open");
@@ -565,20 +570,18 @@ export class Bot {
         return Math.floor(Number(t));
     }
 
-    isTimedOutClearOpen(
-        create_time_sec: number | string,
-        timeoutSec = this.settingUser.timeoutClearOpenSecond,
-        nowSec = Math.floor(Date.now() / 1000),
-    ) {
+    isTimedOutClearOpen(create_time_sec: number) {
         const created = this.toSec(create_time_sec);
-        if (!Number.isFinite(created)) return false; // hoặc throw nếu muốn nghiêm
-        console.log({
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        console.log(`${RED}${BOLD}isTimedOutClearOpen`, {
+            timeEnd: nowSec - created,
             nowSec,
             created,
-            timeEnd: nowSec - created,
-            timeoutSec,
+            timeoutClearOpenSecond: this.settingUser.timeoutClearOpenSecond,
         });
-        return nowSec - created >= timeoutSec;
+
+        return nowSec - created >= this.settingUser.timeoutClearOpenSecond;
     }
 
     async openFillWatcher() {
