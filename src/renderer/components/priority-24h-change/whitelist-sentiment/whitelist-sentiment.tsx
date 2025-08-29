@@ -1,16 +1,14 @@
 // components/whitelist-sentiment.tsx
+import { Bot } from "@/components/bot/logic/class-bot";
 import Loadder from "@/components/loadder/loadder";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Minus, TrendingDown, TrendingUp } from "lucide-react";
-import { SentimentBar } from "./sentiment-bar";
-import { useEffect, useState } from "react";
-import { useAppDispatch } from "@/redux/store";
 import { SET_PRIORITY } from "@/redux/slices/bot.slice";
-import Whitelist from "@/components/whitelist/whitelist";
-import { Bot } from "@/components/bot/logic/class-bot";
-import { TWhitelistUi } from "@/types/white-list.type";
+import { useAppDispatch } from "@/redux/store";
+import { Minus, TrendingDown, TrendingUp } from "lucide-react";
+import { useEffect } from "react";
+import { SentimentBar } from "./sentiment-bar";
 
 type Props = {
     total?: number;
@@ -21,21 +19,10 @@ type Props = {
     lastUpdated?: string;
     isLoading?: boolean;
     botRef: React.RefObject<Bot | null>;
-    whitelistUi: TWhitelistUi[]
 };
 
-export function WhitelistSentiment({
-    whitelistUi,
-    total = 100,
-    green = 0,
-    red = 0,
-    thresholdLong = 70,
-    thresholdShort = 70,
-    lastUpdated,
-    isLoading,
-}: Props) {
+export function WhitelistSentiment({ total = 100, green = 0, red = 0, thresholdLong = 70, thresholdShort = 70, lastUpdated, isLoading }: Props) {
     const dispatch = useAppDispatch();
-    const [openWhitelist, setOpenWhitelist] = useState(false);
 
     const g = total ? Math.round((green / total) * 100) : 0;
     const r = total ? Math.round((red / total) * 100) : 0;
@@ -76,13 +63,7 @@ export function WhitelistSentiment({
 
                     {/* Chips */}
                     <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <Badge
-                            onClick={() => {
-                                setOpenWhitelist(true);
-                            }}
-                            variant="secondary"
-                            className="gap-1 cursor-pointer"
-                        >
+                        <Badge variant="secondary" className="gap-1 cursor-pointer">
                             Total Whitelist <Separator orientation="vertical" className="mx-1 h-4" />
                             <span className="font-medium">{total}</span>
                         </Badge>
@@ -131,12 +112,6 @@ export function WhitelistSentiment({
                     {lastUpdated && <div className="text-xs text-muted-foreground">Last updated: {lastUpdated}</div>}
                 </CardContent>
             </Card>
-            <Whitelist
-                totalWhitelist={total}
-                whitelistUi={whitelistUi}
-                open={openWhitelist}
-                onOpenChange={setOpenWhitelist}
-            />
         </>
     );
 }

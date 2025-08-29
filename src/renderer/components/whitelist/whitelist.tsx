@@ -1,6 +1,12 @@
 import { Badge } from "@/components/ui/badge";
+import { useSocket } from "@/hooks/socket.hook";
 import { cn } from "@/lib/utils";
-import { TWhitelistUi } from "@/types/white-list.type";
+import { useAppSelector } from "@/redux/store";
+import { TSocketRes } from "@/types/base.type";
+import { TWhiteList, TWhitelistUi } from "@/types/white-list.type";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { checkSize, handleSize, isDepthCalc, isSpreadPercent } from "../bot/logic/handle-bot";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Button } from "../ui/button";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "../ui/sheet";
@@ -8,39 +14,91 @@ import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle }
 type TProps = {
     open: boolean;
     onOpenChange: React.Dispatch<React.SetStateAction<boolean>>;
-    whitelistUi?: TWhitelistUi[];
-    totalWhitelist: number;
 };
 
-export default function Whitelist({ whitelistUi, open, onOpenChange: setOpen, totalWhitelist }: TProps) {
-    // const socket = useSocket();
+export default function Whitelist({ open, onOpenChange }: TProps) {
+    const socket = useSocket();
+    const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
+    const [whitelistUi, setWhitelistUi] = useState<TWhitelistUi[]>([]);
 
-    // useEffect(() => {
-    //     if (!socket?.socket) return;
-    //     const io = socket.socket; // ✅ bắt giữ instance
+    useEffect(() => {
+        if (!socket?.socket || !settingUser) return;
+        const io = socket.socket; // ✅ bắt giữ instance
 
-    //     const handleEntry = ({ data }: TSocketRes<TWhiteList>) => {
-    //         console.log({ handleEntry: data });
-    //     };
+        const handleEntry = ({ data }: TSocketRes<TWhiteList>) => {
+            const whiteListArr = Object.values(data);
 
-    //     io.on("entry", handleEntry);
+            const result: TWhitelistUi[] = [];
 
-    //     return () => {
-    //         io.off("entry", handleEntry);
-    //     };
-    // }, [socket?.socket]);
+            for (const whitelistItem of whiteListArr) {
+                const { core, contractInfo } = whitelistItem;
+                const { askBest, askSumDepth, bidBest, bidSumDepth, imbalanceAskPercent, imbalanceBidPercent, lastPrice, spreadPercent, symbol } =
+                    core ?? {};
+
+                const { order_price_round } = contractInfo;
+
+                const missing =
+                    !symbol ||
+                    spreadPercent == null ||
+                    bidSumDepth == null ||
+                    askSumDepth == null ||
+                    lastPrice == null ||
+                    imbalanceAskPercent == null ||
+                    imbalanceBidPercent == null ||
+                    order_price_round == null;
+
+                if (missing) {
+                    toast.error(`[${symbol ?? "UNKNOWN"}] core thiếu field: ${JSON.stringify(core)}`, { duration: Infinity });
+                    continue;
+                }
+
+                const isSpread = isSpreadPercent(spreadPercent, settingUser.minSpreadPercent, settingUser.maxSpreadPercent);
+                const isDepth = isDepthCalc(askSumDepth, bidSumDepth, settingUser.maxDepth);
+
+                const sizeStr = handleSize(whitelistItem, settingUser.inputUSDT);
+                const isSize = checkSize(sizeStr);
+
+                const isLong = imbalanceBidPercent > settingUser.ifImbalanceBidPercent;
+                const isShort = imbalanceAskPercent > settingUser.ifImbalanceAskPercent;
+                const side = isLong ? "long" : isShort ? "short" : null;
+
+                const qualified = isSpread && isDepth && isSize && !!side;
+
+                result.push({
+                    core,
+                    isDepth,
+                    isLong,
+                    isShort,
+                    isSize,
+                    isSpread,
+                    qualified,
+                    sizeStr,
+                    side,
+                    symbol,
+                });
+            }
+
+            setWhitelistUi(result);
+        };
+
+        io.on("entry", handleEntry);
+
+        return () => {
+            io.off("entry", handleEntry);
+        };
+    }, [socket?.socket, settingUser]);
 
     return (
         <>
             {whitelistUi && (
-                <Sheet open={open} onOpenChange={setOpen}>
+                <Sheet open={open} onOpenChange={onOpenChange}>
                     <SheetContent className="w-[600px] !max-w-full gap-0 outline-none">
                         <SheetHeader>
-                            <SheetTitle>Whitelist {totalWhitelist}</SheetTitle>
+                            <SheetTitle>Whitelist {whitelistUi.length}</SheetTitle>
                         </SheetHeader>
                         <div className="flex-1 h-auto w-full px-4 overflow-y-auto">
                             <Accordion type="multiple" className="space-y-2 w-full">
-                                {whitelistUi.map(({ core, isSpread, isDepth, sizeStr, isSize, side, qualified, isLong, isShort }) => (
+                                {whitelistUi.map(({ core, isSpread, isDepth, sizeStr, isSize, qualified, isLong, isShort }) => (
                                     <AccordionItem
                                         key={core.symbol}
                                         value={core.symbol}
@@ -65,7 +123,6 @@ export default function Whitelist({ whitelistUi, open, onOpenChange: setOpen, to
                                                     <Badge variant={isDepth ? "default" : "outline"}>Depth</Badge>
                                                     <Badge variant={isSpread ? "default" : "outline"}>Spread</Badge>
                                                     <Badge variant={isSize ? "default" : "outline"}>Size</Badge>
-                                                    <Badge variant={side ? "default" : "outline"}>Priority</Badge>
                                                 </div>
                                             </div>
                                         </AccordionTrigger>
