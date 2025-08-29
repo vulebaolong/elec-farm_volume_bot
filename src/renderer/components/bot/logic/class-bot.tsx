@@ -53,7 +53,7 @@ export type TNewBot = {
     webview: Electron.WebviewTag;
     orderOpens: TOrderOpen[] | null;
     positions: TPosition[];
-    stateSetWhitelistUi: React.Dispatch<React.SetStateAction<TWhitelistUi[]>>;
+    // stateSetWhitelistUi: React.Dispatch<React.SetStateAction<TWhitelistUi[]>>;
 };
 
 export class Bot {
@@ -116,7 +116,7 @@ export class Bot {
         this.webview = newBot.webview;
         this.orderOpens = newBot.orderOpens || [];
         this.replacePositions(newBot.positions);
-        this.stateSetWhitelistUi = newBot.stateSetWhitelistUi;
+        // this.stateSetWhitelistUi = newBot.stateSetWhitelistUi;
     }
 
     setIsHandle(isHandle: boolean) {
@@ -1032,6 +1032,14 @@ export class Bot {
             const side = this.pickSideByPriority(isLong, isShort, priority as TPriority);
 
             const qualified = isSpread && isDepth && isSize && !!side;
+            // console.log({
+            //     symbol,
+            //     qualified,
+            //     side,
+            //     isSpread,
+            //     isDepth,
+            //     isSize,
+            // });
 
             // Thu thập cho UI
             uiRows.push({
@@ -1049,6 +1057,8 @@ export class Bot {
 
             // Thu thập cho bot nếu đủ điều kiện
             if (qualified && side) {
+                // console.log("qualified: ", qualified, "side: ", side);
+
                 const opr = contractInfo?.order_price_round; // cẩn thận null
                 if (opr == null) {
                     // thiếu tick size thì vẫn show UI, nhưng không đưa vào bot

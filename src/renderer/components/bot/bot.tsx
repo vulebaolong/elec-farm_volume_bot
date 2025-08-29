@@ -12,7 +12,7 @@ import { useBot } from "./logic/use-bot";
 export default function Bot() {
     const [isReady, setIsReady] = useState(false);
     const webviewRef = useRef<Electron.WebviewTag>(null);
-    const { botRef, whitelistUi } = useBot(webviewRef.current);
+    const { botRef } = useBot(webviewRef.current);
 
     const saveAccount = useSaveAccount();
 
@@ -104,7 +104,7 @@ export default function Bot() {
             <div className="flex flex-col gap-5 h-full pb-10">
                 <Controll botRef={botRef} isReady={isReady} webviewRef={webviewRef} />
 
-                <Priority24hChange botRef={botRef} whitelistUi={whitelistUi} />
+                <Priority24hChange botRef={botRef} />
 
                 <div className="px-5">
                     <div className="p-1 h-full border border-border shadow-lg rounded-2xl">
