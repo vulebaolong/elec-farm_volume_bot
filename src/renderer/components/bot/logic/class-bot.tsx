@@ -645,7 +645,7 @@ export class Bot {
             openFillInMyTrades = openFillInMyTrades.filter((openFillInMyTrade) => {
                 const price = this.tpPrice(
                     Number(openFillInMyTrade.price),
-                    this.settingUser.takeProfit / 100,
+                    this.settingUser.takeProfit,
                     openFillInMyTrade.size > 0 ? "long" : "short",
                     order_price_round,
                 );
@@ -673,7 +673,7 @@ export class Bot {
 
             for (const openFillInMyTrade of openFillInMyTrades) {
                 const sideFortpPrice = openFillInMyTrade.size > 0 ? "long" : "short";
-                const price = this.tpPrice(Number(openFillInMyTrade.price), this.settingUser.takeProfit / 100, sideFortpPrice, order_price_round);
+                const price = this.tpPrice(Number(openFillInMyTrade.price), this.settingUser.takeProfit, sideFortpPrice, order_price_round);
 
                 payloadCloses.push({
                     symbol: openFillInMyTrade.contract.replace("/", "_"),
@@ -758,7 +758,7 @@ export class Bot {
             }
             console.log(`getLastPrice: lastPrice: ${lastPrice}`);
 
-            const price = this.tpPrice(entry_price, takeProfit / 100, sideFortpPrice, tickSize, lastPrice);
+            const price = this.tpPrice(entry_price, takeProfit, sideFortpPrice, tickSize, lastPrice);
 
             payloads.push({
                 symbol: contract,
@@ -1110,7 +1110,7 @@ export class Bot {
             const entry_price = Number(pos.entry_price);
             const takeProfit = this.configBot.settingUser.takeProfit;
             const sideFortpPrice = this.getPosSide(pos);
-            const price = this.tpPrice(entry_price, takeProfit / 100, sideFortpPrice, tickSize);
+            const price = this.tpPrice(entry_price, takeProfit, sideFortpPrice, tickSize);
 
             payloads.push({
                 symbol: contract,
