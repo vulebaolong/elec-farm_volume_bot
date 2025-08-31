@@ -30,14 +30,21 @@ import { TPosition, TPositionRes } from "@/types/position.type";
 import { TPayload24Change, TPriority } from "@/types/priority-change.type";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TUiSelector } from "@/types/ui-selector.type";
-import { TCore, TWhiteList, TWhitelistEntry, TWhiteListItem, TWhitelistUi } from "@/types/white-list.type";
+import { TWhiteList, TWhitelistEntry, TWhitelistUi } from "@/types/white-list.type";
 import { toast } from "sonner";
+import { checkSize, handleSize, isDepthCalc, isSpreadPercent } from "./handle-bot";
+import { appendLog } from "@/helpers/log-store";
+import { clearStickies, removeSticky, setSticky } from "@/helpers/timeout-sticky-store";
 
 /**
  * reduce_only
  *  - true: là lệnh đóng
  *  - false: lệnh open
  */
+
+const RED = "\x1b[31m";
+const BOLD = "\x1b[1m";
+const RESET = "\x1b[0m";
 
 export type TBotConfig = {
     uiSelector: TUiSelector[];
@@ -53,7 +60,6 @@ export type TNewBot = {
     webview: Electron.WebviewTag;
     orderOpens: TOrderOpen[] | null;
     positions: TPosition[];
-    stateSetWhitelistUi: React.Dispatch<React.SetStateAction<TWhitelistUi[]>>;
 };
 
 export class Bot {
@@ -87,12 +93,6 @@ export class Bot {
         return myTrades;
     }
 
-    static checkSize(size: string | null | undefined): boolean {
-        if (typeof size !== "string") return false;
-        const s = size.trim();
-        return /^[1-9]\d*$/.test(s);
-    }
-
     private count = 0;
     private configBot: TBotConfig;
     private webview: Electron.WebviewTag;
@@ -108,15 +108,12 @@ export class Bot {
 
     private running = false;
 
-    private stateSetWhitelistUi: React.Dispatch<React.SetStateAction<TWhitelistUi[]>> = () => {};
-
     constructor(newBot: TNewBot) {
         // copy để tránh bị mutate từ bên ngoài
         this.configBot = { ...newBot.configBot };
         this.webview = newBot.webview;
         this.orderOpens = newBot.orderOpens || [];
         this.replacePositions(newBot.positions);
-        this.stateSetWhitelistUi = newBot.stateSetWhitelistUi;
     }
 
     setIsHandle(isHandle: boolean) {
@@ -137,6 +134,8 @@ export class Bot {
 
         try {
             while (true) {
+                // this.logInfo(`✅ Create Order`);
+
                 const iterStart = performance.now();
                 this.log("✅✅✅✅✅ ITER START =====", this.snapshot());
                 this.setWhitelistEntry();
@@ -200,7 +199,7 @@ export class Bot {
 
                             // lấy ra tất cả các lệnh open, với is_reduce_only = false
                             for (const contract of contractsToCancel) {
-                                if (this.isTimedOutClearOpen(contract.earliest)) {
+                                if (this.isTimedOutClearOpen(contract.earliest, contract.contract)) {
                                     await this.withTimeout(
                                         this.clickCanelAllOpen(contract.contract),
                                         10_000,
@@ -217,6 +216,7 @@ export class Bot {
                             this.log("Clear Open: no order open");
                         }
                         this.log("🟢🟢🟢🟢🟢 Clear Open");
+                        console.log("\n\n");
 
                         // ===== 2) CREATE OPEN =====
                         this.log("🔵🔵🔵🔵🔵 Create Open");
@@ -396,17 +396,20 @@ export class Bot {
             );
 
             if (!result.data) return;
-            const status = `✅ ${result.data.contract} - ${label} ${this.getOrderSide(result.data)}`;
+            const status = `✅ ${result.data.contract} - ${label} ${this.getOrderSide(result.data)} | ${result.data.size} | ${result.data.price} `;
 
-            toast.success(status, {
-                description: <DescriptionOpenEntry symbol={result.data.contract} size={result.data.size} price={result.data.price} />,
-            });
+            // toast.success(status, {
+            //     description: <DescriptionOpenEntry symbol={result.data.contract} size={result.data.size} price={result.data.price} />,
+            // });
+
+            this.logInfo(status);
 
             return result.data;
         } catch (err: any) {
             const status = `❌ ${payload.symbol} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"}`;
             console.error(status, err);
-            toast.error(status, { description: err.message });
+            // toast.error(status, { description: err.message });
+            this.logError(status);
             // throw err;
         } finally {
             if (handler) this.webview.removeEventListener("ipc-message", handler);
@@ -478,26 +481,48 @@ export class Bot {
         }
     }
 
-    /** 1) Gom open orders theo contract + lấy create_time sớm nhất (và đếm số lệnh) */
-    earliestOpenByContract() {
-        const m = new Map<string, { earliest: number; count: number }>();
-        for (const o of this.orderOpens) {
-            if (o.is_reduce_only) continue; // chỉ lấy lệnh OPEN (reduce_only = false)
-            const c = o.contract.replace("/", "_");
-            const rec = m.get(c);
-            if (!rec) {
-                m.set(c, { earliest: o.create_time, count: 1 });
-            } else {
-                if (o.create_time < rec.earliest) rec.earliest = o.create_time;
-            }
-        }
-        return [...m.entries()].map(([contract, v]) => ({ contract, earliest: v.earliest }));
+    logInfo(msg: string, extra?: any) {
+        appendLog("info", extra ? `${msg} ${JSON.stringify(extra)}` : msg);
+    }
+    logError(msg: string, extra?: any) {
+        appendLog("error", extra ? `${msg} ${JSON.stringify(extra)}` : msg);
     }
 
-    /** 2) Các contract có OPEN nhưng KHÔNG có position, kèm thời điểm open sớm nhất */
+    /** Gom OPEN orders theo contract (reduce_only = false) + thống kê */
+    openStatsByContract() {
+        const m = new Map<string, { earliest: number; latest: number; count: number }>();
+
+        for (const o of this.orderOpens) {
+            if (o.is_reduce_only) continue; // chỉ OPEN
+            const c = o.contract.replace("/", "_");
+
+            const rec = m.get(c);
+            if (!rec) {
+                m.set(c, { earliest: o.create_time, latest: o.create_time, count: 1 });
+            } else {
+                if (o.create_time < rec.earliest) rec.earliest = o.create_time;
+                if (o.create_time > rec.latest) rec.latest = o.create_time;
+                rec.count++;
+            }
+        }
+
+        // [{ contract, earliest, latest, count }]
+        return [...m.entries()].map(([contract, v]) => ({ contract, ...v }));
+    }
+
+    /** Các contract có OPEN nhưng KHÔNG có position, kèm earliest riêng từng contract */
     contractsToCancelWithEarliest() {
-        const list = this.earliestOpenByContract();
-        return list.filter(({ contract }) => !this.positions.has(contract));
+        const stats = this.openStatsByContract();
+        if (stats.length === 0) clearStickies();
+        return stats.filter(({ contract }) => {
+            if (this.positions.has(contract)) {
+                console.log("removeSticky: ", `timeout:${contract}`);
+                removeSticky(`timeout:${contract}`);
+                return false;
+            } else {
+                return true;
+            }
+        });
     }
 
     async clickCanelAllOpen(contract: string) {
@@ -515,7 +540,9 @@ export class Bot {
         // console.log("stringClickCanelAllOpen: ", stringClickCanelAllOpen);
 
         const result: TClickCancelAllOpenRes = await this.webview.executeJavaScript(stringClickCanelAllOpen);
-        toast.success(`✅ ${result.contract} Cancel All Open: ${result.clicked}`);
+        // toast.success(`✅ ${result.contract} Cancel All Open: ${result.clicked}`);
+        this.logInfo(`✅ ${contract} Cancel All Open: ${result.clicked}`);
+        removeSticky(`timeout:${contract}`);
     }
 
     async clickTabOpenOrder() {
@@ -565,20 +592,24 @@ export class Bot {
         return Math.floor(Number(t));
     }
 
-    isTimedOutClearOpen(
-        create_time_sec: number | string,
-        timeoutSec = this.settingUser.timeoutClearOpenSecond,
-        nowSec = Math.floor(Date.now() / 1000),
-    ) {
+    isTimedOutClearOpen(create_time_sec: number, contract: string) {
         const created = this.toSec(create_time_sec);
-        if (!Number.isFinite(created)) return false; // hoặc throw nếu muốn nghiêm
-        console.log({
-            nowSec,
-            created,
-            timeEnd: nowSec - created,
-            timeoutSec,
-        });
-        return nowSec - created >= timeoutSec;
+        const nowSec = Math.floor(Date.now() / 1000);
+
+        // console.log(`${RED}${BOLD}isTimedOutClearOpen`, {
+        //     timeEnd: nowSec - created,
+        //     nowSec,
+        //     created,
+        //     timeoutClearOpenSecond: this.settingUser.timeoutClearOpenSecond,
+        // });
+        // toast.info(
+        //     `${contract} timeEnd: ${nowSec - created}, nowSec: ${nowSec}, created: ${created}, timeoutClearOpenSecond: ${this.settingUser.timeoutClearOpenSecond}`,
+        //     { duration: Infinity },
+        // );
+        this.logInfo(`${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
+        setSticky(`timeout:${contract}`, `${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
+
+        return nowSec - created >= this.settingUser.timeoutClearOpenSecond;
     }
 
     async openFillWatcher() {
@@ -614,7 +645,7 @@ export class Bot {
             openFillInMyTrades = openFillInMyTrades.filter((openFillInMyTrade) => {
                 const price = this.tpPrice(
                     Number(openFillInMyTrade.price),
-                    this.settingUser.takeProfit / 100,
+                    this.settingUser.takeProfit,
                     openFillInMyTrade.size > 0 ? "long" : "short",
                     order_price_round,
                 );
@@ -642,7 +673,7 @@ export class Bot {
 
             for (const openFillInMyTrade of openFillInMyTrades) {
                 const sideFortpPrice = openFillInMyTrade.size > 0 ? "long" : "short";
-                const price = this.tpPrice(Number(openFillInMyTrade.price), this.settingUser.takeProfit / 100, sideFortpPrice, order_price_round);
+                const price = this.tpPrice(Number(openFillInMyTrade.price), this.settingUser.takeProfit, sideFortpPrice, order_price_round);
 
                 payloadCloses.push({
                     symbol: openFillInMyTrade.contract.replace("/", "_"),
@@ -727,7 +758,7 @@ export class Bot {
             }
             console.log(`getLastPrice: lastPrice: ${lastPrice}`);
 
-            const price = this.tpPrice(entry_price, takeProfit / 100, sideFortpPrice, tickSize, lastPrice);
+            const price = this.tpPrice(entry_price, takeProfit, sideFortpPrice, tickSize, lastPrice);
 
             payloads.push({
                 symbol: contract,
@@ -791,68 +822,67 @@ export class Bot {
     async handleRoi() {
         for (const [, pos] of this.positions) {
             const symbol = pos.contract.replace("/", "_");
-            const infoContract = await this.getInfoContract(symbol);
-            if (!infoContract) {
-                console.log("handleRoi: infoContract not found");
-                continue;
-            }
-            const size = pos.size;
+            const info = await this.getInfoContract(symbol);
+            if (!info) continue;
+
+            const size = Number(pos.size);
             const entryPrice = Number(pos.entry_price);
             const leverage = Number(pos.leverage);
-            const mode = pos.mode;
-            const quanto_multiplier = infoContract.quanto_multiplier;
-            const lastPrice = await this.getLastPrice(symbol);
-            const nowMs = Date.now(); // = now ở đơn vị ms
+            const quanto = Number(info.quanto_multiplier);
+            const lastPrice = Number(await this.getLastPrice(symbol));
+            const openTimeSec = Number(pos.open_time); // giây
+            const nowMs = Date.now();
 
-            console.log({
-                size,
-                entryPrice,
-                quanto_multiplier,
-                leverage,
-                mode,
-                lastPrice,
-                nowMs,
-                pos,
-            });
+            // Bỏ qua nếu dữ liệu không hợp lệ
+            if (!Number.isFinite(size) || size === 0) continue;
+            if (!Number.isFinite(entryPrice) || entryPrice <= 0) continue;
+            if (!Number.isFinite(leverage) || leverage <= 0) continue;
+            if (!Number.isFinite(quanto) || quanto <= 0) continue;
+            if (!Number.isFinite(lastPrice) || lastPrice <= 0) continue;
 
-            if (!size) continue;
-            if (!entryPrice) continue;
-            if (!quanto_multiplier) continue;
-            if (!leverage) continue;
-            if (!mode) continue;
-            if (!lastPrice) continue;
-
-            const initialMargin = (entryPrice * Math.abs(size) * quanto_multiplier) / leverage;
-            const unrealizedPnL = (lastPrice - entryPrice) * size * quanto_multiplier;
+            const initialMargin = (entryPrice * Math.abs(size) * quanto) / leverage;
+            const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
             const returnPercent = (unrealizedPnL / initialMargin) * 100;
 
-            const stopLoss = this.configBot.settingUser.stopLoss;
-            const timeoutEnabled = this.configBot.settingUser.timeoutEnabled;
-            const timeoutMs = this.configBot.settingUser.timeoutMs;
-            const takeProfit = this.configBot.settingUser.takeProfit;
-            const createdAtMs = this.toMs(pos.open_time);
-
+            const { stopLoss, timeoutEnabled, timeoutMs } = this.configBot.settingUser;
+            const createdAtMs = openTimeSec > 0 ? openTimeSec * 1000 : nowMs;
             const isSL = returnPercent <= -stopLoss;
             const timedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
 
-            console.log(`[${symbol}] ${returnPercent} |${takeProfit} | ${stopLoss} | ${timedOut} | ${isSL}`);
+            if (!isSL && !timedOut) continue;
 
-            if (!isSL && !timedOut) continue; // ✅ Không thỏa mãn điều kiện nào
+            // Lấy order book
+            const book = await this.getBidsAsks(symbol);
+            const bestBid = Number(book?.bids?.[0]?.p);
+            const bestAsk = Number(book?.asks?.[0]?.p);
+            if (!Number.isFinite(bestBid) || !Number.isFinite(bestAsk)) continue;
 
-            const reason = isSL ? "🔴Loss" : `⏰Timeout - ${timeoutMs}`;
-            console.log(symbol, reason);
+            // Chọn giá maker đúng phía
+            const tick = Number(info.order_price_round) || 0;
+            const aggressiveTicks = 2; // có thể lấy từ setting
+            const toFixed = (n: number) => {
+                const dec = this.decimalsFromTick(tick || 0.00000001);
+                return n.toFixed(dec);
+            };
 
-            const bidsAsks = await this.getBidsAsks(symbol);
-            const price = bidsAsks[size > 0 ? "bids" : "asks"][1];
+            let priceNum: number;
+            if (size > 0) {
+                // close long = SELL → đặt >= bestAsk để là maker
+                priceNum = bestAsk + (tick * aggressiveTicks || 0);
+            } else {
+                // close short = BUY → đặt <= bestBid để là maker
+                priceNum = bestBid - (tick * aggressiveTicks || 0);
+            }
+            const priceStr = toFixed(priceNum);
 
             const payload: TPayloadClickOpenPostOnlyEntry = {
-                symbol: symbol,
-                price: price.p,
-                size: this.flipSignStr(size),
+                symbol,
+                price: priceStr,
+                size: this.flipSignStr(size), // đảo dấu để reduce
                 reduce_only: true,
             };
-            console.log(`Roi`, payload);
-            await this.withTimeout(this.openEntry(payload, `SL: Close`), 10_000, `Roi: openEntry(open ${symbol})`);
+
+            await this.withTimeout(this.openEntry(payload, "SL: Close"), 10_000, `Roi: openEntry(close ${symbol})`);
         }
     }
 
@@ -971,27 +1001,21 @@ export class Bot {
         return this.whitelistEntry;
     }
 
-    getWhitelistUi(): TWhitelistUi[] {
-        return [...(this.whitelistUi ?? [])];
-    }
-
     setWhitelistEntry() {
         const whiteListArr = Object.values(this.whiteList);
         if (whiteListArr.length === 0) {
             this.whitelistEntry = [];
-            this.whitelistUi = [];
             return;
         }
 
         this.whitelistEntry = []; // cho bot
-        const uiRows: TWhitelistUi[] = []; // tạm, cuối hàm mới gán vào this.whitelistUi
-
-        const priority = this.calPriority();
 
         for (const whitelistItem of whiteListArr) {
             const { core, contractInfo } = whitelistItem;
             const { askBest, askSumDepth, bidBest, bidSumDepth, imbalanceAskPercent, imbalanceBidPercent, lastPrice, spreadPercent, symbol } =
                 core ?? {};
+
+            const { order_price_round } = contractInfo;
 
             const missing =
                 !symbol ||
@@ -1000,133 +1024,53 @@ export class Bot {
                 askSumDepth == null ||
                 lastPrice == null ||
                 imbalanceAskPercent == null ||
-                imbalanceBidPercent == null;
+                imbalanceBidPercent == null ||
+                order_price_round == null;
 
             if (missing) {
-                if (this.configBot.roleId === 3) {
-                    toast.error(`[${symbol ?? "UNKNOWN"}] core thiếu field: ${JSON.stringify(core)}`, { duration: Infinity });
-                }
-                uiRows.push({
-                    symbol: symbol ?? "UNKNOWN",
-                    sizeStr: null,
-                    side: null,
-                    isSpread: false,
-                    isDepth: false,
-                    isSize: false,
-                    qualified: false,
-                    isLong: false,
-                    isShort: false,
-                    core: core ?? ({} as TCore),
-                });
+                toast.error(`[${symbol ?? "UNKNOWN"}] core thiếu field: ${JSON.stringify(core)}`, { duration: Infinity });
                 continue;
             }
 
-            const isSpread = this.isSpreadPercent(spreadPercent);
-            const isDepth = this.isDepth(askSumDepth, bidSumDepth);
+            const isSpread = isSpreadPercent(spreadPercent, this.settingUser.minSpreadPercent, this.settingUser.maxSpreadPercent);
+            const isDepth = isDepthCalc(askSumDepth, bidSumDepth, this.settingUser.maxDepth);
 
-            const sizeStr = this.handleSize(whitelistItem);
-            const isSize = Bot.checkSize(sizeStr);
+            const sizeStr = handleSize(whitelistItem, this.settingUser.inputUSDT);
+            const isSize = checkSize(sizeStr);
 
             const isLong = imbalanceBidPercent > this.settingUser.ifImbalanceBidPercent;
             const isShort = imbalanceAskPercent > this.settingUser.ifImbalanceAskPercent;
-            const side = this.pickSideByPriority(isLong, isShort, priority as TPriority);
+            const side = isLong ? "long" : isShort ? "short" : null;
 
             const qualified = isSpread && isDepth && isSize && !!side;
-
-            // Thu thập cho UI
-            uiRows.push({
-                symbol,
-                sizeStr,
-                side: side ?? null,
-                isSpread,
-                isDepth,
-                isSize,
-                qualified,
-                isLong,
-                isShort,
-                core,
-            });
+            // console.log({
+            //     symbol,
+            //     qualified,
+            //     side,
+            //     isSpread,
+            //     isDepth,
+            //     isSize,
+            // });
 
             // Thu thập cho bot nếu đủ điều kiện
             if (qualified && side) {
-                const opr = contractInfo?.order_price_round; // cẩn thận null
-                if (opr == null) {
-                    // thiếu tick size thì vẫn show UI, nhưng không đưa vào bot
-                } else {
-                    this.whitelistEntry.push({
-                        symbol,
-                        sizeStr,
-                        side,
-                        askBest,
-                        bidBest,
-                        order_price_round: opr,
-                    });
-                }
-
-                // if (this.configBot.roleId === 3) {
-                //     toast.error(`Có whitelistEntry: ${JSON.stringify(this.whitelistEntry)}`);
-                // }
+                this.whitelistEntry.push({
+                    symbol,
+                    sizeStr,
+                    side,
+                    askBest,
+                    bidBest,
+                    order_price_round,
+                });
             }
         }
 
         // sort 1 lần ở cuối
-        uiRows.sort((a, b) => Number(b.qualified) - Number(a.qualified));
+        // uiRows.sort((a, b) => Number(b.qualified) - Number(a.qualified));
 
         // gán cho state nội bộ + báo UI
-        this.whitelistUi = uiRows;
-        this.stateSetWhitelistUi(uiRows);
-    }
-
-    /**
-     * hàm này sẽ được tính toán ở entry
-     * quét SymbolState và tính size cho từng settingUser
-     */
-    handleSize(whitelistItem: TWhiteListItem): string {
-        const { order_size_min, order_size_max, quanto_multiplier, symbol } = whitelistItem.contractInfo;
-        const { lastPrice } = whitelistItem.core;
-        const inputUSDT = this.settingUser.inputUSDT;
-        if ([order_size_min, order_size_max, quanto_multiplier, inputUSDT, lastPrice].some((v) => v === null || v === undefined)) {
-            console.log(`${symbol} - Tham số không hợp lệ: `, { order_size_min, order_size_max, quanto_multiplier, inputUSDT, lastPrice });
-            return "0";
-        }
-
-        if (lastPrice === null || lastPrice === undefined || isNaN(lastPrice)) {
-            console.log(`${symbol} - Giá không hợp lệ: `, lastPrice);
-            return "0";
-        } // Giá không hợp lệ
-
-        const size = this.calcSize(inputUSDT, lastPrice, quanto_multiplier, order_size_min, order_size_max, order_size_min);
-
-        if (size == null || isNaN(size)) {
-            console.log(`${symbol} - Size không hợp lệ: `, size);
-            return "0";
-        }
-
-        return size.toString();
-    }
-
-    calcSize(inputUSDT: number, price: number, multiplier: number, minSize = 1, maxSize?: number, step = 1) {
-        if (!(price > 0) || !(multiplier > 0)) return 0;
-        let size = Math.floor(inputUSDT / price / multiplier / step) * step;
-        // size = Math.max(size, minSize);
-        if (size < minSize) return 0;
-        if (maxSize != null) size = Math.min(size, maxSize);
-        return size;
-    }
-
-    /**
-     * Spread từ 0.05% đến 0.20%
-     */
-    isSpreadPercent(spreadPercent: number): boolean {
-        const minSpreadPercent = this.settingUser.minSpreadPercent;
-        const maxSpreadPercent = this.settingUser.maxSpreadPercent;
-        if (!spreadPercent) return false;
-        const result = spreadPercent >= minSpreadPercent && spreadPercent <= maxSpreadPercent; // Spread 0.05% – 0.20%
-        return result;
-    }
-
-    isDepth(askSumDepth: number, bidSumDepth: number): boolean {
-        return bidSumDepth >= this.settingUser.maxDepth || askSumDepth >= this.settingUser.maxDepth;
+        // this.whitelistUi = uiRows;
+        // this.stateSetWhitelistUi(uiRows);
     }
 
     setPriority24hChange(priority24hChange: TPayload24Change) {
@@ -1166,7 +1110,7 @@ export class Bot {
             const entry_price = Number(pos.entry_price);
             const takeProfit = this.configBot.settingUser.takeProfit;
             const sideFortpPrice = this.getPosSide(pos);
-            const price = this.tpPrice(entry_price, takeProfit / 100, sideFortpPrice, tickSize);
+            const price = this.tpPrice(entry_price, takeProfit, sideFortpPrice, tickSize);
 
             payloads.push({
                 symbol: contract,
@@ -1270,6 +1214,7 @@ export class Bot {
         const ceilTick = (p: number) => Math.ceil(p / tick) * tick;
         const floorTick = (p: number) => Math.floor(p / tick) * tick;
 
+        tpPercent = tpPercent / 100;
         const factor = side === "long" ? 1 + tpPercent : 1 - tpPercent;
         const roundDir = side === "long" ? ceilTick : floorTick; // làm tròn theo chiều đúng
 

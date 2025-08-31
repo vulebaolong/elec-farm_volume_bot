@@ -10,11 +10,13 @@ import { useState } from "react";
 import DialogInfo from "../dialog/dialog-info";
 import ThemeToggleV2 from "../theme-toggle/theme-toggle-v2";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import Whitelist from "../whitelist/whitelist";
 
 export function NavMain() {
     const { isMobile, state } = useSidebar();
     const [openAbout, setOpenAbout] = useState(false);
     const info = useAppSelector((state) => state.user.info);
+    const [openWhitelist, setOpenWhitelist] = useState(false);
 
     const srollToTop = () => {
         requestAnimationFrame(() => {
@@ -67,10 +69,10 @@ export function NavMain() {
                     </SidebarMenuItem>
 
                     {/* whitelist */}
-                    {/* <SidebarMenuItem>
+                    <SidebarMenuItem>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <SidebarMenuButton onClick={() => setOpenSymbol(true)} className="flex items-center overflow-hidden">
+                                <SidebarMenuButton onClick={() => setOpenWhitelist(true)} className="flex items-center overflow-hidden">
                                     <BadgeDollarSign className="size-4 shrink-0 " />
                                     <span className="text-sm">White List</span>
                                 </SidebarMenuButton>
@@ -79,7 +81,7 @@ export function NavMain() {
                                 <p>White List</p>
                             </TooltipContent>
                         </Tooltip>
-                    </SidebarMenuItem> */}
+                    </SidebarMenuItem>
 
                     {/* setting - amin */}
                     {(info?.Roles?.id === 3 || info?.Roles?.id === 1) && (
@@ -144,6 +146,7 @@ export function NavMain() {
             </SidebarGroup>
 
             <DialogInfo open={openAbout} onOpenChange={setOpenAbout} />
+            <Whitelist open={openWhitelist} onOpenChange={setOpenWhitelist} />
         </>
     );
 }

@@ -5,6 +5,8 @@ import { SET_IS_START } from "@/redux/slices/bot.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { toast } from "sonner";
 import { Bot } from "./logic/class-bot";
+import { TerminalPanel } from "../log-ui/terminal-panel";
+import { StickyPanel } from "../log-ui/sticky-panel";
 
 type TProps = {
     isReady: boolean;
@@ -51,13 +53,17 @@ export default function Controll({ isReady, webviewRef, botRef }: TProps) {
                 <CardHeader className="flex items-center gap-2">
                     <CardTitle className="text-base">Controll</CardTitle>
                 </CardHeader>
-                <CardContent className="flex gap-2 items-center">
-                    <Button disabled={!isReady || isStart || !botRef.current} onClick={start} size="sm">
-                        Start
-                    </Button>
-                    <Button disabled={!isReady || !isStart || !botRef.current} onClick={stop} size="sm">
-                        Stop
-                    </Button>
+                <CardContent className="flex gap-2">
+                    <div className="flex gap-2 items-center h-fit">
+                        <Button disabled={!isReady || isStart || !botRef.current} onClick={start} size="sm">
+                            Start
+                        </Button>
+                        <Button disabled={!isReady || !isStart || !botRef.current} onClick={stop} size="sm">
+                            Stop
+                        </Button>
+                    </div>
+                    <TerminalPanel />
+                    <StickyPanel />
                 </CardContent>
             </Card>
         </div>
