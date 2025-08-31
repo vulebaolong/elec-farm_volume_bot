@@ -513,7 +513,7 @@ export class Bot {
     /** Các contract có OPEN nhưng KHÔNG có position, kèm earliest riêng từng contract */
     contractsToCancelWithEarliest() {
         const stats = this.openStatsByContract();
-        if(stats.length === 0) clearStickies();
+        if (stats.length === 0) clearStickies();
         return stats.filter(({ contract }) => {
             if (this.positions.has(contract)) {
                 console.log("removeSticky: ", `timeout:${contract}`);
@@ -1214,6 +1214,7 @@ export class Bot {
         const ceilTick = (p: number) => Math.ceil(p / tick) * tick;
         const floorTick = (p: number) => Math.floor(p / tick) * tick;
 
+        tpPercent = tpPercent / 100;
         const factor = side === "long" ? 1 + tpPercent : 1 - tpPercent;
         const roundDir = side === "long" ? ceilTick : floorTick; // làm tròn theo chiều đúng
 
