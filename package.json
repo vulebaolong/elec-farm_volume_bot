@@ -199,7 +199,10 @@
         "appId": "org.erb.BotFarmVolume",
         "asar": true,
         "afterSign": ".erb/scripts/notarize.js",
-        "asarUnpack": "**\\*.{node,dll}",
+        "asarUnpack": [
+            "dist/main/workers/**",
+            "**\\*.{node,dll}"
+        ],
         "files": [
             "dist",
             "node_modules",

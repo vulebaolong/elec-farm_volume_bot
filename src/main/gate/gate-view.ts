@@ -1,6 +1,6 @@
 import { shell, BrowserWindow, WebContentsView } from "electron";
 
-export function ensureGateView(mainWindow: BrowserWindow, isDebug: boolean) {
+export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
      // --- Gate WebContentsView ---
     const gateView = new WebContentsView({
         webPreferences: {
@@ -58,4 +58,7 @@ export function ensureGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     //   console.log("Gate request:", details.url);
     //   callback({ cancel: false, requestHeaders: details.requestHeaders });
     // });
+
+    return gateView;
 }
+

@@ -31,7 +31,6 @@ export type TFormValuesUiSelector = {
 export default function SettingSelector() {
     const uiSelector = useAppSelector((state) => state.bot.uiSelector);
     const upsertUiSelector = useUpsertUiSelector();
-    const queryClient = useQueryClient();
 
     const form = useForm<TFormValuesUiSelector>({
         defaultValues: { selectors: [] },

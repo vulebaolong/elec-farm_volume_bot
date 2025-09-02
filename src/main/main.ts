@@ -1,5 +1,3 @@
-import { startBotWorker, stopBotWorker } from "./workers";
-
 import { IS_PRODUCTION } from "@/constant/app.constant";
 import { app, BrowserWindow, ipcMain, powerMonitor, shell } from "electron";
 import { installExtension, REDUX_DEVTOOLS } from "electron-devtools-installer";
@@ -7,11 +5,12 @@ import log from "electron-log";
 import { autoUpdater } from "electron-updater";
 import { pathToFileURL } from "node:url";
 import path from "path";
-import { ensureGateView } from "./gate/gate-view";
+import { initGateView } from "./gate/gate-view";
 import MenuBuilder from "./menu";
 import { registerMetricsIPC } from "./metrics";
 import { setupUpdaterIPC } from "./updater";
 import { resolveHtmlPath } from "./util";
+import { initBot } from "./workers/init.worker";
 
 class AppUpdater {
     constructor() {
@@ -84,7 +83,8 @@ const createWindow = async () => {
 
     setupUpdaterIPC();
     registerMetricsIPC();
-    ensureGateView(mainWindow, isDebug);
+    const gateView = initGateView(mainWindow, isDebug);
+    initBot(mainWindow, gateView);
 
     mainWindow.loadURL(resolveHtmlPath("index.html"));
 
@@ -144,7 +144,6 @@ app.on("window-all-closed", async () => {
     // Respect the OSX convention of having the application in memory even
     // after all windows have been closed
     if (process.platform !== "darwin") {
-        await stopBotWorker();
         app.quit();
     }
 });
@@ -158,7 +157,6 @@ app.whenReady()
         }
 
         createWindow();
-        startBotWorker();
         app.on("activate", () => {
             // On macOS it's common to re-create a window in the app when the
             // dock icon is clicked and there are no other windows open.

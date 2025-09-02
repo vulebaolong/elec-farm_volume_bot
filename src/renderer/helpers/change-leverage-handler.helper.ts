@@ -2,7 +2,7 @@ import { IS_PRODUCTION } from "@/constant/app.constant";
 import { changedLaveragelist } from "./white-list.helper";
 import { toast } from "sonner";
 import { TRespnoseGate } from "@/types/base.type";
-import { changeLeverage } from "@/javascript-string/logic-farm";
+import { createCodeStringchangeLeverage } from "@/javascript-string/logic-farm";
 
 type TChangeLeverageHandler = {
     symbol: string;
@@ -15,7 +15,7 @@ export const changeLeverageHandler = async ({ symbol, leverageNumber, webview }:
     if (!changedLaveragelist.has(symbol)) {
         try {
             const leverageString = leverageNumber.toString();
-            const stringOrder = changeLeverage({
+            const stringOrder = createCodeStringchangeLeverage({
                 symbol: symbol,
                 leverage: leverageString,
             });

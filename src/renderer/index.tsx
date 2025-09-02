@@ -15,10 +15,6 @@ if (IS_PRODUCTION) {
     console.info = () => {};
     console.trace = () => {};
 }
-console.log = () => {};
-console.debug = () => {};
-console.info = () => {};
-console.trace = () => {};
 
 const container = document.getElementById("root") as HTMLElement;
 const root = createRoot(container);

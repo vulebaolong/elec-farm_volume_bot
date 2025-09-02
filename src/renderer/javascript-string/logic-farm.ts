@@ -258,7 +258,7 @@ export const closeOrder = (payload: TCloseOrder) => {
 `;
 };
 
-export const changeLeverage = (payload: TPayloadLeverage) => {
+export const createCodeStringchangeLeverage = (payload: TPayloadLeverage) => {
     return `
 (async () => {
 try {
