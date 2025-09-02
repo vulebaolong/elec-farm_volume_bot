@@ -8,7 +8,6 @@ export const useUpdateSettingUser = () => {
     return useMutation({
         mutationFn: async (payload: TSettingUsersUpdate) => {
             const { data } = await api.patch<TRes<TSettingUsers>>(`${ENDPOINT.SETTING_USER.UPDATE_SETTING_USER}/${payload.id}`, payload);
-            console.log({ useUpdateSettingUser: data });
             return data;
         },
     });

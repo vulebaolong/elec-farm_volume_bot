@@ -1,14 +1,13 @@
+import { useGetInfoMutation } from "@/api/tanstack/auth.tanstack";
 import { useGetUiSelector } from "@/api/tanstack/selector.tanstack";
 import { SET_SETTING_SYSTEM, SET_WHITELIST_RESET_IN_PROGRESS } from "@/redux/slices/bot.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
 import { TSettingSystemsSocket } from "@/types/setting-system.type";
+import { TSettingUsersSocket } from "@/types/setting-user.type";
+import { TWhiteList } from "@/types/white-list.type";
 import { useEffect, useRef } from "react";
 import { useSocket } from "./socket.hook";
-import { TWhiteList } from "@/types/white-list.type";
-import { TWorkerData } from "@/types/worker.type";
-import { TSettingUsers } from "@/types/setting-user.type";
-import { TUiSelector } from "@/types/ui-selector.type";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
@@ -16,6 +15,7 @@ export const useInitData = () => {
     const dispatch = useAppDispatch();
     const getUiSelector = useGetUiSelector();
     const countRef = useRef(0);
+    const getInfoMutation = useGetInfoMutation();
 
     useEffect(() => {
         if (!socket) return;
@@ -26,6 +26,12 @@ export const useInitData = () => {
             dispatch(SET_SETTING_SYSTEM(data));
         };
         socket.on("setting-system", handleSettingSystem);
+
+        // cập nhật setting user thường
+        const handleSettingUser = ({ data }: TSocketRes<TSettingUsersSocket>) => {
+            getInfoMutation.mutate();
+        };
+        socket.on("setting-user", handleSettingUser);
 
         // tránh vào lệnh trong khi đang reset whitelist
         const handleBlockEntryDuringWhitelistReset = ({ data }: TSocketRes<boolean>) => {
@@ -43,6 +49,8 @@ export const useInitData = () => {
         return () => {
             socket.off("setting-system", handleSettingSystem);
             socket.off("white-list-reset-in-progress", handleBlockEntryDuringWhitelistReset);
+            socket.off("setting-user", handleSettingUser);
+            socket.off("entry", handleEntry);
         };
     }, [socket]);
 
@@ -57,6 +65,7 @@ export const useInitData = () => {
             window.electron?.ipcRenderer.sendMessage("bot:init", dataWorkerInit);
             countRef.current = 1;
         } else {
+            console.log("settingUser: ", settingUser);
             window.electron?.ipcRenderer.sendMessage("bot:settingUser", settingUser);
             window.electron?.ipcRenderer.sendMessage("bot:uiSelector", getUiSelector.data);
         }

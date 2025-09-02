@@ -13,6 +13,7 @@ import { z } from "zod";
 import { ButtonLoading } from "../ui/button-loading";
 import { Form } from "../ui/form";
 import { useQueryClient } from "@tanstack/react-query";
+import { useGetInfoMutation } from "@/api/tanstack/auth.tanstack";
 
 const numberFromStringOrNumber = z.union([
     z.number(),
@@ -59,6 +60,7 @@ type TProps = {
 
 export default function SettingAdminUser({ type }: TProps) {
     const updateSettingUser = useUpdateSettingUser();
+    const getInfoMutation = useGetInfoMutation();
     const getSettingUserById = useGetSettingUserById(1);
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
     const queryClient = useQueryClient();
@@ -138,8 +140,12 @@ export default function SettingAdminUser({ type }: TProps) {
         console.log({ updateSettingUser: payload });
         updateSettingUser.mutate(payload, {
             onSuccess: (data) => {
-                // không cần load lại seting vì đã nhận được ở socket setting đặt ở app
-                if (type === "user") queryClient.invalidateQueries({ queryKey: [`get-setting-user-by-id`] });
+                console.log({ type });
+                if (type === "user") {
+                    queryClient.invalidateQueries({ queryKey: [`get-setting-user-by-id`] });
+                } else {
+                    getInfoMutation.mutate();
+                }
                 toast.success(`Update Setting successfully`);
             },
             onError: (error) => {

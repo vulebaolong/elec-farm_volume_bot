@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { PageTitle } from "../title-page/title-page";
 import Controll from "./controll";
 import { TWorkerData } from "@/types/worker.type";
+import GateDockPanel from "../gate-dock-panel/gate-dock-panel";
 
 export default function Bot() {
     // const saveAccount = useSaveAccount();
@@ -93,8 +94,10 @@ export default function Bot() {
         <div className="">
             <PageTitle title="Bot" icon={BotIcon} size="md" />
 
-            <div className="flex flex-col gap-5 h-full pb-10">
+            <div className="flex flex-col gap-5 h-full pb-80">
+                {/* <GateDockPanel /> */}
                 <Controll />
+
 
                 {/* <Priority24hChange botRef={botRef} /> */}
 

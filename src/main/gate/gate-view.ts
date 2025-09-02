@@ -1,7 +1,10 @@
+import { setLocalStorageScript } from "@/javascript-string/logic-farm";
 import { shell, BrowserWindow, WebContentsView } from "electron";
+import { forceDesktopLayout } from "../force-desktop";
+import { installGateDock } from "./gate-dock";
 
 export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
-     // --- Gate WebContentsView ---
+    // --- Gate WebContentsView ---
     const gateView = new WebContentsView({
         webPreferences: {
             // bảo mật: không cần Node integration trong trang web Gate
@@ -22,14 +25,15 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
 
     // layout: để Gate chiếm bên phải, phần trái để app React hiển thị
     const L_PANEL = 600; // px: độ rộng panel trái cho UI của bạn
-    const H_PANEL = 300;
+    const x = 900;
+    const H_PANEL = 470;
     const layoutGateView = () => {
         if (!mainWindow) return;
         const { width, height } = mainWindow.getContentBounds();
         gateView.setBounds({
-            x: L_PANEL,
+            x: width - x,
             y: H_PANEL,
-            width: Math.max(0, width - L_PANEL),
+            width: x,
             height: Math.max(0, height - H_PANEL),
         });
     };
@@ -45,20 +49,19 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     });
 
     // load trang Gate
-    gateView.webContents.loadURL("https://www.gate.com/futures/USDT/BTC_USDT");
+    gateView.webContents.loadURL("https://www.gate.com/futures/USDT/BTC_USDT").then(() => {
+        gateView.webContents.executeJavaScript(setLocalStorageScript, true);
+    });
 
     // Debug DevTools riêng cho Gate (tùy chọn)
     if (isDebug) {
         gateView.webContents.openDevTools({ mode: "detach" });
     }
 
-    // Ví dụ: bạn có thể intercept request của Gate tại đây nếu cần
-    // const sess = gateView.webContents.session;
-    // sess.webRequest.onBeforeSendHeaders((details, callback) => {
-    //   console.log("Gate request:", details.url);
-    //   callback({ cancel: false, requestHeaders: details.requestHeaders });
-    // });
+    gateView.webContents.once("did-finish-load", () => {
+        // forceDesktopLayout(gateView);
+        // installGateDock(mainWindow, gateView);
+    });
 
     return gateView;
 }
-

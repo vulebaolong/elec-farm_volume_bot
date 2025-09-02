@@ -1,4 +1,5 @@
 import { TSide } from "@/types/base.type";
+import { TUiSelectorOrder } from "@/types/bot.type";
 import { TPayloadLeverage } from "@/types/leverage.type";
 
 // "future-order-type-usdt": "market",
@@ -25,8 +26,6 @@ export const setLocalStorageScript = `
     "future_no_noty_twap": "false"
   };
 
-  const alreadyReloaded = sessionStorage.getItem("__reloaded_once__");
-
   const notMatched = Object.entries(desiredSettings).filter(
     ([key, value]) => localStorage.getItem(key) !== value
   );
@@ -41,19 +40,7 @@ export const setLocalStorageScript = `
     localStorage.setItem(key, value);
   }
 
-  console.warn("⚠️ Đã cập nhật localStorage:", notMatched);
-
-  if (!alreadyReloaded) {
-    sessionStorage.setItem("__reloaded_once__", "true");
-    console.log("🔄 Reload lại để apply localStorage");
-
-    // Trả về trước khi reload (trong microtask để đảm bảo send xong)
-    setTimeout(() => {
-      location.reload();
-    }, 10);
-
-    return { done: false, message: "🔄 Đang reload sau khi cập nhật localStorage" };
-  }
+  console.info("⚠️ Đã cập nhật localStorage:", notMatched);
 
   // Đã reload rồi mà vẫn sai
   return { done: false, message: "❌ localStorage chưa đúng dù đã reload" };
@@ -454,6 +441,67 @@ export const createCodeStringGetBidsAsks = (contract: string, limit: number | un
     return data;
   } catch (err) {
     console.info('⚠️ createCodeStringGetBidsAsks script error:', err.message || err);
+    throw err;
+  }
+})();
+`;
+};
+
+export const createCodeStringClickOrder = (selector: TUiSelectorOrder) => {
+    return `
+(async () => {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  let log = [];
+
+  // hàm set value an toàn cho input controlled (React/Vue)
+  const setValue = (el, value) => {
+    const proto = Object.getPrototypeOf(el);
+    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+    const setter = desc && desc.set;
+    if (setter) setter.call(el, value);
+    else el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  try {
+    const inputPrice = document.querySelector(${JSON.stringify(selector.inputPrice)});
+    if (!inputPrice) throw new Error('inputPrice not found');
+
+    const inputPosition = document.querySelector(${JSON.stringify(selector.inputPosition)});
+    if (!inputPosition) throw new Error('inputPosition not found');
+
+    const btn = document.querySelector(${JSON.stringify(selector.buttonLong)});
+    if (!btn) throw new Error('Buy button not found');
+
+    // --- set PRICE ---
+    inputPrice.focus();
+    // clear
+    setValue(inputPrice, '');
+    // set price
+    setValue(inputPrice, '100');
+    log.push({ message: 'Set inputPrice value', data: '100' });
+    console.info({ message: 'Set inputPrice value', data: '100' });
+
+    // --- set AMOUNT/POSITION ---
+    inputPosition.focus();
+    // clear
+    setValue(inputPosition, '');
+    // set amount
+    setValue(inputPosition, '1');
+    log.push({ message: 'Set inputPosition value', data: '1' });
+    console.info({ message: 'Set inputPosition value', data: '1' });
+
+    await sleep(200);
+
+    // --- click BUY ---
+    btn.removeAttribute('disabled');
+    btn.click();
+    log.push({ message: 'Buy button clicked', data: null });
+
+    return log;
+  } catch (err) {
+    console.info('⚠️ openOrder script error:', err?.message || err);
     throw err;
   }
 })();

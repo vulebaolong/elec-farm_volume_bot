@@ -18,7 +18,16 @@ export type Channels =
     | "bot:setWhiteList"
     | "bot:settingUser"
     | "bot:uiSelector"
-    | "bot:metrics";
+    | "bot:log"
+    | "bot:metrics"
+    | "gate:get-state"
+    | "gate:set-dock"
+    | "gate:set-ratio"
+    | "gate:move-overlay"
+    | "gate:toggle"
+    | "bot:sticky:set"
+    | "bot:sticky:remove"
+    | "bot:sticky:clear";
 
 const electronHandler = {
     ipcRenderer: {

@@ -11,6 +11,7 @@ import { registerMetricsIPC } from "./metrics";
 import { setupUpdaterIPC } from "./updater";
 import { resolveHtmlPath } from "./util";
 import { initBot } from "./workers/init.worker";
+import { installGateDock } from "./gate/gate-dock";
 
 class AppUpdater {
     constructor() {

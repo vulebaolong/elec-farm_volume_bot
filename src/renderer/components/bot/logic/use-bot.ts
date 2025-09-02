@@ -11,9 +11,9 @@ import { TPayload24Change } from "@/types/priority-change.type";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TUiSelector } from "@/types/ui-selector.type";
 import { TUser } from "@/types/user.type";
-import { TWhiteList, TWhitelistUi } from "@/types/white-list.type";
+import { TWhiteList } from "@/types/white-list.type";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Bot, TBotConfig } from "./class-bot";
 
 export function useBot(webview: Electron.WebviewTag | null) {
