@@ -7,7 +7,7 @@ import { TRes } from "@/types/app.type";
 import { TGateApiRes } from "@/types/base-gate.type";
 import { TSide } from "@/types/base.type";
 import { TBidsAsks } from "@/types/bids-asks.type";
-import { StickySetPayload, TChangeLeverage, TDataInitBot, TDataOrder, TPayloadOrder } from "@/types/bot.type";
+import { FetchResult, StickySetPayload, TChangeLeverage, TDataInitBot, TDataOrder, TPayloadOrder } from "@/types/bot.type";
 import { TGetInfoContractRes } from "@/types/contract.type";
 import { TOrderOpen } from "@/types/order.type";
 import { TPosition, TPositionRes } from "@/types/position.type";
@@ -50,6 +50,13 @@ parentPort!.on("message", (msg: any) => {
     }
 });
 
+// process.on("uncaughtException", (err) => {
+//     console.log(`uncaughtException`, err);
+// });
+// process.on("unhandledRejection", (reason) => {
+//     console.log(`unhandledRejection`, reason);
+// });
+
 class Bot {
     private count = 0;
     private running = false;
@@ -80,13 +87,11 @@ class Bot {
         this.running = true;
 
         while (this.running) {
-            this.beforeEach();
-
             const iterStart = performance.now();
-            this.log("\n\n\n\n\n");
-            this.log("✅✅✅✅✅ ITER START =====", this.snapshot());
-
             try {
+                this.log("\n\n\n\n\n");
+                this.log("✅✅✅✅✅ ITER START =====", this.snapshot());
+                this.beforeEach();
                 if (this.isStart) {
                     let isRefresh = true;
 
@@ -222,13 +227,12 @@ class Bot {
                 await this.refreshSnapshot("Err");
 
                 this.log("❌❌❌❌❌ ITER ERROR =====", err);
+            } finally {
+                const dt = Math.round(performance.now() - iterStart);
+                this.count += 1;
+                this.log(`✅✅✅✅✅ ITER END (took ${dt}ms) =====`, "");
+                await this.sleep(1_000);
             }
-
-            const dt = Math.round(performance.now() - iterStart);
-            this.count += 1;
-            this.log(`✅✅✅✅✅ ITER END (took ${dt}ms) =====`, "");
-
-            await this.sleep(1_000);
         }
     }
 
@@ -407,11 +411,16 @@ class Bot {
     }
 
     private async getOrderOpens() {
-        const { body } = await this.gateFetch("https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open");
-        const { data: orderOpens, code: codeOrderOpen, message: messageOrderOpen }: TGateApiRes<TOrderOpen[] | null> = JSON.parse(body);
-        if (codeOrderOpen >= 400) throw new Error(`Lỗi code >= 400 khi gọi createCodeStringGetOrderOpens: ${messageOrderOpen}`);
-        // console.log({ "orderOpen hoàn thành": orderOpens });
-        return orderOpens;
+        const url = "https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open";
+
+        const { data, code, message } = await this.gateJson<TGateApiRes<TOrderOpen[] | null>>(url);
+        if (code >= 400) {
+            const msg = `getOrderOpens fail (code=${code}): ${message || "Unknown"}`;
+            this.sendLogUi(`❌ ${msg}`, "error");
+            throw new Error(msg);
+        }
+
+        return data ?? [];
     }
 
     /** Làm mới orderOpens kèm timeout & log */
@@ -422,12 +431,17 @@ class Bot {
     }
 
     private async getPositions() {
-        const { body } = await this.gateFetch("https://www.gate.com/apiw/v2/futures/usdt/positions");
-        const { data: positions, code: codePosition, message: messagePosition }: TPositionRes = JSON.parse(body);
-        if (codePosition >= 400) throw new Error(`Lỗi code >= 400 khi gọi getPosition: ${messagePosition}`);
-        // console.log({ "getPosition hoàn thành": positions });
-        if (!positions) return [];
-        const openPositionsList = positions.filter((pos) => Number(pos.size) !== 0);
+        const url = "https://www.gate.com/apiw/v2/futures/usdt/positions";
+
+        const { data, code, message } = await this.gateJson<TPositionRes>(url);
+        if (code >= 400) {
+            const msg = `getPositions fail (code=${code}): ${message || "Unknown"}`;
+            this.sendLogUi(`❌ ${msg}`, "error");
+            throw new Error(msg);
+        }
+
+        if (!data) return [];
+        const openPositionsList = data.filter((pos) => Number(pos.size) !== 0);
         return openPositionsList;
     }
 
@@ -476,31 +490,45 @@ class Bot {
     }
 
     private seq = 0;
-    private gateFetch(url: string, init?: any): Promise<{ ok: boolean; status: number; body: string }> {
+    private gateFetch(url: string, init?: any, timeoutMs = 15_000): Promise<FetchResult> {
         const reqId = ++this.seq;
-        const data: TWorkerData<{ url: string; init?: any; reqId: number }> = {
-            type: "bot:fetch",
-            payload: { url, init, reqId },
-        };
-        this.parentPort?.postMessage(data);
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                this.parentPort!.off("message", onMsg);
-                reject(new Error("gateFetch timeout"));
-            }, 15000);
+        const port = this.parentPort!;
+
+        return new Promise<FetchResult>((resolve) => {
+            let settled = false;
+            let timer: NodeJS.Timeout;
+
+            const done = (r: FetchResult) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                try {
+                    port.off("message", onMsg);
+                } catch {}
+                resolve(r); // ❗️CHỈ resolve, KHÔNG reject
+            };
 
             const onMsg = (m: any) => {
-                if (m?.type === "bot:fetch:res" && m.payload.reqId === reqId) {
-                    clearTimeout(timeout);
-                    parentPort!.off("message", onMsg);
-                    if (m.payload.error) {
-                        reject(new Error(m.payload.error));
-                    } else {
-                        resolve(m.payload.res);
-                    }
+                try {
+                    if (m?.type !== "bot:fetch:res") return;
+                    if (m.payload?.reqId !== reqId) return;
+                    if (m.payload?.error) return done({ ok: false, error: m.payload.error });
+                    return done({ ok: true, res: m.payload.res });
+                } catch (e) {
+                    return done({ ok: false, error: `gateFetch handler error: ${String(e)}` });
                 }
             };
-            this.parentPort!.on("message", onMsg);
+
+            // attach listener TRƯỚC
+            port.on("message", onMsg);
+
+            // đặt timeout SAU khi attach
+            timer = setTimeout(() => {
+                done({ ok: false, error: "gateFetch timeout" });
+            }, timeoutMs);
+
+            // postMessage SAU khi attach (tránh race)
+            port.postMessage({ type: "bot:fetch", payload: { url, init, reqId } });
         });
     }
 
@@ -531,57 +559,59 @@ class Bot {
     }
 
     private async changeLeverage(symbol: string, leverageNumber: number): Promise<boolean> {
-        // console.log(`changedLaveragelist: ${symbol}`, changedLaveragelist, changedLaveragelist.has(symbol));
-        if (!this.changedLaveragelist.has(symbol)) {
-            try {
-                const leverageString = leverageNumber.toString();
-
-                const { body } = await this.gateFetch(`/apiw/v2/futures/usdt/positions/${symbol}/leverage`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ leverage: leverageString }),
-                });
-                const { data, code, message }: TGateApiRes<TChangeLeverage[]> = JSON.parse(body);
-                if (code >= 400 || code < 0) throw new Error(`code:${code} | ${message}`);
-
-                if (data?.[0]?.leverage !== leverageString || data?.[1]?.leverage !== leverageString) {
-                    throw new Error(
-                        `resLeverage !== settingUsers.leverage: 
-                                        long=${data?.[0]?.leverage} 
-                                        short=${data?.[1]?.leverage} 
-                                        shouldLeverage=${leverageString}`,
-                    );
-                }
-
-                this.changedLaveragelist.add(symbol);
-
-                if (!IS_PRODUCTION) {
-                    this.log(`✅ Change Leverage [SUCCESS]: ${symbol} | ${leverageString}`);
-                }
-
-                return true;
-            } catch (error: any) {
-                this.log(`❌ Change Leverage [FAILED]: ${symbol} | ${error?.message}`);
-                this.sendLogUi(`❌ Change Leverage [FAILED]: ${error?.message}`, `error`);
-                return false; // ⛔ Dừng hẳn, không vào lệnh
-            }
-        } else {
+        if (this.changedLaveragelist.has(symbol)) {
             this.log(`✅ Change Leverage [EXISTS] ${symbol} skip => `, this.changedLaveragelist);
             return true;
         }
+
+        const leverageString = leverageNumber.toString();
+
+        const url = `https://www.gate.com/apiw/v2/futures/usdt/positions/${symbol}/leverage`;
+
+        const { data, code, message } = await this.gateJson<TGateApiRes<TChangeLeverage[]>>(url, {
+            method: "POST",
+            body: JSON.stringify({ leverage: leverageString }),
+            headers: { "Content-Type": "application/json" },
+        });
+
+        if (code >= 400 || code < 0) {
+            this.log(`❌ Change Leverage [FAILED]: ${symbol} | code:${code} | ${message}`);
+            this.sendLogUi(`❌ Change Leverage [FAILED]: code:${code} | ${message}`, `error`);
+            return false;
+        }
+
+        if (data?.[0]?.leverage !== leverageString || data?.[1]?.leverage !== leverageString) {
+            this.log(`❌ Change Leverage [FAILED]: ${symbol} | mismatched leverage`);
+            return false;
+        }
+
+        this.changedLaveragelist.add(symbol);
+        if (!IS_PRODUCTION) this.log(`✅ Change Leverage [SUCCESS]: ${symbol} | ${leverageString}`);
+        return true;
     }
 
-    private async getBidsAsks(contract: string, limit: number | undefined = 10) {
-        const { body } = await this.gateFetch(
-            `https://www.gate.com/apiw/v2/futures/usdt/order_book?limit=${limit}&contract=${contract.replace("/", "_")}`,
-        );
-        const { data, code, message }: TGateApiRes<TBidsAsks> = JSON.parse(body);
-        if (code >= 400) {
-            this.sendLogUi(`❌ getBidsAsks: code >= 400 | ${message}`, `error`);
-            throw new Error(`❌ getBidsAsks: code >= 400 | ${message}`);
+    // Helper parse JSON an toàn + check Result
+    private async gateJson<T>(url: string, init?: any, timeoutMs = 15_000): Promise<T> {
+        const r = await this.gateFetch(url, init, timeoutMs);
+        if (!r.ok) throw new Error(r.error);
+
+        try {
+            return JSON.parse(r.res.body) as T;
+        } catch (e) {
+            throw new Error(`Invalid JSON from ${url}: ${String(e)}`);
         }
+    }
+
+    private async getBidsAsks(contract: string, limit: number = 10) {
+        const url = `https://www.gate.com/apiw/v2/futures/usdt/order_book?limit=${limit}&contract=${contract.replace("/", "_")}`;
+
+        const { data, code, message } = await this.gateJson<TGateApiRes<TBidsAsks>>(url);
+        if (code >= 400) {
+            const msg = `getBidsAsks fail (code=${code}): ${message || "Unknown"}`;
+            this.sendLogUi(`❌ ${msg}`, "error");
+            throw new Error(msg);
+        }
+
         this.log(`✅ Get Bids & Asks [SUCCESS]: ${contract} | limit: ${limit}`);
         return data;
     }

@@ -63,3 +63,8 @@ export type TUiSelectorOrder = {
 };
 
 export type StickySetPayload = { key: string; text: string; ts: number };
+
+
+export type FetchOK = { ok: true; res: { ok: boolean; status: number; body: string } };
+export type FetchErr = { ok: false; error: string };
+export type FetchResult = FetchOK | FetchErr;
