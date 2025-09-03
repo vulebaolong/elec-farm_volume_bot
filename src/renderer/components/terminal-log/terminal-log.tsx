@@ -89,7 +89,7 @@ export default function TerminalLog({ lines, maxLines = 2000, className }: Props
             </CardHeader> */}
 
             <CardContent className="p-0">
-                <div ref={viewRef} className="h-52 w-full overflow-auto rounded-md bg-black text-neutral-100 p-2 font-mono text-xs leading-relaxed">
+                <div ref={viewRef} className="h-52 w-full overflow-auto rounded-md bg-black text-neutral-100 p-2 font-mono text-[10px] leading-relaxed">
                     {visible.map((l, i) => (
                         <div key={i} className="whitespace-pre-wrap">
                             <span className="text-neutral-500">[{new Date(l.ts).toLocaleTimeString()}]</span>{" "}

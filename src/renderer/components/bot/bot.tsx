@@ -1,12 +1,6 @@
-import { useSocket } from "@/hooks/socket.hook";
-import { TSocketRes } from "@/types/base.type";
-import { TWhiteList } from "@/types/white-list.type";
 import { BotIcon } from "lucide-react";
-import { useEffect } from "react";
 import { PageTitle } from "../title-page/title-page";
 import Controll from "./controll";
-import { TWorkerData } from "@/types/worker.type";
-import GateDockPanel from "../gate-dock-panel/gate-dock-panel";
 
 export default function Bot() {
     // const saveAccount = useSaveAccount();
@@ -97,19 +91,6 @@ export default function Bot() {
             <div className="flex flex-col gap-5 h-full pb-80">
                 {/* <GateDockPanel /> */}
                 <Controll />
-
-
-                {/* <Priority24hChange botRef={botRef} /> */}
-
-                {/* <div className="px-5">
-                    <div className="p-1 h-full border border-border shadow-lg rounded-2xl">
-                        <div className="flex-1 overflow-auto rounded-2xl w-full h-full">
-                            <div className="min-w-[1280px] h-full aspect-[6/5]">
-                                {wvPreload && <Webview webviewRef={webviewRef} setIsReady={setIsReady} wvPreload={wvPreload} />}
-                            </div>
-                        </div>
-                    </div>
-                </div> */}
             </div>
         </div>
     );

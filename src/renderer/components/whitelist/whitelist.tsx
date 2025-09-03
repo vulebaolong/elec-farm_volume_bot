@@ -6,10 +6,10 @@ import { TSocketRes } from "@/types/base.type";
 import { TWhiteList, TWhitelistUi } from "@/types/white-list.type";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { checkSize, handleSize, isDepthCalc, isSpreadPercent } from "../bot/logic/handle-bot";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Button } from "../ui/button";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "../ui/sheet";
+import { checkSize, handleSize, isDepthCalc, isSpreadPercent } from "src/main/workers/util-bot.worker";
 
 type TProps = {
     open: boolean;

@@ -1,6 +1,8 @@
 // bot.worker.ts
+import { LogLevel } from "@/components/terminal-log/terminal-log";
 import { BASE_URL, IS_PRODUCTION } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
+import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder } from "@/javascript-string/logic-farm";
 import { TRes } from "@/types/app.type";
 import { TGateApiRes } from "@/types/base-gate.type";
 import { TSide } from "@/types/base.type";
@@ -18,8 +20,15 @@ import { monitorEventLoopDelay } from "node:perf_hooks";
 import { parentPort, threadId } from "node:worker_threads";
 import v8 from "v8";
 import { checkSize, handleSize, isDepthCalc, isSpreadPercent } from "./util-bot.worker";
-import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder, TClickCancelAllOpenRes } from "@/javascript-string/logic-farm";
-import { LogLevel } from "@/components/terminal-log/terminal-log";
+
+const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
+
+if (!isDebug) {
+    console.log = () => {};
+    console.debug = () => {};
+    console.info = () => {};
+    console.trace = () => {};
+}
 
 let bot: Bot | null = null;
 
@@ -559,6 +568,7 @@ class Bot {
                 return true;
             } catch (error: any) {
                 this.log(`❌ Change Leverage [FAILED]: ${symbol} | ${error?.message}`);
+                this.sendLogUi(`❌ Change Leverage [FAILED]: ${error?.message}`, `error`);
                 return false; // ⛔ Dừng hẳn, không vào lệnh
             }
         } else {
@@ -572,7 +582,10 @@ class Bot {
             `https://www.gate.com/apiw/v2/futures/usdt/order_book?limit=${limit}&contract=${contract.replace("/", "_")}`,
         );
         const { data, code, message }: TGateApiRes<TBidsAsks> = JSON.parse(body);
-        if (code >= 400) throw new Error(`❌ getBidsAsks: code >= 400 | ${message}`);
+        if (code >= 400) {
+            this.sendLogUi(`❌ getBidsAsks: code >= 400 | ${message}`, `error`);
+            throw new Error(`❌ getBidsAsks: code >= 400 | ${message}`);
+        }
         this.log(`✅ Get Bids & Asks [SUCCESS]: ${contract} | limit: ${limit}`);
         return data;
     }
@@ -608,11 +621,20 @@ class Bot {
                 if (m?.type === "bot:order:res") {
                     clearTimeout(timeout);
                     this.parentPort!.off("message", onMsg);
+                    const result = JSON.parse(m.payload.bodyText);
                     if (m.payload.ok) {
-                        const result = JSON.parse(m.payload.bodyText)
-                        const status = `✅ ${result.data.contract} - ${label} ${this.getOrderSide(result.data)} | ${result.data.size} | ${result.data.price} `;
-                        this.sendLogUi(status);
-                        resolve(result);
+                        if (!result.data || result.code >= 400 || result.code < 0) {
+                            reject(new Error(`${payload.contract} ${result?.message}`));
+                            this.sendLogUi(
+                                `❌ ${payload.contract} - ${Number(payload.size) >= 0 ? "long" : "short"} | ${result.data?.size} | ${payload.price} | ${result?.message}`,
+                                `error`,
+                            );
+                            return;
+                        } else {
+                            const status = `✅ ${payload.contract} - ${label} ${this.getOrderSide(result.data)} | ${result.data?.size} | ${result.data?.price}`;
+                            this.sendLogUi(status);
+                            resolve(result);
+                        }
                     } else {
                         reject(new Error(m.payload.error));
                     }
@@ -638,6 +660,7 @@ class Bot {
             const infoContract = await this.getInfoContract(contract);
             if (!infoContract) {
                 console.log(`❌ getCloseOrderPayloads: infoContract not found: ${contract}`);
+                this.sendLogUi(`❌ getCloseOrderPayloads: infoContract not found: ${contract}`, "error");
                 continue;
             }
             const tickSize = infoContract.order_price_round;
@@ -650,6 +673,7 @@ class Bot {
             const lastPrice = await this.getLastPrice(contract);
             if (!lastPrice) {
                 console.log(`❌ getLastPrice: lastPrice not found: ${contract}`);
+                this.sendLogUi(`❌ getLastPrice: lastPrice not found: ${contract}`, "error");
                 continue;
             }
             this.log(`✅ getLastPrice: lastPrice: ${lastPrice}`);

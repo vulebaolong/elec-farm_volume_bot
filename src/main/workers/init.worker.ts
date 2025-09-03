@@ -1,9 +1,20 @@
 // src/main/workers/init.worker.ts
+import { LogLine } from "@/components/terminal-log/terminal-log";
 import { createCodeStringClickOrder } from "@/javascript-string/logic-farm";
 import { TPayloadOrder } from "@/types/bot.type";
+import { TWorkerData } from "@/types/worker.type";
 import { app, BrowserWindow, ipcMain, WebContentsView } from "electron";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
+
+const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
+
+if (!isDebug) {
+    console.log = () => {};
+    console.debug = () => {};
+    console.info = () => {};
+    console.trace = () => {};
+}
 
 let botWorker: Worker | null = null;
 
@@ -26,9 +37,15 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
 
         interceptRequest(gateView);
 
-        botWorker.on("error", (err) => console.error("botWorker error:", err));
+        botWorker.on("error", (err) => {
+            console.error("botWorker error:", err);
+            const payload: LogLine = { ts: Date.now(), level: "error", text: err?.message };
+            mainWindow?.webContents.send("bot:log", payload);
+        });
         botWorker.on("exit", (code) => {
             console.log("botWorker exit:", code);
+            const payload: LogLine = { ts: Date.now(), level: "error", text: `${code}` };
+            mainWindow?.webContents.send("bot:log", payload);
             botWorker = null;
         });
 
@@ -38,9 +55,13 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
         // lắng nghe từ rerender
         ipcMain.on("bot:start", (event, data) => {
             botWorker?.postMessage({ type: "bot:start" });
+            const payload: LogLine = { ts: Date.now(), level: "info", text: `🟢 Start` };
+            mainWindow?.webContents.send("bot:log", payload);
         });
         ipcMain.on("bot:stop", (event, data) => {
             botWorker?.postMessage({ type: "bot:stop" });
+              const payload: LogLine = { ts: Date.now(), level: "info", text: `🔴 Stop` };
+            mainWindow?.webContents.send("bot:log", payload);
         });
         ipcMain.on("bot:setWhiteList", (event, data) => {
             botWorker?.postMessage({ type: "bot:setWhiteList", payload: data });

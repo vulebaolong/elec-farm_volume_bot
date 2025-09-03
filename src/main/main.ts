@@ -11,7 +11,15 @@ import { registerMetricsIPC } from "./metrics";
 import { setupUpdaterIPC } from "./updater";
 import { resolveHtmlPath } from "./util";
 import { initBot } from "./workers/init.worker";
-import { installGateDock } from "./gate/gate-dock";
+
+const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
+
+if (!isDebug) {
+    console.log = () => {};
+    console.debug = () => {};
+    console.info = () => {};
+    console.trace = () => {};
+}
 
 class AppUpdater {
     constructor() {
@@ -33,8 +41,6 @@ if (process.env.NODE_ENV === "production") {
     const sourceMapSupport = require("source-map-support");
     sourceMapSupport.install();
 }
-
-const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 
 if (isDebug) {
     require("electron-debug").default();
