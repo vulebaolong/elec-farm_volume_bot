@@ -4,7 +4,7 @@ import os from "os";
 import { monitorEventLoopDelay } from "perf_hooks";
 import v8 from "v8";
 
-const el = monitorEventLoopDelay({ resolution: 20 });
+const el = monitorEventLoopDelay({ resolution: 500 });
 el.enable();
 
 function getIpcListenerCount() {

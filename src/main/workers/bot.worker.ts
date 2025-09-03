@@ -16,7 +16,7 @@ import { TUiSelector } from "@/types/ui-selector.type";
 import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
 import { TWorkerData } from "@/types/worker.type";
 import axios from "axios";
-import { monitorEventLoopDelay } from "node:perf_hooks";
+import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import { parentPort, threadId } from "node:worker_threads";
 import v8 from "v8";
 import { checkSize, handleSize, isDepthCalc, isSpreadPercent } from "./util-bot.worker";
@@ -121,11 +121,7 @@ class Bot {
                         // lấy ra tất cả các lệnh open, với is_reduce_only = false
                         for (const contract of contractsToCancel) {
                             if (this.isTimedOutClearOpen(contract.earliest, contract.contract)) {
-                                await this.withTimeout(
-                                    this.clickCanelAllOpen(contract.contract),
-                                    10_000,
-                                    `Clear Open: clickCanelAllOpen(${contract.contract})`,
-                                );
+                                await this.clickCanelAllOpen(contract.contract);
                                 isRefresh = false;
                             }
                         }
@@ -598,6 +594,7 @@ class Bot {
             console.log(`Not found selector`, { selectorInputPosition, selectorButtonLong, selectorInputPrice });
             throw new Error(`Not found selector`);
         }
+
         const data: TWorkerData<TDataOrder> = {
             type: "bot:order",
             payload: {
@@ -609,6 +606,7 @@ class Bot {
                 },
             },
         };
+
         this.parentPort?.postMessage(data);
 
         return new Promise((resolve, reject) => {
@@ -618,26 +616,40 @@ class Bot {
             }, 15000);
 
             const onMsg = (m: any) => {
-                if (m?.type === "bot:order:res") {
-                    clearTimeout(timeout);
-                    this.parentPort!.off("message", onMsg);
-                    const result = JSON.parse(m.payload.bodyText);
-                    if (m.payload.ok) {
-                        if (!result.data || result.code >= 400 || result.code < 0) {
-                            reject(new Error(`${payload.contract} ${result?.message}`));
-                            this.sendLogUi(
-                                `❌ ${payload.contract} - ${Number(payload.size) >= 0 ? "long" : "short"} | ${result.data?.size} | ${payload.price} | ${result?.message}`,
-                                `error`,
-                            );
-                            return;
+                try {
+                    if (m?.type === "bot:order:res") {
+                        clearTimeout(timeout);
+                        this.parentPort!.off("message", onMsg);
+                        if (m.payload.ok) {
+                            let result: any;
+
+                            try {
+                                result = JSON.parse(m.payload?.bodyText ?? "null");
+                            } catch (e) {
+                                reject(new Error(`❌ Invalid JSON from main: ${String(e)}`));
+                                this.sendLogUi(`❌ Invalid JSON from main: ${String(e)}`, `error`);
+                            }
+
+                            const code = typeof result?.code === "number" ? result.code : 0;
+
+                            if (!result?.data || code >= 400 || code < 0) {
+                                reject(new Error(`${payload.contract} ${result?.message}`));
+                                this.sendLogUi(
+                                    `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price} | ${result?.message}`,
+                                    `error`,
+                                );
+                                return;
+                            } else {
+                                const status = `✅ ${payload.contract} - ${label} ${this.getOrderSide(result.data)} | ${result.data?.size} | ${result.data?.price}`;
+                                this.sendLogUi(status);
+                                resolve(result);
+                            }
                         } else {
-                            const status = `✅ ${payload.contract} - ${label} ${this.getOrderSide(result.data)} | ${result.data?.size} | ${result.data?.price}`;
-                            this.sendLogUi(status);
-                            resolve(result);
+                            reject(new Error(m.payload?.error));
                         }
-                    } else {
-                        reject(new Error(m.payload.error));
                     }
+                } catch (error) {
+                    console.log(`11111111`, error);
                 }
             };
             this.parentPort!.on("message", onMsg);
@@ -869,7 +881,7 @@ class Bot {
         const created = this.toSec(create_time_sec);
         const nowSec = Math.floor(Date.now() / 1000);
 
-        this.sendLogUi(`${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
+        this.sendLogUi(`⏰ ${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
         this.setSticky(`timeout:${contract}`, `${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
 
         return nowSec - created >= this.settingUser.timeoutClearOpenSecond;
@@ -1050,10 +1062,29 @@ class Bot {
     }
 }
 
-const el = monitorEventLoopDelay({ resolution: 20 });
+const el = monitorEventLoopDelay({ resolution: 500 });
 el.enable();
+
+let prevELU = performance.eventLoopUtilization(); // mốc cho delta
+let prevHr = process.hrtime.bigint(); // mốc thời gian
+let prevCPU = process.cpuUsage(); // mốc CPU (process-level)
+
+function cpuPctProcessSinceLast() {
+    const nowHr = process.hrtime.bigint();
+    const elapsedUs = Number(nowHr - prevHr) / 1000; // microseconds trôi qua
+    prevHr = nowHr;
+
+    const diff = process.cpuUsage(prevCPU); // µs CPU tăng thêm (user+system)
+    prevCPU = process.cpuUsage();
+
+    const usedUs = diff.user + diff.system;
+    // % của 1 core
+    return +((usedUs / elapsedUs) * 100).toFixed(1);
+}
 function snapshotWorkerMetrics() {
     const heap = process.memoryUsage(); // heapUsed là isolate của worker
+    const elu = performance.eventLoopUtilization(prevELU);
+    prevELU = elu;
     return {
         threadId,
         ts: Date.now(),
@@ -1064,6 +1095,12 @@ function snapshotWorkerMetrics() {
             mean: el.mean / 1e6, // ms
             max: el.max / 1e6,
             p95: el.percentile(95) / 1e6,
+        },
+        cpu: {
+            // % “gần đúng” mức bận của chính worker (per-thread)
+            approxFromELU: +(elu.utilization * 100).toFixed(1),
+            // % CPU của TOÀN PROCESS (mọi thread) từ process.cpuUsage()
+            processPct: cpuPctProcessSinceLast(),
         },
     };
 }

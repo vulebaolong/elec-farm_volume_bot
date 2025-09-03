@@ -16,7 +16,6 @@ type Props = {
 };
 
 export default function TerminalLog({ lines, maxLines = 2000, className }: Props) {
-    const [paused, setPaused] = useState(false);
     const [q, setQ] = useState("");
     const [levels, setLevels] = useState<Record<LogLevel, boolean>>({
         info: true,
@@ -32,13 +31,32 @@ export default function TerminalLog({ lines, maxLines = 2000, className }: Props
 
     const viewRef = useRef<HTMLDivElement>(null);
 
-    // auto scroll khi có log mới & không pause
+    // trạng thái “đang ở cuối” (dùng ref để tránh re-render liên tục khi scroll)
+    const stickRef = useRef(true);
+    const THRESHOLD = 8; // px dung sai coi là “đang ở cuối”
+
     useEffect(() => {
-        if (paused) return;
+        const el = viewRef.current;
+        if (!el) return;
+
+        const onScroll = () => {
+            const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - THRESHOLD;
+            stickRef.current = atBottom;
+        };
+
+        // set initial
+        onScroll();
+        el.addEventListener("scroll", onScroll, { passive: true });
+        return () => el.removeEventListener("scroll", onScroll);
+    }, []);
+
+    // auto scroll chỉ khi đang ở cuối
+    useEffect(() => {
+        if (!stickRef.current) return;
         const el = viewRef.current;
         if (!el) return;
         el.scrollTop = el.scrollHeight;
-    }, [visible, paused]);
+    }, [visible]);
 
     const copyAll = async () => {
         const text = visible.map((l) => `[${new Date(l.ts).toLocaleTimeString()}] ${l.level.toUpperCase()} ${l.text}`).join("\n");
@@ -47,49 +65,11 @@ export default function TerminalLog({ lines, maxLines = 2000, className }: Props
 
     return (
         <Card className={className}>
-            {/* <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <div className="flex items-center gap-2">
-                    <Badge variant="secondary">Terminal</Badge>
-                    <div className="text-xs text-muted-foreground">{visible.length} lines</div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Input placeholder="Filter..." value={q} onChange={(e) => setQ(e.target.value)} className="h-8 w-[180px]" />
-                    <div className="hidden md:flex gap-1">
-                        {(["info", "warn", "error"] as LogLevel[]).map((l) => (
-                            <Button
-                                key={l}
-                                variant={levels[l] ? "secondary" : "ghost"}
-                                size="sm"
-                                onClick={() => setLevels((s) => ({ ...s, [l]: !s[l] }))}
-                            >
-                                {l}
-                            </Button>
-                        ))}
-                    </div>
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => setPaused((p) => !p)}
-                        title={paused ? "Resume autoscroll" : "Pause autoscroll"}
-                    >
-                        {paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={copyAll} title="Copy visible logs">
-                        <Copy className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        variant="destructive"
-                        size="icon"
-                        onClick={() => window.dispatchEvent(new CustomEvent("terminal:clear"))}
-                        title="Clear (emit event)"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
-                </div>
-            </CardHeader> */}
-
             <CardContent className="p-0">
-                <div ref={viewRef} className="h-52 w-full overflow-auto rounded-md bg-black text-neutral-100 p-2 font-mono text-[10px] leading-relaxed">
+                <div
+                    ref={viewRef}
+                    className="h-52 w-full overflow-auto rounded-md bg-black text-neutral-100 p-2 font-mono text-[10px] leading-relaxed"
+                >
                     {visible.map((l, i) => (
                         <div key={i} className="whitespace-pre-wrap">
                             <span className="text-neutral-500">[{new Date(l.ts).toLocaleTimeString()}]</span>{" "}

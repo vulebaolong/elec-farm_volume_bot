@@ -31,20 +31,18 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
             ? path.join(process.resourcesPath, "app.asar.unpacked", "dist", "main", "workers", "bot.worker.js")
             : path.join(__dirname, "workers", "bot.worker.bundle.dev.js");
 
-        botWorker = new Worker(workerPath, {
-            workerData: { tickMs: 1000 }, // nếu cần tham số khởi tạo 1 lần
-        });
+        botWorker = new Worker(workerPath,);
 
         interceptRequest(gateView);
 
         botWorker.on("error", (err) => {
             console.error("botWorker error:", err);
-            const payload: LogLine = { ts: Date.now(), level: "error", text: err?.message };
+            const payload: LogLine = { ts: Date.now(), level: "error", text: `bot error: ${err?.message}` };
             mainWindow?.webContents.send("bot:log", payload);
         });
         botWorker.on("exit", (code) => {
             console.log("botWorker exit:", code);
-            const payload: LogLine = { ts: Date.now(), level: "error", text: `${code}` };
+            const payload: LogLine = { ts: Date.now(), level: "error", text: `bot exited code: ${code}, need to reload app` };
             mainWindow?.webContents.send("bot:log", payload);
             botWorker = null;
         });
@@ -60,7 +58,7 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
         });
         ipcMain.on("bot:stop", (event, data) => {
             botWorker?.postMessage({ type: "bot:stop" });
-              const payload: LogLine = { ts: Date.now(), level: "info", text: `🔴 Stop` };
+            const payload: LogLine = { ts: Date.now(), level: "info", text: `🔴 Stop` };
             mainWindow?.webContents.send("bot:log", payload);
         });
         ipcMain.on("bot:setWhiteList", (event, data) => {
