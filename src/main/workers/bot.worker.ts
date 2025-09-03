@@ -171,8 +171,8 @@ class Bot {
 
                             const bidsAsks = await this.getBidsAsks(symbol);
 
-                            // const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, 5 + 1);
-                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, 2);
+                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, 5 + 1);
+                            // const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, 2);
                             this.log(`Create Open: ${prices.length} ladder order(s)`, prices);
 
                             for (const price of prices) {
