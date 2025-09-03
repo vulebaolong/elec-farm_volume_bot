@@ -7,7 +7,7 @@ import { TRes } from "@/types/app.type";
 import { TGateApiRes } from "@/types/base-gate.type";
 import { TSide } from "@/types/base.type";
 import { TBidsAsks } from "@/types/bids-asks.type";
-import { FetchResult, StickySetPayload, TChangeLeverage, TDataInitBot, TDataOrder, TPayloadOrder } from "@/types/bot.type";
+import { FetchResult, OpenRes, StickySetPayload, TChangeLeverage, TDataInitBot, TDataOrder, TPayloadOrder } from "@/types/bot.type";
 import { TGetInfoContractRes } from "@/types/contract.type";
 import { TOrderOpen } from "@/types/order.type";
 import { TPosition, TPositionRes } from "@/types/position.type";
@@ -221,7 +221,7 @@ class Bot {
                         this.log("✅ Refresh End: done");
                     }
                 } else {
-                    this.log("isHandle=false → skip all work");
+                    this.log("isStart=false → skip all work");
                 }
             } catch (err) {
                 await this.refreshSnapshot("Err");
@@ -646,43 +646,124 @@ class Bot {
             }, 15000);
 
             const onMsg = (m: any) => {
-                try {
-                    if (m?.type === "bot:order:res") {
-                        clearTimeout(timeout);
-                        this.parentPort!.off("message", onMsg);
-                        if (m.payload.ok) {
-                            let result: any;
+                if (m?.type === "bot:order:res") {
+                    clearTimeout(timeout);
+                    this.parentPort!.off("message", onMsg);
+                    if (m.payload.ok) {
+                        let result: any;
 
-                            try {
-                                result = JSON.parse(m.payload?.bodyText ?? "null");
-                            } catch (e) {
-                                reject(new Error(`❌ Invalid JSON from main: ${String(e)}`));
-                                this.sendLogUi(`❌ Invalid JSON from main: ${String(e)}`, `error`);
-                            }
-
-                            const code = typeof result?.code === "number" ? result.code : 0;
-
-                            if (!result?.data || code >= 400 || code < 0) {
-                                reject(new Error(`${payload.contract} ${result?.message}`));
-                                this.sendLogUi(
-                                    `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price} | ${result?.message}`,
-                                    `error`,
-                                );
-                                return;
-                            } else {
-                                const status = `✅ ${payload.contract} - ${label} ${this.getOrderSide(result.data)} | ${result.data?.size} | ${result.data?.price}`;
-                                this.sendLogUi(status);
-                                resolve(result);
-                            }
-                        } else {
-                            reject(new Error(m.payload?.error));
+                        try {
+                            result = JSON.parse(m.payload?.bodyText ?? "null");
+                        } catch (e) {
+                            resolve(new Error(`❌ Invalid JSON from main: ${String(e)}`));
+                            this.sendLogUi(`❌ Invalid JSON from main: ${String(e)}`, `error`);
                         }
+
+                        const code = typeof result?.code === "number" ? result.code : 0;
+
+                        if (!result?.data || code >= 400 || code < 0) {
+                            resolve(new Error(`${payload.contract} ${result?.message}`));
+                            this.sendLogUi(
+                                `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price} | ${result?.message}`,
+                                `error`,
+                            );
+                            return;
+                        } else {
+                            const status = `✅ ${payload.contract} - ${label} ${this.getOrderSide(result.data)} | ${result.data?.size} | ${result.data?.price}`;
+                            this.sendLogUi(status);
+                            resolve(result);
+                        }
+                    } else {
+                        resolve(new Error(m.payload?.error));
                     }
-                } catch (error) {
-                    console.log(`11111111`, error);
                 }
             };
             this.parentPort!.on("message", onMsg);
+        });
+    }
+
+    private async openEntry1(payload: TPayloadOrder, label: string): Promise<OpenRes> {
+        const selectorInputPosition = this.uiSelector?.find((i) => i.code === "inputPosition")?.selectorValue;
+        const selectorInputPrice = this.uiSelector?.find((i) => i.code === "inputPrice")?.selectorValue;
+        const selectorButtonLong = this.uiSelector?.find((i) => i.code === "buttonLong")?.selectorValue;
+
+        if (!selectorInputPosition || !selectorButtonLong || !selectorInputPrice) {
+            const msg = `Not found selector`;
+            this.sendLogUi(`❌ ${msg}`, "error");
+            return { ok: false, error: msg };
+        }
+
+        const port = this.parentPort!;
+
+        // Promise luôn resolve (Result pattern)
+        return new Promise<OpenRes>((resolve) => {
+            let settled = false;
+            let timer: NodeJS.Timeout;
+
+            const done = (r: OpenRes) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                try {
+                    port.off("message", onMsg);
+                } catch {}
+                resolve(r);
+            };
+
+            const onMsg = (m: any) => {
+                try {
+                    if (m?.type !== "bot:order:res") return;
+
+                    if (!m.payload?.ok) {
+                        const err = String(m.payload?.error || "order failed");
+                        this.sendLogUi(`❌ ${payload.contract} - ${label}: ${err}`, "error");
+                        return done({ ok: false, error: err });
+                    }
+
+                    // bodyText -> JSON
+                    let result: any = null;
+                    try {
+                        result = JSON.parse(m.payload.bodyText ?? "null");
+                    } catch (e) {
+                        const err = `Invalid JSON from main: ${String(e)}`;
+                        this.sendLogUi(`❌ ${err}`, "error");
+                        return done({ ok: false, error: err });
+                    }
+
+                    const code = typeof result?.code === "number" ? result.code : 0;
+                    if (!result?.data || code >= 400 || code < 0) {
+                        const msg = result?.message || `code=${code}`;
+                        const side = Number(payload.size) >= 0 ? "long" : "short";
+                        this.sendLogUi(`❌ ${payload.contract} - ${label} ${side} | ${payload.size} | ${payload.price} | ${msg}`, "error");
+                        return done({ ok: false, error: `${payload.contract} ${msg}` });
+                    }
+
+                    const side = this.getOrderSide(result.data);
+                    this.sendLogUi(`✅ ${payload.contract} - ${label} ${side} | ${result.data?.size} | ${result.data?.price}`);
+                    return done({ ok: true, result });
+                } catch (e) {
+                    // tuyệt đối không throw ra ngoài handler
+                    return done({ ok: false, error: `openEntry handler error: ${String(e)}` });
+                }
+            };
+
+            port.on("message", onMsg);
+
+            // timeout (đừng để 5ms kẻo race)
+            timer = setTimeout(() => {
+                this.sendLogUi(`❌ ${payload.contract} - ${label}: openEntry timeout`, "error");
+                done({ ok: false, error: "openEntry timeout" });
+            }, 15_000);
+
+            // Gửi yêu cầu SAU khi đã gắn listener
+            const data: TWorkerData<TDataOrder> = {
+                type: "bot:order",
+                payload: {
+                    payloadOrder: payload,
+                    selector: { inputPosition: selectorInputPosition, inputPrice: selectorInputPrice, buttonLong: selectorButtonLong },
+                },
+            };
+            port.postMessage(data);
         });
     }
 
