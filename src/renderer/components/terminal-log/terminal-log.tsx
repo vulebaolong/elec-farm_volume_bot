@@ -80,7 +80,7 @@ export default function TerminalLog({ lines, maxLines = 2000, className }: Props
                         </div>
                     ))}
                 </div>
-                <WorkerMetrics />
+                {/* <WorkerMetrics /> */}
             </CardContent>
         </Card>
     );

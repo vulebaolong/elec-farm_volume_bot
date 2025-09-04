@@ -113,7 +113,12 @@ class Bot {
 
                         for (const p of payloads) {
                             // console.log("Create close order:", p);
-                            await this.openEntry(p, `TP: Close`);
+                            try {
+                                await this.openEntry(p, `TP: Close`);
+                            } catch (error: any) {
+                                this.sendLogUi(`${error.message}`, "error");
+                                continue;
+                            }
                         }
 
                         await this.refreshSnapshot("Close");
@@ -192,7 +197,12 @@ class Bot {
                                     price: price.p,
                                     reduce_only: false, // false là lệnh open
                                 };
-                                await this.openEntry(payloadOpenOrder, `Open`);
+                                try {
+                                    await this.openEntry(payloadOpenOrder, `Open`);
+                                } catch (error: any) {
+                                    this.sendLogUi(`${error.message}`, "error");
+                                    continue
+                                }
                             }
 
                             await this.refreshSnapshot("Create Open");
@@ -1197,7 +1207,12 @@ class Bot {
                 reduce_only: true,
             };
 
-            this.openEntry(payload, "SL: Close");
+            try {
+                await this.openEntry(payload, "SL: Close");
+            } catch (error: any) {
+                this.sendLogUi(`${error.message}`, "error");
+                continue
+            }
         }
     }
 
