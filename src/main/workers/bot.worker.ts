@@ -201,7 +201,7 @@ class Bot {
                                     await this.openEntry(payloadOpenOrder, `Open`);
                                 } catch (error: any) {
                                     this.sendLogUi(`${error.message}`, "error");
-                                    continue
+                                    continue;
                                 }
                             }
 
@@ -1208,10 +1208,24 @@ class Bot {
             };
 
             try {
-                await this.openEntry(payload, "SL: Close");
+                // await this.openEntry(payload, "SL: Close");
+                this.sendLogUi(
+                    [
+                        `🧪 ROI DEBUG — ${symbol}`,
+                        `  • side: ${size > 0 ? "long" : "short"}  size: ${size}`,
+                        `  • entry: ${entryPrice}  last: ${lastPrice}  lev: ${leverage}x  quanto: ${quanto}`,
+                        `  • PnL: ${unrealizedPnL.toFixed(6)}  IM: ${initialMargin.toFixed(6)}  ROI: ${returnPercent.toFixed(2)}%`,
+                        `  • SL(threshold): -${stopLoss}%  → isSL=${isSL}`,
+                        `  • timeout: ${timeoutEnabled}  age: ${((nowMs - createdAtMs) / 1000).toFixed(1)}s / ${(timeoutMs / 1000).toFixed(1)}s  → timedOut=${timedOut}`,
+                        `  • orderbook: bestBid=${bestBid}  bestAsk=${bestAsk}  tick=${tick}  aggTicks=${aggressiveTicks}`,
+                        `  • chosenPrice: ${priceStr}`,
+                        `  • payload: ${JSON.stringify(payload)}`,
+                    ].join("\n"),
+                    "info",
+                );
             } catch (error: any) {
                 this.sendLogUi(`${error.message}`, "error");
-                continue
+                continue;
             }
         }
     }

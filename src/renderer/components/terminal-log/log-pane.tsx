@@ -16,5 +16,5 @@ export default function LogsPane() {
         };
     }, []);
 
-    return <TerminalLog lines={lines} className="shadow-sm !p-2 w-[500px]" maxLines={100} />;
+    return <TerminalLog lines={lines} className="shadow-sm !p-2 w-[500px]" maxLines={1000} />;
 }
