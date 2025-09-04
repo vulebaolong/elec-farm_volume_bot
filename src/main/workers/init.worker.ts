@@ -1,8 +1,17 @@
 // src/main/workers/init.worker.ts
 import { LogLine } from "@/components/terminal-log/terminal-log";
 import { createCodeStringClickOrder } from "@/javascript-string/logic-farm";
-import { TPayloadOrder } from "@/types/bot.type";
-import { TWorkerData } from "@/types/worker.type";
+import {
+    TFectMainRes,
+    TGateClickCancelAllOpenRes,
+    TGateClickTabOpenOrderRes,
+    TGateFectMainRes,
+    TGateOrderMainRes,
+    TPayloadOrder,
+    TResultClickCancelOpen,
+    TResultClickOpenOrder,
+    TResultClickTabOpenOrder,
+} from "@/types/bot.type";
 import { app, BrowserWindow, ipcMain, WebContentsView } from "electron";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
@@ -31,7 +40,7 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
             ? path.join(process.resourcesPath, "app.asar.unpacked", "dist", "main", "workers", "bot.worker.js")
             : path.join(__dirname, "workers", "bot.worker.bundle.dev.js");
 
-        botWorker = new Worker(workerPath,);
+        botWorker = new Worker(workerPath);
 
         interceptRequest(gateView);
 
@@ -93,53 +102,139 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
             }
             if (msg?.type === "bot:fetch") {
                 const { url, init, reqId } = msg.payload;
-                const res = await gateFetch(gateView, { url, init });
                 try {
-                    const payload = { reqId, res, error: null };
+                    const js = `
+                    (async () => {
+                        try {
+                            const res = await fetch(${JSON.stringify(url)}, {
+                                ...${JSON.stringify(init || {})},
+                                credentials: 'include',
+                            });
+                            const text = await res.text();
+                            return { ok: true, bodyText: text, error: null };
+                        } catch (e) {
+                            return { ok: false, bodyText: '', error: String(e && e.message || e) };
+                        } 
+                    })()
+                    `;
+
+                    const result: TFectMainRes = await gateView.webContents.executeJavaScript(js, true);
+
+                    if (result.ok === false && result.error) {
+                        throw new Error(result.error);
+                    }
+
+                    const payload: TGateFectMainRes = {
+                        ok: true,
+                        reqId,
+                        bodyText: result?.bodyText,
+                        error: null,
+                    };
+
                     botWorker?.postMessage({ type: "bot:fetch:res", payload });
                 } catch (e: any) {
-                    const payload = { reqId, res, error: String(e?.message || e) };
+                    const payload: TGateFectMainRes = {
+                        ok: false,
+                        reqId,
+                        bodyText: "",
+                        error: String(e?.message || e),
+                    };
                     botWorker?.postMessage({ type: "bot:fetch:res", payload });
                 }
             }
             if (msg?.type === "bot:order") {
-                const { payloadOrder: payloadOrderRaw, selector } = msg?.payload;
-
-                payloadOrder = payloadOrderRaw;
-
-                // Tạo promise chờ API order
-                const waitOrder = waitForOneRequest(gateView.webContents, {
-                    method: "POST",
-                    url: "https://www.gate.com/apiw/v2/futures/usdt/orders",
-                    timeoutMs: 15000,
-                });
-
-                // Thực hiện click (trả về khi JS của bạn xong, không phải khi API xong)
-                const js = createCodeStringClickOrder(selector);
-                await gateView.webContents.executeJavaScript(js, true);
-
-                // Chờ API xong, lấy body
+                const { payloadOrder: payloadOrderRaw, selector, reqOrderId } = msg?.payload;
                 try {
+                    payloadOrder = payloadOrderRaw;
+
+                    // Tạo promise chờ API order
+                    const waitOrder = waitForOneRequest(gateView.webContents, {
+                        method: "POST",
+                        url: "https://www.gate.com/apiw/v2/futures/usdt/orders",
+                    });
+
+                    // Thực hiện click (trả về khi JS của bạn xong, không phải khi API xong)
+                    const js = createCodeStringClickOrder(selector);
+                    const resultClick: TResultClickOpenOrder = await gateView.webContents.executeJavaScript(js, true);
+                    if (resultClick.ok === false && resultClick.error) {
+                        throw new Error(resultClick.error);
+                    }
+
+                    // Chờ API xong, lấy body
                     const { bodyText } = await waitOrder;
-                    botWorker?.postMessage({ type: "bot:order:res", payload: { ok: true, bodyText, error: null } });
-                } catch (e) {
-                    botWorker?.postMessage({ type: "bot:order:res", payload: { ok: false, bodyText: "", error: String(e) } });
+
+                    const payload: TGateOrderMainRes = {
+                        ok: true,
+                        reqOrderId,
+                        bodyText,
+                        error: null,
+                    };
+
+                    botWorker?.postMessage({ type: "bot:order:res", payload: payload });
+                } catch (e: any) {
+                    const payload: TGateOrderMainRes = {
+                        ok: false,
+                        reqOrderId: reqOrderId,
+                        bodyText: "",
+                        error: String(e?.message || e),
+                    };
+                    botWorker?.postMessage({ type: "bot:order:res", payload: payload });
                 }
             }
             if (msg?.type === "bot:clickTabOpenOrder") {
+                const { reqClickTabOpenOrderId, stringClickTabOpenOrder } = msg?.payload;
+
                 try {
-                    const result: boolean = await gateView.webContents.executeJavaScript(msg?.payload, true);
-                    botWorker?.postMessage({ type: "bot:clickTabOpenOrder:res", payload: { ok: true, result, error: null } });
-                } catch (e) {
-                    botWorker?.postMessage({ type: "bot:clickTabOpenOrder:res", payload: { ok: false, result: null, error: String(e) } });
+                    const result: TResultClickTabOpenOrder = await gateView.webContents.executeJavaScript(stringClickTabOpenOrder, true);
+
+                    if (result.ok === false && result.error) {
+                        throw new Error(result.error);
+                    }
+
+                    const payload: TGateClickTabOpenOrderRes = {
+                        ok: true,
+                        body: result.data,
+                        reqClickTabOpenOrderId: reqClickTabOpenOrderId,
+                        error: null,
+                    };
+
+                    botWorker?.postMessage({ type: "bot:clickTabOpenOrder:res", payload: payload });
+                } catch (e: any) {
+                    const payload: TGateClickTabOpenOrderRes = {
+                        ok: false,
+                        body: null,
+                        reqClickTabOpenOrderId: reqClickTabOpenOrderId,
+                        error: String(e?.message || e),
+                    };
+                    botWorker?.postMessage({ type: "bot:clickTabOpenOrder:res", payload: payload });
                 }
             }
             if (msg?.type === "bot:clickCanelAllOpen") {
+                const { reqClickCanelAllOpenOrderId, stringClickCanelAllOpen } = msg?.payload;
+
                 try {
-                    const result = await gateView.webContents.executeJavaScript(msg?.payload, true);
-                    botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: { ok: true, result, error: null } });
-                } catch (e) {
-                    botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: { ok: false, result: null, error: String(e) } });
+                    const result: TResultClickCancelOpen = await gateView.webContents.executeJavaScript(stringClickCanelAllOpen, true);
+
+                    if (result.ok === false && result.error) {
+                        throw new Error(result.error);
+                    }
+
+                    const payload: TGateClickCancelAllOpenRes = {
+                        ok: result.ok,
+                        body: result.data,
+                        reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
+                        error: null,
+                    };
+                    
+                    botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
+                } catch (e: any) {
+                    const payload: TGateClickCancelAllOpenRes = {
+                        ok: false,
+                        body: null,
+                        reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
+                        error: String(e?.message || e),
+                    };
+                    botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
                 }
             }
             if (msg?.type === "bot:log") {
@@ -158,24 +253,6 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
     }
 
     return botWorker!;
-}
-
-export async function gateFetch(gateView: WebContentsView, req: { url: string; init?: any }) {
-    if (!gateView) throw new Error("gateView not ready");
-    const { url, init } = req;
-
-    // Lưu ý: luôn JSON.stringify để tránh chèn mã
-    const js = `
-    (async () => {
-      const res = await fetch(${JSON.stringify(url)}, {
-        ...${JSON.stringify(init || {})},
-        credentials: 'include' // đảm bảo gửi cookie với cross-site nếu cần
-      });
-      const text = await res.text(); // hoặc .json() nếu chắc chắn JSON
-      return { ok: res.ok, status: res.status, body: text };
-    })()
-  `;
-    return gateView.webContents.executeJavaScript(js, true);
 }
 
 export function interceptRequest(gateView: WebContentsView) {
@@ -210,38 +287,38 @@ export function interceptRequest(gateView: WebContentsView) {
                     // console.log(`[Fetch.requestPaused] ${key}`);
 
                     switch (key) {
-                        case "POST https://www.gate.com/apiw/v2/futures/usdt/positions/BTC_USDT/leverage":
-                            console.log(`[Fetch.requestPaused] ${key}`);
+                        // case "POST https://www.gate.com/apiw/v2/futures/usdt/positions/BTC_USDT/leverage":
+                        //     console.log(`[Fetch.requestPaused] ${key}`);
 
-                            let bodyChangeLeverage = request.postData ?? "";
-                            try {
-                                const obj = JSON.parse(bodyChangeLeverage);
+                        //     let bodyChangeLeverage = request.postData ?? "";
+                        //     try {
+                        //         const obj = JSON.parse(bodyChangeLeverage);
 
-                                const modified = handlePayloadModification(obj, {
-                                    leverage: "20",
-                                });
+                        //         const modified = handlePayloadModification(obj, {
+                        //             leverage: "20",
+                        //         });
 
-                                const jsonText = JSON.stringify(modified);
+                        //         const jsonText = JSON.stringify(modified);
 
-                                const postDataB64 = Buffer.from(jsonText, "utf8").toString("base64");
+                        //         const postDataB64 = Buffer.from(jsonText, "utf8").toString("base64");
 
-                                // Cập nhật headers (loại bỏ content-length để Chromium tự set lại)
-                                // const headersArr = toHeaderArray(request.headers || {});
-                                // deleteHeader(headersArr, "content-length");
-                                // setHeader(headersArr, "content-type", "application/json; charset=utf-8");
+                        //         // Cập nhật headers (loại bỏ content-length để Chromium tự set lại)
+                        //         // const headersArr = toHeaderArray(request.headers || {});
+                        //         // deleteHeader(headersArr, "content-length");
+                        //         // setHeader(headersArr, "content-type", "application/json; charset=utf-8");
 
-                                await wc.debugger.sendCommand("Fetch.continueRequest", {
-                                    requestId,
-                                    postData: postDataB64,
-                                });
+                        //         await wc.debugger.sendCommand("Fetch.continueRequest", {
+                        //             requestId,
+                        //             postData: postDataB64,
+                        //         });
 
-                                if (networkId) watchNetworkIds.add(networkId);
-                            } catch (err) {
-                                console.log(`có lỗi`, err);
-                                // Không phải JSON hoặc parse fail → cho qua
-                                // await wc.debugger.sendCommand("Fetch.continueRequest", { requestId });
-                            }
-                            break;
+                        //         if (networkId) watchNetworkIds.add(networkId);
+                        //     } catch (err) {
+                        //         console.log(`có lỗi`, err);
+                        //         // Không phải JSON hoặc parse fail → cho qua
+                        //         // await wc.debugger.sendCommand("Fetch.continueRequest", { requestId });
+                        //     }
+                        //     break;
 
                         case "POST https://www.gate.com/apiw/v2/futures/usdt/orders":
                             console.log(`[Fetch.requestPaused] ${key}`);
@@ -300,9 +377,6 @@ export function interceptRequest(gateView: WebContentsView) {
                         case "GET https://www.gate.com/apiw/v2/futures/usdt/accounts":
                             tracked.set(reqId, { method, url });
                             break;
-                        // case /^POST /.test(key) && /\/positions\/[^/]+\/leverage$/.test(url):
-                        //   tracked.set(reqId, { method: m, url });
-                        //   break;
                         default:
                             break;
                     }
@@ -375,18 +449,14 @@ type WaitOrderOpts = {
     method: "GET" | "POST" | "PUT" | "DELETE" | string;
     url: string; // match endpoint
     matchPost?: (postDataText: string) => boolean; // match body (nếu cần)
-    timeoutMs?: number;
 };
 
 async function waitForOneRequest(
     wc: Electron.WebContents,
-    { method, url, matchPost, timeoutMs = 15000 }: WaitOrderOpts,
+    { method, url, matchPost }: WaitOrderOpts,
 ): Promise<{ requestId: string; status?: number; bodyText: string }> {
     return new Promise((resolve, reject) => {
         const tracked = new Set<string>();
-        const timer = setTimeout(() => {
-            cleanup(new Error("order timeout"));
-        }, timeoutMs);
 
         const onMsg = async (_e: any, ev: string, p: any) => {
             try {
@@ -452,7 +522,6 @@ async function waitForOneRequest(
         };
 
         const cleanup = (err?: Error, res?: any) => {
-            clearTimeout(timer);
             wc.debugger.off("message", onMsg);
             tracked.clear();
             err ? reject(err) : resolve(res);

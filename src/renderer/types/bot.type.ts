@@ -52,6 +52,7 @@ export type TPayloadOrder = {
 };
 
 export type TDataOrder = {
+    reqOrderId: number;
     selector: TUiSelectorOrder;
     payloadOrder: TPayloadOrder;
 };
@@ -64,11 +65,90 @@ export type TUiSelectorOrder = {
 
 export type StickySetPayload = { key: string; text: string; ts: number };
 
-
 export type FetchOK = { ok: true; res: { ok: boolean; status: number; body: string } };
 export type FetchErr = { ok: false; error: string };
 export type FetchResult = FetchOK | FetchErr;
 
-export type OpenOk = { ok: true; result: any };          // result = JSON đã parse
+export type OpenOk = { ok: true; result: any }; // result = JSON đã parse
 export type OpenErr = { ok: false; error: string };
 export type OpenRes = OpenOk | OpenErr;
+
+export type TFectMainRes = {
+    ok: boolean;
+    bodyText: string;
+    error: string | null;
+};
+
+export type TFectWorkRes<T> = {
+    ok: boolean;
+    body: T | null;
+    error: string | null;
+};
+
+export type TGateFectMainRes = {
+    ok: boolean;
+    bodyText: string;
+    error: string | null;
+    reqId: number;
+};
+
+export type TOrderWorkRes<T> = {
+    ok: boolean;
+    body: T | null;
+    error: string | null;
+};
+
+export type TGateOrderMainRes = {
+    ok: boolean;
+    bodyText: string;
+    error: string | null;
+    reqOrderId: number;
+};
+
+export type TResultClickOpenOrder = {
+    ok: boolean;
+    data: { message: string; data: string | null }[] | null;
+    error: string | null;
+};
+
+export type TClickTabOpenOrderRes<T> = {
+    ok: boolean;
+    body: T | null;
+    error: string | null;
+};
+export type TPayloadClickTabOpenOrder = {
+    stringClickTabOpenOrder: string;
+    reqClickTabOpenOrderId: number;
+};
+export type TResultClickTabOpenOrder = {
+    ok: boolean;
+    data: boolean | null;
+    error: string | null;
+};
+export type TGateClickTabOpenOrderRes = {
+    ok: boolean;
+    body: boolean | null;
+    error: string | null;
+    reqClickTabOpenOrderId: number;
+};
+
+export type TResultClickCancelOpen = {
+    ok: boolean;
+    data: { scanned: number; clicked: number; skipped: number; contract: string } | null;
+    error: string | null;
+};
+export type TClickCancelAllOpenRes<T> = {
+    ok: boolean;
+    body: T | null;
+    error: string | null;
+};
+export type TPayloadClickCancelAllOpen = {
+    stringClickCanelAllOpen: string;
+    reqClickCanelAllOpenOrderId: number;
+};
+export type TGateClickCancelAllOpenRes = {
+    ok: boolean;
+    body: TResultClickCancelOpen['data'] | null;
+    error: string | null;
+    reqClickCanelAllOpenOrderId: number;
+};

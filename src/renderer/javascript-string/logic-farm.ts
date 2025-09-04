@@ -355,10 +355,9 @@ export const createCodeStringClickTabOpenOrder = (payload: TCreateCodeStringClic
 
       await sleep(100);
 
-      return true;
+      return { ok: true, data: true, error: null };
   } catch (err) {
-      console.info('⚠️ closeOrder script error:', err.message || err);
-      throw err;
+      return { ok: false, data: null, error: String(err && err.message || err) };
   }
 })();
 `;
@@ -412,17 +411,13 @@ export const createCodeStringClickCancelAllOpen = ({ contract, tableOrderPanel }
         btn.click();
         clicked++;
       } else {
-        console.info('⚠️ Không tìm thấy nút Cancel cho', contractNorm, row);
         skipped++;
       }
-      // (tuỳ chọn) delay nhẹ để tránh spam click nếu cần:
-      // await new Promise(r => setTimeout(r, 30));
     }
 
-    return { ok: true, scanned, clicked, skipped, contract: "${contract}" };
+      return { ok: true, data: { scanned, clicked, skipped, contract: "${contract}" }, error: null };
   } catch (err) {
-    console.info('⚠️ clickCancelOpenByContract script error:', err?.message || err);
-    throw err;
+      return { ok: false, data: null, error: err };
   }
 })();
 `;
@@ -481,7 +476,6 @@ export const createCodeStringClickOrder = (selector: TUiSelectorOrder) => {
     // set price
     setValue(inputPrice, '100');
     log.push({ message: 'Set inputPrice value', data: '100' });
-    console.info({ message: 'Set inputPrice value', data: '100' });
 
     // --- set AMOUNT/POSITION ---
     inputPosition.focus();
@@ -490,7 +484,6 @@ export const createCodeStringClickOrder = (selector: TUiSelectorOrder) => {
     // set amount
     setValue(inputPosition, '1');
     log.push({ message: 'Set inputPosition value', data: '1' });
-    console.info({ message: 'Set inputPosition value', data: '1' });
 
     await sleep(200);
 
@@ -499,10 +492,9 @@ export const createCodeStringClickOrder = (selector: TUiSelectorOrder) => {
     btn.click();
     log.push({ message: 'Buy button clicked', data: null });
 
-    return log;
+    return { ok: true, data: log, error: null };
   } catch (err) {
-    console.info('⚠️ openOrder script error:', err?.message || err);
-    throw err;
+    return { ok: false, data: null, error: String(err && err.message || err) };
   }
 })();
 `;

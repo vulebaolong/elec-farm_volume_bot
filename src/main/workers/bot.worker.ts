@@ -1,25 +1,41 @@
 // bot.worker.ts
 import { LogLevel } from "@/components/terminal-log/terminal-log";
-import { BASE_URL, IS_PRODUCTION } from "@/constant/app.constant";
-import { ENDPOINT } from "@/constant/endpoint.constant";
-import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder } from "@/javascript-string/logic-farm";
-import { TRes } from "@/types/app.type";
+import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder, TOpenOrderPostOnly } from "@/javascript-string/logic-farm";
 import { TGateApiRes } from "@/types/base-gate.type";
-import { TSide } from "@/types/base.type";
-import { TBidsAsks } from "@/types/bids-asks.type";
-import { FetchResult, OpenRes, StickySetPayload, TChangeLeverage, TDataInitBot, TDataOrder, TPayloadOrder } from "@/types/bot.type";
-import { TGetInfoContractRes } from "@/types/contract.type";
+import {
+    StickySetPayload,
+    TChangeLeverage,
+    TClickCancelAllOpenRes,
+    TClickTabOpenOrderRes,
+    TDataInitBot,
+    TDataOrder,
+    TFectWorkRes,
+    TGateClickCancelAllOpenRes,
+    TGateClickTabOpenOrderRes,
+    TGateFectMainRes,
+    TGateOrderMainRes,
+    TOrderWorkRes,
+    TPayloadClickCancelAllOpen,
+    TPayloadClickTabOpenOrder,
+    TPayloadOrder,
+    TUiSelectorOrder,
+} from "@/types/bot.type";
 import { TOrderOpen } from "@/types/order.type";
-import { TPosition, TPositionRes } from "@/types/position.type";
+import { TPosition } from "@/types/position.type";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TUiSelector } from "@/types/ui-selector.type";
-import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
 import { TWorkerData } from "@/types/worker.type";
-import axios from "axios";
-import { monitorEventLoopDelay, performance } from "node:perf_hooks";
-import { parentPort, threadId } from "node:worker_threads";
-import v8 from "v8";
+import { performance } from "node:perf_hooks";
+import { parentPort } from "node:worker_threads";
 import { checkSize, handleSize, isDepthCalc, isSpreadPercent } from "./util-bot.worker";
+import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
+import { TSide } from "@/types/base.type";
+import { TGetInfoContractRes } from "@/types/contract.type";
+import axios from "axios";
+import { TRes } from "@/types/app.type";
+import { BASE_URL } from "@/constant/app.constant";
+import { ENDPOINT } from "@/constant/endpoint.constant";
+import { TBidsAsks } from "@/types/bids-asks.type";
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 
@@ -50,34 +66,25 @@ parentPort!.on("message", (msg: any) => {
     }
 });
 
-// process.on("uncaughtException", (err) => {
-//     console.log(`uncaughtException`, err);
-// });
-// process.on("unhandledRejection", (reason) => {
-//     console.log(`unhandledRejection`, reason);
-// });
-
 class Bot {
     private count = 0;
     private running = false;
     private parentPort: import("worker_threads").MessagePort;
     private isStart = false;
-
-    // state
-    private whitelistEntry: TWhitelistEntry[] = [];
-    private whiteList: TWhiteList = {};
-    private positions = new Map<string, TPosition>();
     private orderOpens: TOrderOpen[] = [];
+    private positions = new Map<string, TPosition>();
     private changedLaveragelist: Set<string> = new Set();
-    private infoContract = new Map<string, TGetInfoContractRes>();
-
     private settingUser: TSettingUsers;
     private uiSelector: TUiSelector[];
+    private whitelistEntry: TWhitelistEntry[] = [];
+    private whiteList: TWhiteList = {};
+    private infoContract = new Map<string, TGetInfoContractRes>();
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
         this.settingUser = dataInitBot.settingUser;
         this.uiSelector = dataInitBot.uiSelector;
+
         this.run();
         this.isReady();
     }
@@ -86,14 +93,18 @@ class Bot {
         if (this.running) return;
         this.running = true;
 
-        while (this.running) {
+        for (;;) {
             const iterStart = performance.now();
             try {
                 this.log("\n\n\n\n\n");
-                this.log("✅✅✅✅✅ ITER START =====", this.snapshot());
+                this.log(`✅✅✅✅✅ ITER START ${this.count} | ${this.isStart} | ${this.running} =====`);
                 this.beforeEach();
+
                 if (this.isStart) {
-                    let isRefresh = true;
+                    let isRefreshed_1_CREATE_CLOSE = false;
+                    let isRefreshed_2_CLEAR_OPEN = false;
+                    let isRefreshed_3_CREATE_OPEN = false;
+                    let isRefreshed_4_SL_ROI = false;
 
                     // ===== 1) CREATE CLOSE =====
                     this.log("🟡🟡🟡🟡🟡 Create Close");
@@ -106,7 +117,7 @@ class Bot {
                         }
 
                         await this.refreshSnapshot("Close");
-                        isRefresh = false;
+                        isRefreshed_1_CREATE_CLOSE = true;
 
                         this.log("✅ Create Close: done build payloads…");
                     } else {
@@ -118,20 +129,24 @@ class Bot {
                     // ===== 2) CLEAR OPEN =====
                     this.log("🟢🟢🟢🟢🟢 Clear Open");
                     if (this.orderOpens.length > 0) {
-                        if (isRefresh) await this.refreshSnapshot("Clear Open");
+                        if (isRefreshed_1_CREATE_CLOSE === false) await this.refreshSnapshot("Clear Open");
 
                         const contractsToCancel = this.contractsToCancelWithEarliest();
                         // console.log(`contractsToCancel`, contractsToCancel);
 
+                        let isShouldRefresh = false;
                         // lấy ra tất cả các lệnh open, với is_reduce_only = false
                         for (const contract of contractsToCancel) {
                             if (this.isTimedOutClearOpen(contract.earliest, contract.contract)) {
                                 await this.clickCanelAllOpen(contract.contract);
-                                isRefresh = false;
+                                isShouldRefresh = true;
                             }
                         }
 
-                        if (!isRefresh) await this.refreshSnapshot("Clear Open");
+                        if (isShouldRefresh) {
+                            await this.refreshSnapshot("Clear Open");
+                            isRefreshed_2_CLEAR_OPEN = true;
+                        }
 
                         this.log("✅ Clear Open: done");
                     } else {
@@ -142,6 +157,7 @@ class Bot {
 
                     // ===== 3) CREATE OPEN =====
                     this.log("🔵🔵🔵🔵🔵 Create Open");
+                    if (isRefreshed_2_CLEAR_OPEN === false) await this.refreshSnapshot("Create Open");
                     if (this.isCheckwhitelistEntryEmty() && this.isCheckMaxOpenPO()) {
                         for (const whitelistItem of Object.values(this.whitelistEntry)) {
                             const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
@@ -160,15 +176,8 @@ class Bot {
 
                             this.log(`Create Open: ${symbol} ok (not exists) | side=${side} | sizeStr=${sizeStr}`);
 
-                            // Đổi leverage trước khi vào lệnh
                             const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
                             if (!ok) continue;
-
-                            // console.log({
-                            //     bidBest: bidBest,
-                            //     askBest: askBest,
-                            //     order_price_round: order_price_round,
-                            // });
 
                             const bidsAsks = await this.getBidsAsks(symbol);
 
@@ -183,13 +192,11 @@ class Bot {
                                     price: price.p,
                                     reduce_only: false, // false là lệnh open
                                 };
-                                // this.log("Create Open: openEntry()", payloadOpenOrder);
-                                const reuslt = await this.openEntry(payloadOpenOrder, `Open`);
-                                // console.log({ openEntry: reuslt });
+                                await this.openEntry(payloadOpenOrder, `Open`);
                             }
 
                             await this.refreshSnapshot("Create Open");
-                            isRefresh = false;
+                            isRefreshed_3_CREATE_OPEN = true;
 
                             this.log("✅ Create Open: done for symbol", symbol);
                         }
@@ -204,34 +211,30 @@ class Bot {
                     if (this.positions.size > 0) {
                         await this.handleRoi();
 
-                        // refresh để lần lặp sau không đặt trùng
                         await this.refreshSnapshot("Roi");
+                        isRefreshed_4_SL_ROI = true;
 
                         this.log("✅ Roi: done");
-
-                        isRefresh = false;
                     } else {
                         this.log("SL/Timeout: no positions");
                     }
                     this.log("🟣🟣🟣🟣🟣 SL/Timeout");
                     console.log("\n\n");
 
-                    if (isRefresh) {
-                        await this.refreshSnapshot("Refresh");
-                        this.log("✅ Refresh End: done");
+                    if (!isRefreshed_1_CREATE_CLOSE && !isRefreshed_2_CLEAR_OPEN && !isRefreshed_3_CREATE_OPEN && !isRefreshed_4_SL_ROI) {
+                        await this.refreshSnapshot("All");
                     }
                 } else {
                     this.log("isStart=false → skip all work");
                 }
-            } catch (err) {
-                await this.refreshSnapshot("Err");
-
+            } catch (err: any) {
                 this.log("❌❌❌❌❌ ITER ERROR =====", err);
+                this.sendLogUi(err.message, "error");
             } finally {
                 const dt = Math.round(performance.now() - iterStart);
                 this.count += 1;
                 this.log(`✅✅✅✅✅ ITER END (took ${dt}ms) =====`, "");
-                await this.sleep(1_000);
+                await this.sleep(1000);
             }
         }
     }
@@ -242,6 +245,22 @@ class Bot {
             payload: { isReady: true },
         };
         this.parentPort?.postMessage(data);
+    }
+
+    private beforeEach() {
+        this.parentPort?.postMessage({
+            type: "bot:heartbeat",
+            payload: {
+                ts: Date.now(),
+                isStart: this.isStart,
+            },
+        });
+
+        // this.parentPort?.postMessage({ type: "bot:metrics", payload: snapshotWorkerMetrics() });
+
+        this.setWhitelistEntry();
+
+        // this.sendLogUi(`count: ${this.count}`);
     }
 
     handleEvent(msg: any) {
@@ -277,32 +296,452 @@ class Bot {
         return new Promise((r) => setTimeout(r, ms));
     }
 
-    private beforeEach() {
+    private async getOrderOpens() {
+        const url = "https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open";
+
+        const { body, error, ok } = await this.gateFetch<TGateApiRes<TOrderOpen[] | null>>(url);
+        if (ok === false || error || body === null) {
+            const msg = `❌ Get Order Opens: ${error}`;
+            throw new Error(msg);
+        }
+
+        if (body?.code >= 400 || body?.code < 0) {
+            const msg = `❌ Get Order Opens: ${body?.message || "Unknown"}`;
+            throw new Error(msg);
+        }
+
+        if (body?.data === null || body?.data === undefined) return [];
+
+        return body.data;
+    }
+
+    private async getPositions() {
+        const url = "https://www.gate.com/apiw/v2/futures/usdt/positions";
+
+        const { body, error, ok } = await this.gateFetch<TGateApiRes<TPosition[] | null>>(url);
+        if (ok === false || error || body === null) {
+            const msg = `❌ Get Positions: ${error}`;
+            throw new Error(msg);
+        }
+
+        if (body?.code >= 400 || body?.code < 0) {
+            const msg = `❌ Get Position: ${body?.message || "Unknown"}`;
+            throw new Error(msg);
+        }
+
+        if (body?.data === null || body?.data === undefined) return [];
+
+        const openPositionsList = body.data.filter((pos) => Number(pos.size) !== 0);
+        return openPositionsList;
+    }
+
+    private setOrderOpens(orderOpens: TOrderOpen[]) {
+        this.orderOpens = orderOpens || [];
+    }
+    private replacePositions(list: TPosition[]) {
+        this.positions.clear();
+        for (const p of list) this.setPosition(p);
+    }
+    private setPosition(value: TPosition) {
+        const marginMode = Number(value.leverage) === 0 ? "cross" : "isolated";
+        const contract = value.contract.replace("/", "_");
+        const side = value.size > 0 ? "long" : "short";
+        const key = `${contract}-${marginMode}-${side}-${value.leverage}`;
+        this.positions.set(contract, value);
+    }
+
+    /** Làm mới orderOpens kèm timeout & log */
+    private async refreshOrderOpens(ctx = "Refresh"): Promise<void> {
+        const orderOpens = await this.getOrderOpens();
+        this.setOrderOpens(orderOpens || []);
+        this.log(`${ctx}: refresh orderOpens`);
+    }
+
+    /** Làm mới positions kèm timeout & log */
+    private async refreshPositions(ctx = "Refresh"): Promise<void> {
+        const pos = await this.getPositions();
+        this.replacePositions(pos);
+        this.log(`${ctx}: refresh positions`);
+    }
+
+    /** Combo: làm mới cả orderOpens & positions (tuần tự để tránh đè webview) */
+    private async refreshSnapshot(ctx = "Refresh"): Promise<void> {
+        await this.refreshOrderOpens(ctx);
+        await this.refreshPositions(ctx);
+        this.log(`✅ ${ctx}: snapshot updated`);
+    }
+
+    private seq = 0;
+
+    private gateFetch<T>(url: string, init?: any, timeoutMs = 10_000): Promise<TFectWorkRes<T>> {
+        const reqId = ++this.seq;
+        const port = this.parentPort!;
+
+        return new Promise<TFectWorkRes<T>>((resolve) => {
+            let settled = false;
+            let timer: NodeJS.Timeout;
+
+            const done = (r: TFectWorkRes<T>) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                try {
+                    port.off("message", onMsg);
+                } catch {}
+                resolve(r);
+            };
+
+            const onMsg = (m: any) => {
+                try {
+                    if (m?.type !== "bot:fetch:res") return;
+                    if (m.payload?.reqId !== reqId) return;
+
+                    const p: TGateFectMainRes = m.payload;
+                    if (!p.ok) return done({ ok: false, body: null, error: p.error || "fetch failed" });
+
+                    let parsed: T;
+                    try {
+                        parsed = JSON.parse(p.bodyText) as T;
+                    } catch (e) {
+                        return done({ ok: false, body: null, error: `Invalid JSON from ${url}: ${String(e)}` });
+                    }
+
+                    return done({ ok: true, body: parsed, error: null });
+                } catch (e) {
+                    return done({ ok: false, body: null, error: `gateFetch handler error: ${String(e)}` });
+                }
+            };
+
+            // 1) nghe trước
+            port.on("message", onMsg);
+
+            // 2) timeout RPC (phòng main không hồi)
+            timer = setTimeout(() => {
+                done({ ok: false, body: null, error: "gateFetch rpc timeout" });
+            }, timeoutMs);
+
+            // 3) gửi sau
+            port.postMessage({ type: "bot:fetch", payload: { url, init, reqId, timeoutMs } });
+        });
+    }
+
+    private sendLogUi(text: string, level: LogLevel | undefined = "info") {
         this.parentPort?.postMessage({
-            type: "bot:heartbeat",
-            payload: {
-                ts: Date.now(),
-                isStart: this.isStart,
-            },
+            type: "bot:log",
+            payload: { ts: Date.now(), level, text: text },
+        });
+    }
+
+    private log(step: string, data?: any) {
+        const ts = new Date().toISOString();
+        if (data !== undefined) console.log(`[Bot][${ts}] ${step}`, data);
+        else console.log(`[Bot][${ts}] ${step}`);
+    }
+
+    private async changeLeverage(symbol: string, leverageNumber: number): Promise<boolean> {
+        if (this.changedLaveragelist.has(symbol)) {
+            this.log(`✅ Change Leverage [EXISTS] ${symbol} skip => `, this.changedLaveragelist);
+            return true;
+        }
+
+        const leverageString = leverageNumber.toString();
+
+        const url = `https://www.gate.com/apiw/v2/futures/usdt/positions/${symbol}/leverage`;
+
+        const { body, error, ok } = await this.gateFetch<TGateApiRes<TChangeLeverage[] | null>>(url, {
+            method: "POST",
+            body: JSON.stringify({ leverage: leverageString }),
+            headers: { "Content-Type": "application/json" },
+        });
+        if (ok === false || error || body === null) {
+            const msg = `❌ Change Leverage: ${error}`;
+            throw new Error(msg);
+        }
+
+        const { code, data, message } = body;
+
+        if (code >= 400 || code < 0) {
+            const msg = `❌ Change Leverage: ${symbol} | code:${code} | ${message}`;
+            this.log(msg);
+            this.sendLogUi(msg, `error`);
+            return false;
+        }
+
+        if (data === null || data === undefined) {
+            const msg = `❌ Change Leverage: data is ${data}`;
+            throw new Error(msg);
+        }
+
+        if (data?.[0]?.leverage !== leverageString || data?.[1]?.leverage !== leverageString) {
+            const msg = `❌ Change Leverage: ${symbol} | mismatched leverage`;
+            this.log(msg);
+            this.sendLogUi(msg, `error`);
+            return false;
+        }
+
+        this.changedLaveragelist.add(symbol);
+        const msg = `✅ Change Leverage: ${symbol} | ${leverageString}`;
+        this.log(msg);
+        this.sendLogUi(msg, `info`);
+
+        return true;
+    }
+
+    private async openEntry(payload: TPayloadOrder, label: string) {
+        const selectorInputPosition = this.uiSelector?.find((item) => item.code === "inputPosition")?.selectorValue;
+        const selectorInputPrice = this.uiSelector?.find((item) => item.code === "inputPrice")?.selectorValue;
+        const selectorButtonLong = this.uiSelector?.find((item) => item.code === "buttonLong")?.selectorValue;
+        if (!selectorInputPosition || !selectorButtonLong || !selectorInputPrice) {
+            console.log(`Not found selector`, { selectorInputPosition, selectorButtonLong, selectorInputPrice });
+            throw new Error(`Not found selector`);
+        }
+
+        const dataSelector: TUiSelectorOrder = {
+            inputPosition: selectorInputPosition,
+            inputPrice: selectorInputPrice,
+            buttonLong: selectorButtonLong,
+        };
+
+        const { body, error, ok } = await this.createOrder<TGateApiRes<TOrderOpen | null>>(payload, dataSelector);
+
+        if (ok === false || error || body === null) {
+            const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${error}`;
+            throw new Error(msg);
+        }
+
+        if (body?.code >= 400 || body?.code < 0) {
+            const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${body?.message || "Unknown"}`;
+            throw new Error(msg);
+        }
+
+        if (body?.data === null || body?.data === undefined) {
+            const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: data is ${body?.data}`;
+            throw new Error(msg);
+        }
+
+        const status = `✅ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}`;
+        this.sendLogUi(status);
+
+        return body.data;
+    }
+
+    private seqOrder = 0;
+
+    private async createOrder<T>(payload: TPayloadOrder, dataSelector: TUiSelectorOrder, timeoutMs = 10_000): Promise<TOrderWorkRes<T>> {
+        const reqOrderId = ++this.seqOrder;
+        const port = this.parentPort!;
+
+        return new Promise<TOrderWorkRes<T>>((resolve) => {
+            let settled = false;
+            let timer: NodeJS.Timeout;
+
+            const done = (r: TFectWorkRes<T>) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                try {
+                    port.off("message", onMsg);
+                } catch {}
+                resolve(r);
+            };
+
+            const onMsg = (m: any) => {
+                try {
+                    if (m?.type !== "bot:order:res") return;
+                    if (m.payload?.reqOrderId !== reqOrderId) return;
+
+                    const p: TGateOrderMainRes = m.payload;
+                    if (!p.ok) return done({ ok: false, body: null, error: p.error || "Order failed" });
+
+                    let parsed: T;
+                    try {
+                        parsed = JSON.parse(p.bodyText) as T;
+                    } catch (e) {
+                        return done({ ok: false, body: null, error: `Invalid JSON from Order: ${String(e)}` });
+                    }
+
+                    return done({ ok: true, body: parsed, error: null });
+                } catch (e) {
+                    return done({ ok: false, body: null, error: `Order handler error: ${String(e)}` });
+                }
+            };
+
+            // 1) nghe trước
+            port.on("message", onMsg);
+
+            // 2) timeout RPC (phòng main không hồi)
+            timer = setTimeout(() => {
+                done({ ok: false, body: null, error: "Order rpc timeout" });
+            }, timeoutMs);
+
+            const data: TWorkerData<TDataOrder> = {
+                type: "bot:order",
+                payload: {
+                    reqOrderId,
+                    payloadOrder: payload,
+                    selector: dataSelector,
+                },
+            };
+
+            // 3) gửi sau
+            port.postMessage(data);
+        });
+    }
+
+    private async clickTabOpenOrder() {
+        const selectorButtonTabOpenOrder = this.uiSelector?.find((item) => item.code === "buttonTabOpenOrder")?.selectorValue;
+        if (!selectorButtonTabOpenOrder) {
+            console.log(`Not found selector`, { selectorButtonTabOpenOrder });
+            throw new Error(`Not found selector`);
+        }
+        const stringClickTabOpenOrder = createCodeStringClickTabOpenOrder({ buttonTabOpenOrder: selectorButtonTabOpenOrder });
+
+        const { body, error, ok } = await this.sendClickTabOpenOrder<boolean | null>(stringClickTabOpenOrder);
+
+        if (ok === false || error || body === null) {
+            const msg = `❌ Click Tab Open Order error: ${error}`;
+            throw new Error(msg);
+        }
+        if (body === false) {
+            const msg = `❌ Click Tab Open Order body: ${body}`;
+            throw new Error(msg);
+        }
+
+        return body;
+    }
+
+    private seqClickTabOpenOrder = 0;
+
+    private async sendClickTabOpenOrder<T>(stringClickTabOpenOrder: string, timeoutMs = 10_000): Promise<TClickTabOpenOrderRes<T>> {
+        const reqClickTabOpenOrderId = ++this.seqClickTabOpenOrder;
+        const port = this.parentPort!;
+
+        return new Promise<TClickTabOpenOrderRes<T>>((resolve) => {
+            let settled = false;
+            let timer: NodeJS.Timeout;
+
+            const done = (r: TClickTabOpenOrderRes<T>) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                try {
+                    port.off("message", onMsg);
+                } catch {}
+                resolve(r);
+            };
+
+            const onMsg = (m: any) => {
+                try {
+                    if (m?.type !== "bot:clickTabOpenOrder:res") return;
+                    if (m.payload?.reqClickTabOpenOrderId !== reqClickTabOpenOrderId) return;
+                    console.log(`ClickTabOpenOrder res`, m.payload);
+                    const p: TGateClickTabOpenOrderRes = m.payload;
+                    if (!p.ok) return done({ ok: false, body: null, error: p.error || "ClickTabOpenOrder failed" });
+
+                    return done({ ok: true, body: p.body as T, error: null });
+                } catch (e) {
+                    return done({ ok: false, body: null, error: `ClickTabOpenOrder handler error: ${String(e)}` });
+                }
+            };
+
+            // 1) nghe trước
+            port.on("message", onMsg);
+
+            // 2) timeout RPC (phòng main không hồi)
+            timer = setTimeout(() => {
+                done({ ok: false, body: null, error: "sendClickTabOpenOrder rpc timeout" });
+            }, timeoutMs);
+
+            const payload: TPayloadClickTabOpenOrder = {
+                reqClickTabOpenOrderId,
+                stringClickTabOpenOrder,
+            };
+
+            // 3) gửi sau
+            port.postMessage({ type: "bot:clickTabOpenOrder", payload: payload });
+        });
+    }
+
+    private async clickCanelAllOpen(contract: string) {
+        await this.clickTabOpenOrder();
+
+        const selectorTableOrderPanel = this.uiSelector?.find((item) => item.code === "tableOrderPanel")?.selectorValue;
+        if (!selectorTableOrderPanel) {
+            console.log(`Not found selector`, { selectorTableOrderPanel });
+            throw new Error(`Not found selector`);
+        }
+        const stringClickCanelAllOpen = createCodeStringClickCancelAllOpen({
+            contract: contract.replace("/", "").replace("_", ""),
+            tableOrderPanel: selectorTableOrderPanel,
         });
 
-        this.parentPort?.postMessage({ type: "bot:metrics", payload: snapshotWorkerMetrics() });
+        const { body, error, ok } = await this.sendClickCanelAllOpen<TGateClickCancelAllOpenRes["body"]>(stringClickCanelAllOpen);
 
-        this.setWhitelistEntry();
+        if (ok === false || error || body === null) {
+            const msg = `❌ Click Cancel All Order error: ${error} ${body} ${ok}`;
+            throw new Error(msg);
+        }
 
-        // this.sendLogUi(`count: ${this.count}`);
+        this.sendLogUi(`✅ ${contract} Cancel All Open: ${body.clicked}`);
+        this.removeSticky(`timeout:${contract}`);
+
+        return body;
     }
 
-    private setWhitelist(whiteList: TWhiteList) {
-        this.whiteList = whiteList;
+    private seqClickCanelAllOpenOrder = 0;
+
+    private async sendClickCanelAllOpen<T>(stringClickCanelAllOpen: string, timeoutMs = 10_000): Promise<TClickCancelAllOpenRes<T>> {
+        const reqClickCanelAllOpenOrderId = ++this.seqClickCanelAllOpenOrder;
+        const port = this.parentPort!;
+
+        return new Promise<TClickCancelAllOpenRes<T>>((resolve) => {
+            let settled = false;
+            let timer: NodeJS.Timeout;
+
+            const done = (r: TClickCancelAllOpenRes<T>) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                try {
+                    port.off("message", onMsg);
+                } catch {}
+                resolve(r);
+            };
+
+            const onMsg = (m: any) => {
+                try {
+                    if (m?.type !== "bot:clickCanelAllOpen:res") return;
+                    if (m.payload?.reqClickCanelAllOpenOrderId !== reqClickCanelAllOpenOrderId) return;
+                    const p: TGateClickCancelAllOpenRes = m.payload;
+                    console.log(`clickCanelAllOpen res`, m.payload);
+                    if (!p.ok) return done({ ok: false, body: null, error: p.error || "clickCanelAllOpen failed" });
+
+                    return done({ ok: true, body: p.body as T, error: null });
+                } catch (e) {
+                    return done({ ok: false, body: null, error: `clickCanelAllOpen handler error: ${String(e)}` });
+                }
+            };
+
+            // 1) nghe trước
+            port.on("message", onMsg);
+
+            // 2) timeout RPC (phòng main không hồi)
+            timer = setTimeout(() => {
+                done({ ok: false, body: null, error: "sendClickTabOpenOrder rpc timeout" });
+            }, timeoutMs);
+
+            const payload: TPayloadClickCancelAllOpen = {
+                reqClickCanelAllOpenOrderId,
+                stringClickCanelAllOpen,
+            };
+
+            // 3) gửi sau
+            port.postMessage({ type: "bot:clickCanelAllOpen", payload: payload });
+        });
     }
 
-    private setSettingUser(settingUser: TSettingUsers) {
-        this.settingUser = settingUser;
-    }
-
-    private setUiSelector(settingUser: TUiSelector[]) {
-        this.uiSelector = settingUser;
+    private removeSticky(key: string) {
+        this.parentPort?.postMessage({ type: "bot:sticky:remove", payload: { key } });
     }
 
     private setWhitelistEntry() {
@@ -332,7 +771,9 @@ class Bot {
                 order_price_round == null;
 
             if (missing) {
-                this.log(`[${symbol ?? "UNKNOWN"}] core thiếu field: ${JSON.stringify(core)}`);
+                const msg = `❌ ${symbol ?? "UNKNOWN"} core thiếu field: ${JSON.stringify(core)}`;
+                this.log(msg);
+                this.sendLogUi(msg, "error");
                 continue;
             }
 
@@ -368,403 +809,6 @@ class Bot {
                 });
             }
         }
-    }
-
-    private isCheckwhitelistEntryEmty() {
-        if (this.whitelistEntry.length <= 0) {
-            this.log(`whitelistEntry rỗng => không xử lý whitelistEntry`, this.whitelistEntry.length);
-            return false;
-        }
-        return true;
-    }
-
-    private getLengthOrderInOrderOpensAndPosition(): number {
-        const pairs = new Set<string>();
-
-        // 1) các lệnh OPEN đang treo (không reduce_only)
-        for (const ord of this.orderOpens) {
-            if (ord.is_reduce_only) continue;
-            pairs.add(ord.contract.replace("/", "_"));
-        }
-
-        // 2) các position đang có
-        for (const [, pos] of this.positions) {
-            if (!pos || !pos.size) continue;
-            pairs.add(pos.contract.replace("/", "_"));
-        }
-
-        const length = pairs.size;
-        this.log(`lengthOrderInOrderOpensAndPosition: ${length}`);
-
-        return length;
-    }
-
-    private isCheckMaxOpenPO() {
-        if (this.getLengthOrderInOrderOpensAndPosition() >= this.settingUser.maxTotalOpenPO) {
-            this.log(`Đã đạt giới hạn maxTotalOpenPO >= không xử lý whitelistEntry`, {
-                maxTotalOpenPO: this.settingUser.maxTotalOpenPO,
-                lengthOrderInOrderOpensAndPosition: this.getLengthOrderInOrderOpensAndPosition(),
-            });
-            return false;
-        }
-        return true;
-    }
-
-    private async getOrderOpens() {
-        const url = "https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open";
-
-        const { data, code, message } = await this.gateJson<TGateApiRes<TOrderOpen[] | null>>(url);
-        if (code >= 400) {
-            const msg = `getOrderOpens fail (code=${code}): ${message || "Unknown"}`;
-            this.sendLogUi(`❌ ${msg}`, "error");
-            throw new Error(msg);
-        }
-
-        return data ?? [];
-    }
-
-    /** Làm mới orderOpens kèm timeout & log */
-    private async refreshOrderOpens(ctx = "Refresh"): Promise<void> {
-        const orderOpens = await this.getOrderOpens();
-        this.setOrderOpens(orderOpens || []);
-        this.log(`${ctx}: refresh orderOpens`);
-    }
-
-    private async getPositions() {
-        const url = "https://www.gate.com/apiw/v2/futures/usdt/positions";
-
-        const { data, code, message } = await this.gateJson<TPositionRes>(url);
-        if (code >= 400) {
-            const msg = `getPositions fail (code=${code}): ${message || "Unknown"}`;
-            this.sendLogUi(`❌ ${msg}`, "error");
-            throw new Error(msg);
-        }
-
-        if (!data) return [];
-        const openPositionsList = data.filter((pos) => Number(pos.size) !== 0);
-        return openPositionsList;
-    }
-
-    /** Làm mới positions kèm timeout & log */
-    private async refreshPositions(ctx = "Refresh"): Promise<void> {
-        const pos = await this.getPositions();
-        this.replacePositions(pos);
-        this.log(`${ctx}: refresh positions`);
-    }
-
-    /** Combo: làm mới cả orderOpens & positions (tuần tự để tránh đè webview) */
-    private async refreshSnapshot(ctx = "Refresh"): Promise<void> {
-        await this.refreshOrderOpens(ctx);
-        await this.refreshPositions(ctx);
-        this.log(`✅ ${ctx}: snapshot updated`);
-    }
-
-    /** Bọc promise với timeout + log để xác định điểm treo */
-    private async withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-        let timer: any;
-        try {
-            return await Promise.race([
-                p,
-                new Promise<T>((_, rej) => {
-                    timer = setTimeout(() => rej(new Error(`❌❌❌❌❌ Timeout @ ${label} after ${ms}ms`)), ms);
-                }),
-            ]);
-        } finally {
-            clearTimeout(timer);
-        }
-    }
-
-    private setOrderOpens(orderOpens: TOrderOpen[]) {
-        this.orderOpens = orderOpens || [];
-    }
-    private replacePositions(list: TPosition[]) {
-        this.positions.clear();
-        for (const p of list) this.setPosition(p);
-    }
-    private setPosition(value: TPosition) {
-        const marginMode = Number(value.leverage) === 0 ? "cross" : "isolated";
-        const contract = value.contract.replace("/", "_");
-        const side = value.size > 0 ? "long" : "short";
-        const key = `${contract}-${marginMode}-${side}-${value.leverage}`;
-        this.positions.set(contract, value);
-    }
-
-    private seq = 0;
-    private gateFetch(url: string, init?: any, timeoutMs = 15_000): Promise<FetchResult> {
-        const reqId = ++this.seq;
-        const port = this.parentPort!;
-
-        return new Promise<FetchResult>((resolve) => {
-            let settled = false;
-            let timer: NodeJS.Timeout;
-
-            const done = (r: FetchResult) => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timer);
-                try {
-                    port.off("message", onMsg);
-                } catch {}
-                resolve(r); // ❗️CHỈ resolve, KHÔNG reject
-            };
-
-            const onMsg = (m: any) => {
-                try {
-                    if (m?.type !== "bot:fetch:res") return;
-                    if (m.payload?.reqId !== reqId) return;
-                    if (m.payload?.error) return done({ ok: false, error: m.payload.error });
-                    return done({ ok: true, res: m.payload.res });
-                } catch (e) {
-                    return done({ ok: false, error: `gateFetch handler error: ${String(e)}` });
-                }
-            };
-
-            // attach listener TRƯỚC
-            port.on("message", onMsg);
-
-            // đặt timeout SAU khi attach
-            timer = setTimeout(() => {
-                done({ ok: false, error: "gateFetch timeout" });
-            }, timeoutMs);
-
-            // postMessage SAU khi attach (tránh race)
-            port.postMessage({ type: "bot:fetch", payload: { url, init, reqId } });
-        });
-    }
-
-    private snapshot() {
-        return {
-            // settingUser: this.settingUser,
-            whitelistEntry: this.whitelistEntry.map((e) => e.symbol),
-        };
-    }
-
-    private log(step: string, data?: any) {
-        const ts = new Date().toISOString();
-        if (data !== undefined) console.log(`[Bot][${ts}] ${step}`, data);
-        else console.log(`[Bot][${ts}] ${step}`);
-    }
-
-    private isOrderExitsByContract(contract: string): boolean {
-        const isExitsOrderOpens = !!this.orderOpens.find((item) => item.contract === contract.replace("_", "/") && !item.is_reduce_only);
-        if (isExitsOrderOpens) this.log(`${contract} đã tồn tại trong orderOpens => bỏ qua | isExitsOrderOpens: ${isExitsOrderOpens}`);
-
-        // console.log("contract: ", contract);
-        const isExitsPosition = this.positions.has(contract);
-        if (isExitsPosition) this.log(`${contract} tồn tại trong position => bỏ qua | isExitsPosition: ${isExitsPosition}`);
-
-        const isExits = isExitsOrderOpens || isExitsPosition;
-
-        return isExits;
-    }
-
-    private async changeLeverage(symbol: string, leverageNumber: number): Promise<boolean> {
-        if (this.changedLaveragelist.has(symbol)) {
-            this.log(`✅ Change Leverage [EXISTS] ${symbol} skip => `, this.changedLaveragelist);
-            return true;
-        }
-
-        const leverageString = leverageNumber.toString();
-
-        const url = `https://www.gate.com/apiw/v2/futures/usdt/positions/${symbol}/leverage`;
-
-        const { data, code, message } = await this.gateJson<TGateApiRes<TChangeLeverage[]>>(url, {
-            method: "POST",
-            body: JSON.stringify({ leverage: leverageString }),
-            headers: { "Content-Type": "application/json" },
-        });
-
-        if (code >= 400 || code < 0) {
-            this.log(`❌ Change Leverage [FAILED]: ${symbol} | code:${code} | ${message}`);
-            this.sendLogUi(`❌ Change Leverage [FAILED]: code:${code} | ${message}`, `error`);
-            return false;
-        }
-
-        if (data?.[0]?.leverage !== leverageString || data?.[1]?.leverage !== leverageString) {
-            this.log(`❌ Change Leverage [FAILED]: ${symbol} | mismatched leverage`);
-            return false;
-        }
-
-        this.changedLaveragelist.add(symbol);
-        if (!IS_PRODUCTION) this.log(`✅ Change Leverage [SUCCESS]: ${symbol} | ${leverageString}`);
-        return true;
-    }
-
-    // Helper parse JSON an toàn + check Result
-    private async gateJson<T>(url: string, init?: any, timeoutMs = 15_000): Promise<T> {
-        const r = await this.gateFetch(url, init, timeoutMs);
-        if (!r.ok) throw new Error(r.error);
-
-        try {
-            return JSON.parse(r.res.body) as T;
-        } catch (e) {
-            throw new Error(`Invalid JSON from ${url}: ${String(e)}`);
-        }
-    }
-
-    private async getBidsAsks(contract: string, limit: number = 10) {
-        const url = `https://www.gate.com/apiw/v2/futures/usdt/order_book?limit=${limit}&contract=${contract.replace("/", "_")}`;
-
-        const { data, code, message } = await this.gateJson<TGateApiRes<TBidsAsks>>(url);
-        if (code >= 400) {
-            const msg = `getBidsAsks fail (code=${code}): ${message || "Unknown"}`;
-            this.sendLogUi(`❌ ${msg}`, "error");
-            throw new Error(msg);
-        }
-
-        this.log(`✅ Get Bids & Asks [SUCCESS]: ${contract} | limit: ${limit}`);
-        return data;
-    }
-
-    private async openEntry(payload: TPayloadOrder, label: string) {
-        const selectorInputPosition = this.uiSelector?.find((item) => item.code === "inputPosition")?.selectorValue;
-        const selectorInputPrice = this.uiSelector?.find((item) => item.code === "inputPrice")?.selectorValue;
-        const selectorButtonLong = this.uiSelector?.find((item) => item.code === "buttonLong")?.selectorValue;
-        if (!selectorInputPosition || !selectorButtonLong || !selectorInputPrice) {
-            console.log(`Not found selector`, { selectorInputPosition, selectorButtonLong, selectorInputPrice });
-            throw new Error(`Not found selector`);
-        }
-
-        const data: TWorkerData<TDataOrder> = {
-            type: "bot:order",
-            payload: {
-                payloadOrder: payload,
-                selector: {
-                    inputPosition: selectorInputPosition,
-                    inputPrice: selectorInputPrice,
-                    buttonLong: selectorButtonLong,
-                },
-            },
-        };
-
-        this.parentPort?.postMessage(data);
-
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                this.parentPort!.off("message", onMsg);
-                reject(new Error("openEntry timeout"));
-            }, 15000);
-
-            const onMsg = (m: any) => {
-                if (m?.type === "bot:order:res") {
-                    clearTimeout(timeout);
-                    this.parentPort!.off("message", onMsg);
-                    if (m.payload.ok) {
-                        let result: any;
-
-                        try {
-                            result = JSON.parse(m.payload?.bodyText ?? "null");
-                        } catch (e) {
-                            resolve(new Error(`❌ Invalid JSON from main: ${String(e)}`));
-                            this.sendLogUi(`❌ Invalid JSON from main: ${String(e)}`, `error`);
-                        }
-
-                        const code = typeof result?.code === "number" ? result.code : 0;
-
-                        if (!result?.data || code >= 400 || code < 0) {
-                            resolve(new Error(`${payload.contract} ${result?.message}`));
-                            this.sendLogUi(
-                                `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price} | ${result?.message}`,
-                                `error`,
-                            );
-                            return;
-                        } else {
-                            const status = `✅ ${payload.contract} - ${label} ${this.getOrderSide(result.data)} | ${result.data?.size} | ${result.data?.price}`;
-                            this.sendLogUi(status);
-                            resolve(result);
-                        }
-                    } else {
-                        resolve(new Error(m.payload?.error));
-                    }
-                }
-            };
-            this.parentPort!.on("message", onMsg);
-        });
-    }
-
-    private async openEntry1(payload: TPayloadOrder, label: string): Promise<OpenRes> {
-        const selectorInputPosition = this.uiSelector?.find((i) => i.code === "inputPosition")?.selectorValue;
-        const selectorInputPrice = this.uiSelector?.find((i) => i.code === "inputPrice")?.selectorValue;
-        const selectorButtonLong = this.uiSelector?.find((i) => i.code === "buttonLong")?.selectorValue;
-
-        if (!selectorInputPosition || !selectorButtonLong || !selectorInputPrice) {
-            const msg = `Not found selector`;
-            this.sendLogUi(`❌ ${msg}`, "error");
-            return { ok: false, error: msg };
-        }
-
-        const port = this.parentPort!;
-
-        // Promise luôn resolve (Result pattern)
-        return new Promise<OpenRes>((resolve) => {
-            let settled = false;
-            let timer: NodeJS.Timeout;
-
-            const done = (r: OpenRes) => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timer);
-                try {
-                    port.off("message", onMsg);
-                } catch {}
-                resolve(r);
-            };
-
-            const onMsg = (m: any) => {
-                try {
-                    if (m?.type !== "bot:order:res") return;
-
-                    if (!m.payload?.ok) {
-                        const err = String(m.payload?.error || "order failed");
-                        this.sendLogUi(`❌ ${payload.contract} - ${label}: ${err}`, "error");
-                        return done({ ok: false, error: err });
-                    }
-
-                    // bodyText -> JSON
-                    let result: any = null;
-                    try {
-                        result = JSON.parse(m.payload.bodyText ?? "null");
-                    } catch (e) {
-                        const err = `Invalid JSON from main: ${String(e)}`;
-                        this.sendLogUi(`❌ ${err}`, "error");
-                        return done({ ok: false, error: err });
-                    }
-
-                    const code = typeof result?.code === "number" ? result.code : 0;
-                    if (!result?.data || code >= 400 || code < 0) {
-                        const msg = result?.message || `code=${code}`;
-                        const side = Number(payload.size) >= 0 ? "long" : "short";
-                        this.sendLogUi(`❌ ${payload.contract} - ${label} ${side} | ${payload.size} | ${payload.price} | ${msg}`, "error");
-                        return done({ ok: false, error: `${payload.contract} ${msg}` });
-                    }
-
-                    const side = this.getOrderSide(result.data);
-                    this.sendLogUi(`✅ ${payload.contract} - ${label} ${side} | ${result.data?.size} | ${result.data?.price}`);
-                    return done({ ok: true, result });
-                } catch (e) {
-                    // tuyệt đối không throw ra ngoài handler
-                    return done({ ok: false, error: `openEntry handler error: ${String(e)}` });
-                }
-            };
-
-            port.on("message", onMsg);
-
-            // timeout (đừng để 5ms kẻo race)
-            timer = setTimeout(() => {
-                this.sendLogUi(`❌ ${payload.contract} - ${label}: openEntry timeout`, "error");
-                done({ ok: false, error: "openEntry timeout" });
-            }, 15_000);
-
-            // Gửi yêu cầu SAU khi đã gắn listener
-            const data: TWorkerData<TDataOrder> = {
-                type: "bot:order",
-                payload: {
-                    payloadOrder: payload,
-                    selector: { inputPosition: selectorInputPosition, inputPrice: selectorInputPrice, buttonLong: selectorButtonLong },
-                },
-            };
-            port.postMessage(data);
-        });
     }
 
     private async getCloseOrderPayloads(): Promise<TPayloadOrder[]> {
@@ -988,6 +1032,10 @@ class Bot {
         return [...m.entries()].map(([contract, v]) => ({ contract, ...v }));
     }
 
+    private clearStickies() {
+        this.parentPort?.postMessage({ type: "bot:sticky:clear" });
+    }
+
     private isTimedOutClearOpen(create_time_sec: number, contract: string) {
         const created = this.toSec(create_time_sec);
         const nowSec = Math.floor(Date.now() / 1000);
@@ -1002,79 +1050,88 @@ class Bot {
         return Math.floor(Number(t));
     }
 
-    private async clickCanelAllOpen(contract: string) {
-        await this.clickTabOpenOrder();
-
-        const selectorTableOrderPanel = this.uiSelector?.find((item) => item.code === "tableOrderPanel")?.selectorValue;
-        if (!selectorTableOrderPanel) {
-            console.log(`Not found selector`, { selectorTableOrderPanel });
-            throw new Error(`Not found selector`);
-        }
-        const stringClickCanelAllOpen = createCodeStringClickCancelAllOpen({
-            contract: contract.replace("/", "").replace("_", ""),
-            tableOrderPanel: selectorTableOrderPanel,
-        });
-
-        const data: TWorkerData<string> = {
-            type: "bot:clickCanelAllOpen",
-            payload: stringClickCanelAllOpen,
-        };
-        this.parentPort?.postMessage(data);
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                this.parentPort!.off("message", onMsg);
-                reject(new Error("clickCanelAllOpen timeout"));
-            }, 15000);
-
-            const onMsg = (m: any) => {
-                if (m?.type === "bot:clickCanelAllOpen:res") {
-                    clearTimeout(timeout);
-                    parentPort!.off("message", onMsg);
-                    if (m.payload.error) {
-                        reject(new Error(m.payload.error));
-                    } else {
-                        this.sendLogUi(`✅ ${contract} Cancel All Open: ${m.payload.result.clicked}`);
-                        this.removeSticky(`timeout:${contract}`);
-                        resolve(m.payload.result);
-                    }
-                }
-            };
-            this.parentPort!.on("message", onMsg);
-        });
+    private setSticky(key: string, text: string) {
+        const payload: StickySetPayload = { key, text, ts: Date.now() };
+        this.parentPort?.postMessage({ type: "bot:sticky:set", payload });
     }
 
-    private async clickTabOpenOrder() {
-        const selectorButtonTabOpenOrder = this.uiSelector?.find((item) => item.code === "buttonTabOpenOrder")?.selectorValue;
-        if (!selectorButtonTabOpenOrder) {
-            console.log(`Not found selector`, { selectorButtonTabOpenOrder });
-            throw new Error(`Not found selector`);
+    private isCheckwhitelistEntryEmty() {
+        if (this.whitelistEntry.length <= 0) {
+            this.log(`whitelistEntry rỗng => không xử lý whitelistEntry`, this.whitelistEntry.length);
+            return false;
         }
-        const stringClickTabOpenOrder = createCodeStringClickTabOpenOrder({ buttonTabOpenOrder: selectorButtonTabOpenOrder });
+        return true;
+    }
 
-        const data: TWorkerData<string> = {
-            type: "bot:clickTabOpenOrder",
-            payload: stringClickTabOpenOrder,
-        };
-        this.parentPort?.postMessage(data);
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                this.parentPort!.off("message", onMsg);
-                reject(new Error("clickTabOpenOrder timeout"));
-            }, 15000);
+    private isCheckMaxOpenPO() {
+        if (this.getLengthOrderInOrderOpensAndPosition() >= this.settingUser.maxTotalOpenPO) {
+            this.log(`Đã đạt giới hạn maxTotalOpenPO >= không xử lý whitelistEntry`, {
+                maxTotalOpenPO: this.settingUser.maxTotalOpenPO,
+                lengthOrderInOrderOpensAndPosition: this.getLengthOrderInOrderOpensAndPosition(),
+            });
+            return false;
+        }
+        return true;
+    }
 
-            const onMsg = (m: any) => {
-                if (m?.type === "bot:clickTabOpenOrder:res") {
-                    clearTimeout(timeout);
-                    parentPort!.off("message", onMsg);
-                    if (m.payload.error) {
-                        reject(new Error(m.payload.error));
-                    } else {
-                        resolve(m.payload.result);
-                    }
-                }
-            };
-            this.parentPort!.on("message", onMsg);
-        });
+    private getLengthOrderInOrderOpensAndPosition(): number {
+        const pairs = new Set<string>();
+
+        // 1) các lệnh OPEN đang treo (không reduce_only)
+        for (const ord of this.orderOpens) {
+            if (ord.is_reduce_only) continue;
+            pairs.add(ord.contract.replace("/", "_"));
+        }
+
+        // 2) các position đang có
+        for (const [, pos] of this.positions) {
+            if (!pos || !pos.size) continue;
+            pairs.add(pos.contract.replace("/", "_"));
+        }
+
+        const length = pairs.size;
+        this.log(`lengthOrderInOrderOpensAndPosition: ${length}`);
+
+        return length;
+    }
+
+    private isOrderExitsByContract(contract: string): boolean {
+        const isExitsOrderOpens = !!this.orderOpens.find((item) => item.contract === contract.replace("_", "/") && !item.is_reduce_only);
+        if (isExitsOrderOpens) this.log(`${contract} đã tồn tại trong orderOpens => bỏ qua | isExitsOrderOpens: ${isExitsOrderOpens}`);
+
+        // console.log("contract: ", contract);
+        const isExitsPosition = this.positions.has(contract);
+        if (isExitsPosition) this.log(`${contract} tồn tại trong position => bỏ qua | isExitsPosition: ${isExitsPosition}`);
+
+        const isExits = isExitsOrderOpens || isExitsPosition;
+
+        return isExits;
+    }
+
+    private async getBidsAsks(contract: string, limit: number = 10) {
+        const url = `https://www.gate.com/apiw/v2/futures/usdt/order_book?limit=${limit}&contract=${contract.replace("/", "_")}`;
+
+        const { body, error, ok } = await this.gateFetch<TGateApiRes<TBidsAsks | null>>(url);
+        if (ok === false || error || body === null) {
+            const msg = `❌ Get Order Opens: ${error}`;
+            throw new Error(msg);
+        }
+
+        const { code, data, message } = body;
+
+        if (code >= 400 || code < 0) {
+            const msg = `❌ getBidsAsks fail (code=${code}): ${message || "Unknown"}`;
+            throw new Error(msg);
+        }
+
+        if (data === null) {
+            const msg = `❌ getBidsAsks fail (data === null): ${message || "Unknown"}`;
+            throw new Error(msg);
+        }
+
+        this.log(`✅ Get Bids & Asks [SUCCESS]: ${contract} | limit: ${limit}`);
+
+        return data;
     }
 
     private async handleRoi() {
@@ -1152,66 +1209,15 @@ class Bot {
         return (Object.is(y, -0) ? 0 : y).toString();
     }
 
-    private sendLogUi(text: string, level: LogLevel | undefined = "info") {
-        this.parentPort?.postMessage({
-            type: "bot:log",
-            payload: { ts: Date.now(), level, text: text },
-        });
+    private setWhitelist(whiteList: TWhiteList) {
+        this.whiteList = whiteList;
     }
 
-    private setSticky(key: string, text: string) {
-        const payload: StickySetPayload = { key, text, ts: Date.now() };
-        this.parentPort?.postMessage({ type: "bot:sticky:set", payload });
+    private setSettingUser(settingUser: TSettingUsers) {
+        this.settingUser = settingUser;
     }
 
-    private removeSticky(key: string) {
-        this.parentPort?.postMessage({ type: "bot:sticky:remove", payload: { key } });
+    private setUiSelector(settingUser: TUiSelector[]) {
+        this.uiSelector = settingUser;
     }
-
-    private clearStickies() {
-        this.parentPort?.postMessage({ type: "bot:sticky:clear" });
-    }
-}
-
-const el = monitorEventLoopDelay({ resolution: 500 });
-el.enable();
-
-let prevELU = performance.eventLoopUtilization(); // mốc cho delta
-let prevHr = process.hrtime.bigint(); // mốc thời gian
-let prevCPU = process.cpuUsage(); // mốc CPU (process-level)
-
-function cpuPctProcessSinceLast() {
-    const nowHr = process.hrtime.bigint();
-    const elapsedUs = Number(nowHr - prevHr) / 1000; // microseconds trôi qua
-    prevHr = nowHr;
-
-    const diff = process.cpuUsage(prevCPU); // µs CPU tăng thêm (user+system)
-    prevCPU = process.cpuUsage();
-
-    const usedUs = diff.user + diff.system;
-    // % của 1 core
-    return +((usedUs / elapsedUs) * 100).toFixed(1);
-}
-function snapshotWorkerMetrics() {
-    const heap = process.memoryUsage(); // heapUsed là isolate của worker
-    const elu = performance.eventLoopUtilization(prevELU);
-    prevELU = elu;
-    return {
-        threadId,
-        ts: Date.now(),
-        heapUsed: heap.heapUsed, // bytes
-        heapTotal: heap.heapTotal, // bytes
-        v8: v8.getHeapStatistics(), // isolate stats của worker
-        eventLoop: {
-            mean: el.mean / 1e6, // ms
-            max: el.max / 1e6,
-            p95: el.percentile(95) / 1e6,
-        },
-        cpu: {
-            // % “gần đúng” mức bận của chính worker (per-thread)
-            approxFromELU: +(elu.utilization * 100).toFixed(1),
-            // % CPU của TOÀN PROCESS (mọi thread) từ process.cpuUsage()
-            processPct: cpuPctProcessSinceLast(),
-        },
-    };
 }
