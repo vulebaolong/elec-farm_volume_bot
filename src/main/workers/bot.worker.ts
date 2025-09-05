@@ -106,30 +106,7 @@ class Bot {
                     let isRefreshed_3_CREATE_OPEN = false;
                     let isRefreshed_4_SL_ROI = false;
 
-                    // ===== 1) CREATE CLOSE =====
-                    this.log("🟡🟡🟡🟡🟡 Create Close");
-                    if (this.positions.size > 0) {
-                        const payloads = await this.getCloseOrderPayloads(); // 1 bước: tính + build payload
-
-                        for (const p of payloads) {
-                            // console.log("Create close order:", p);
-                            try {
-                                await this.openEntry(p, `TP: Close`);
-                            } catch (error: any) {
-                                this.sendLogUi(`${error.message}`, "error");
-                                continue;
-                            }
-                        }
-
-                        await this.refreshSnapshot("Close");
-                        isRefreshed_1_CREATE_CLOSE = true;
-
-                        this.log("✅ Create Close: done build payloads…");
-                    } else {
-                        this.log("Create Close: no positions");
-                    }
-                    this.log("🟡🟡🟡🟡🟡 Create Close");
-                    console.log("\n\n");
+                    isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
 
                     // ===== 2) CLEAR OPEN =====
                     this.log("🟢🟢🟢🟢🟢 Clear Open");
@@ -146,6 +123,7 @@ class Bot {
                                 await this.clickCanelAllOpen(contract.contract);
                                 isShouldRefresh = true;
                             }
+                            isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
                         }
 
                         if (isShouldRefresh) {
@@ -203,6 +181,7 @@ class Bot {
                                     this.sendLogUi(`${error.message}`, "error");
                                     continue;
                                 }
+                                isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
                             }
 
                             await this.refreshSnapshot("Create Open");
@@ -219,7 +198,10 @@ class Bot {
                     // ===== 4) SL / ROI =====
                     this.log("🟣🟣🟣🟣🟣 SL/Timeout");
                     if (this.positions.size > 0) {
-                        await this.handleRoi();
+                        for (const [, pos] of this.positions) {
+                            await this.handleRoi(pos);
+                            // isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
+                        }
 
                         await this.refreshSnapshot("Roi");
                         isRefreshed_4_SL_ROI = true;
@@ -255,6 +237,35 @@ class Bot {
             payload: { isReady: true },
         };
         this.parentPort?.postMessage(data);
+    }
+
+    private async createTPClose(isRefreshed_1_CREATE_CLOSE: boolean) {
+        // ===== 1) CREATE TP CLOSE =====
+        this.log("🩵🩵🩵🩵🩵 Create TP Close");
+        this.sendLogUi("💋 Check TP")
+        if (this.positions.size > 0) {
+            const payloads = await this.getCloseOrderPayloads(); // 1 bước: tính + build payload
+
+            for (const p of payloads) {
+                // console.log("Create close order:", p);
+                try {
+                    await this.openEntry(p, `TP: Close`);
+                } catch (error: any) {
+                    this.sendLogUi(`${error.message}`, "error");
+                    continue;
+                }
+            }
+
+            await this.refreshSnapshot("Close");
+            isRefreshed_1_CREATE_CLOSE = true;
+
+            this.log("✅ Create Close: done");
+        } else {
+            this.log("Create Close: no positions");
+        }
+        this.log("🩵🩵🩵🩵🩵 Create TP Close");
+        console.log("\n\n");
+        return isRefreshed_1_CREATE_CLOSE;
     }
 
     private beforeEach() {
@@ -1144,90 +1155,88 @@ class Bot {
         return data;
     }
 
-    private async handleRoi() {
-        for (const [, pos] of this.positions) {
-            const symbol = pos.contract.replace("/", "_");
-            const info = await this.getInfoContract(symbol);
-            if (!info) continue;
+    private async handleRoi(pos: TPosition): Promise<void> {
+        const symbol = pos.contract.replace("/", "_");
+        const info = await this.getInfoContract(symbol);
+        if (!info) return;
 
-            const size = Number(pos.size);
-            const entryPrice = Number(pos.entry_price);
-            const leverage = Number(pos.leverage);
-            const quanto = Number(info.quanto_multiplier);
-            const lastPrice = Number(await this.getLastPrice(symbol));
-            const openTimeSec = Number(pos.open_time); // giây
-            const nowMs = Date.now();
+        const size = Number(pos.size);
+        const entryPrice = Number(pos.entry_price);
+        const leverage = Number(pos.leverage);
+        const quanto = Number(info.quanto_multiplier);
+        const lastPrice = Number(await this.getLastPrice(symbol));
+        const openTimeSec = Number(pos.open_time); // giây
+        const nowMs = Date.now();
 
-            // Bỏ qua nếu dữ liệu không hợp lệ
-            if (!Number.isFinite(size) || size === 0) continue;
-            if (!Number.isFinite(entryPrice) || entryPrice <= 0) continue;
-            if (!Number.isFinite(leverage) || leverage <= 0) continue;
-            if (!Number.isFinite(quanto) || quanto <= 0) continue;
-            if (!Number.isFinite(lastPrice) || lastPrice <= 0) continue;
+        // Bỏ qua nếu dữ liệu không hợp lệ
+        if (!Number.isFinite(size) || size === 0) return;
+        if (!Number.isFinite(entryPrice) || entryPrice <= 0) return;
+        if (!Number.isFinite(leverage) || leverage <= 0) return;
+        if (!Number.isFinite(quanto) || quanto <= 0) return;
+        if (!Number.isFinite(lastPrice) || lastPrice <= 0) return;
 
-            const initialMargin = (entryPrice * Math.abs(size) * quanto) / leverage;
-            const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
-            const returnPercent = (unrealizedPnL / initialMargin) * 100;
+        const initialMargin = (entryPrice * Math.abs(size) * quanto) / leverage;
+        const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
+        const returnPercent = (unrealizedPnL / initialMargin) * 100;
 
-            const { stopLoss, timeoutEnabled, timeoutMs } = this.settingUser;
-            const createdAtMs = openTimeSec > 0 ? openTimeSec * 1000 : nowMs;
-            const isSL = returnPercent <= -stopLoss;
-            const timedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
+        const { stopLoss, timeoutEnabled, timeoutMs } = this.settingUser;
+        const createdAtMs = openTimeSec > 0 ? openTimeSec * 1000 : nowMs;
+        const isSL = returnPercent <= -stopLoss;
+        const timedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
 
-            if (!isSL && !timedOut) continue;
+        if (!isSL && !timedOut) return;
 
-            // Lấy order book
-            const book = await this.getBidsAsks(symbol);
-            const bestBid = Number(book?.bids?.[0]?.p);
-            const bestAsk = Number(book?.asks?.[0]?.p);
-            if (!Number.isFinite(bestBid) || !Number.isFinite(bestAsk)) continue;
+        // Lấy order book
+        const book = await this.getBidsAsks(symbol);
+        const bestBid = Number(book?.bids?.[0]?.p);
+        const bestAsk = Number(book?.asks?.[0]?.p);
+        if (!Number.isFinite(bestBid) || !Number.isFinite(bestAsk)) return;
 
-            // Chọn giá maker đúng phía
-            const tick = Number(info.order_price_round) || 0;
-            const aggressiveTicks = 2; // có thể lấy từ setting
-            const toFixed = (n: number) => {
-                const dec = this.decimalsFromTick(tick || 0.00000001);
-                return n.toFixed(dec);
-            };
+        // Chọn giá maker đúng phía
+        const tick = Number(info.order_price_round) || 0;
+        const aggressiveTicks = 2; // có thể lấy từ setting
+        const toFixed = (n: number) => {
+            const dec = this.decimalsFromTick(tick || 0.00000001);
+            return n.toFixed(dec);
+        };
 
-            let priceNum: number;
-            if (size > 0) {
-                // close long = SELL → đặt >= bestAsk để là maker
-                priceNum = bestAsk + (tick * aggressiveTicks || 0);
-            } else {
-                // close short = BUY → đặt <= bestBid để là maker
-                priceNum = bestBid - (tick * aggressiveTicks || 0);
-            }
-            const priceStr = toFixed(priceNum);
-
-            const payload: TPayloadOrder = {
-                contract: symbol,
-                price: priceStr,
-                size: this.flipSignStr(size),
-                reduce_only: true,
-            };
-
-            try {
-                // await this.openEntry(payload, "SL: Close");
-                this.sendLogUi(
-                    [
-                        `🧪 ROI DEBUG — ${symbol}`,
-                        `  • side: ${size > 0 ? "long" : "short"}  size: ${size}`,
-                        `  • entry: ${entryPrice}  last: ${lastPrice}  lev: ${leverage}x  quanto: ${quanto}`,
-                        `  • PnL: ${unrealizedPnL.toFixed(6)}  IM: ${initialMargin.toFixed(6)}  ROI: ${returnPercent.toFixed(2)}%`,
-                        `  • SL(threshold): -${stopLoss}%  → isSL=${isSL}`,
-                        `  • timeout: ${timeoutEnabled}  age: ${((nowMs - createdAtMs) / 1000).toFixed(1)}s / ${(timeoutMs / 1000).toFixed(1)}s  → timedOut=${timedOut}`,
-                        `  • orderbook: bestBid=${bestBid}  bestAsk=${bestAsk}  tick=${tick}  aggTicks=${aggressiveTicks}`,
-                        `  • chosenPrice: ${priceStr}`,
-                        `  • payload: ${JSON.stringify(payload)}`,
-                    ].join("\n"),
-                    "info",
-                );
-            } catch (error: any) {
-                this.sendLogUi(`${error.message}`, "error");
-                continue;
-            }
+        let priceNum: number;
+        if (size > 0) {
+            // close long = SELL → đặt >= bestAsk để là maker
+            priceNum = bestAsk + (tick * aggressiveTicks || 0);
+        } else {
+            // close short = BUY → đặt <= bestBid để là maker
+            priceNum = bestBid - (tick * aggressiveTicks || 0);
         }
+        const priceStr = toFixed(priceNum);
+
+        const payload: TPayloadOrder = {
+            contract: symbol,
+            price: priceStr,
+            size: this.flipSignStr(size),
+            reduce_only: true,
+        };
+
+        try {
+            // await this.openEntry(payload, "SL: Close");
+            this.sendLogUi(
+                [
+                    `🧪 ROI DEBUG — ${symbol}`,
+                    `  • side: ${size > 0 ? "long" : "short"}  size: ${size}`,
+                    `  • entry: ${entryPrice}  last: ${lastPrice}  lev: ${leverage}x  quanto: ${quanto}`,
+                    `  • PnL: ${unrealizedPnL.toFixed(6)}  IM: ${initialMargin.toFixed(6)}  ROI: ${returnPercent.toFixed(2)}%`,
+                    `  • SL(threshold): -${stopLoss}%  → isSL=${isSL}`,
+                    `  • timeout: ${timeoutEnabled}  age: ${((nowMs - createdAtMs) / 1000).toFixed(1)}s / ${(timeoutMs / 1000).toFixed(1)}s  → timedOut=${timedOut}`,
+                    `  • orderbook: bestBid=${bestBid}  bestAsk=${bestAsk}  tick=${tick}  aggTicks=${aggressiveTicks}`,
+                    `  • chosenPrice: ${priceStr}`,
+                    `  • payload: ${JSON.stringify(payload)}`,
+                ].join("\n"),
+                "info",
+            );
+        } catch (error: any) {
+            this.sendLogUi(`${error.message}`, "error");
+        }
+        return
     }
 
     private flipSignStr(n: number | string): string {

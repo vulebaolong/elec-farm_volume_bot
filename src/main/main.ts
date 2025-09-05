@@ -89,7 +89,7 @@ const createWindow = async () => {
     });
 
     setupUpdaterIPC();
-    registerMetricsIPC();
+    // registerMetricsIPC();
     const gateView = initGateView(mainWindow, isDebug);
     initBot(mainWindow, gateView);
 
