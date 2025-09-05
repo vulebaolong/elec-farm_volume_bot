@@ -242,7 +242,7 @@ class Bot {
     private async createTPClose(isRefreshed_1_CREATE_CLOSE: boolean) {
         // ===== 1) CREATE TP CLOSE =====
         this.log("🩵🩵🩵🩵🩵 Create TP Close");
-        this.sendLogUi("💋 Check TP")
+        // this.sendLogUi("💋 Check TP")
         if (this.positions.size > 0) {
             const payloads = await this.getCloseOrderPayloads(); // 1 bước: tính + build payload
 
