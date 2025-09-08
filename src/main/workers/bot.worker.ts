@@ -123,8 +123,8 @@ class Bot {
                                 await this.clickCanelAllOpen(contract.contract);
                                 isShouldRefresh = true;
                             }
-                            isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
                         }
+                        isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
 
                         if (isShouldRefresh) {
                             await this.refreshSnapshot("Clear Open");
@@ -181,14 +181,14 @@ class Bot {
                                     this.sendLogUi(`${error.message}`, "error");
                                     continue;
                                 }
-                                isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
                             }
-
-                            await this.refreshSnapshot("Create Open");
-                            isRefreshed_3_CREATE_OPEN = true;
+                            isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
 
                             this.log("✅ Create Open: done for symbol", symbol);
                         }
+                        
+                        await this.refreshSnapshot("Create Open");
+                        isRefreshed_3_CREATE_OPEN = true;
                     } else {
                         this.log(`Create Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
                     }
@@ -1236,7 +1236,7 @@ class Bot {
         } catch (error: any) {
             this.sendLogUi(`${error.message}`, "error");
         }
-        return
+        return;
     }
 
     private flipSignStr(n: number | string): string {

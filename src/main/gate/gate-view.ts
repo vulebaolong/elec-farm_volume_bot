@@ -1,7 +1,6 @@
 import { setLocalStorageScript } from "@/javascript-string/logic-farm";
-import { shell, BrowserWindow, WebContentsView } from "electron";
-import { forceDesktopLayout } from "../force-desktop";
-import { installGateDock } from "./gate-dock";
+import { BrowserWindow, WebContentsView, app, shell } from "electron";
+import path from "path";
 
 export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     // --- Gate WebContentsView ---
@@ -16,10 +15,9 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
             partition: "persist:gate",
 
             // nếu bạn có preload riêng cho Gate (không bắt buộc)
-            // preload: path.join(app.isPackaged ? __dirname : path.join(__dirname, "../../assets"), "gate-preload.js"),
+            preload: path.join(app.isPackaged ? __dirname : path.join(__dirname, "../../assets"), "gate-preload.js"),
         },
     });
-
     // add vào contentView root của window
     mainWindow.contentView.addChildView(gateView);
 
@@ -48,6 +46,8 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
         return { action: "deny" };
     });
 
+    blockGateWebSockets(gateView);
+
     // load trang Gate
     gateView.webContents.loadURL("https://www.gate.com/futures/USDT/BTC_USDT").then(() => {
         gateView.webContents.executeJavaScript(setLocalStorageScript, true);
@@ -58,10 +58,21 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
         gateView.webContents.openDevTools({ mode: "detach" });
     }
 
-    gateView.webContents.once("did-finish-load", () => {
-        // forceDesktopLayout(gateView);
-        // installGateDock(mainWindow, gateView);
-    });
-
     return gateView;
+}
+
+export function blockGateWebSockets(gateView: WebContentsView) {
+    const sess = gateView.webContents.session;
+    const filter = { urls: ["wss://*/*", "ws://*/*"] };
+
+    sess.webRequest.onBeforeRequest(filter, (details, cb) => {
+        // Chỉ chặn WS từ domain của Gate (để không ảnh hưởng chỗ khác dùng chung session)
+        const host = new URL(details.url).host;
+        const isGate = /gate\.com$|gateio\./i.test(host);
+        if (details.resourceType === "webSocket" && isGate) {
+            // huỷ handshake => trang không thiết lập được WS
+            return cb({ cancel: true });
+        }
+        cb({ cancel: false });
+    });
 }
