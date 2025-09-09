@@ -11,15 +11,21 @@ export type TContractInfo = {
 };
 
 export type TCore = {
-    symbol: string;
-    spreadPercent: number;
-    imbalanceBidPercent: number;
-    imbalanceAskPercent: number;
-    bidSumDepth: number;
-    askSumDepth: number;
-    bidBest: number;
-    askBest: number;
-    lastPrice: number;
+    gate: {
+        symbol: string;
+        spreadPercent: number;
+        imbalanceBidPercent: number;
+        imbalanceAskPercent: number;
+        bidSumDepth: number;
+        askSumDepth: number;
+        bidBest: number;
+        askBest: number;
+        lastPrice: number;
+    };
+     binance: {
+        symbol: string;
+        lastPrice: number;
+    };
 };
 
 export type TWhiteListItem = {

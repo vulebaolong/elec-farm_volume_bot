@@ -1,4 +1,6 @@
-import { TWhiteListItem } from "@/types/white-list.type";
+import { TSide } from "@/types/base.type";
+import { TSettingUsers } from "@/types/setting-user.type";
+import { TCore, TWhiteListItem } from "@/types/white-list.type";
 
 /**
  * Spread từ 0.05% đến 0.20%
@@ -19,7 +21,7 @@ export function isDepthCalc(askSumDepth: number, bidSumDepth: number, maxDepth: 
  */
 export function handleSize(whitelistItem: TWhiteListItem, inputUSDT: number): string {
     const { order_size_min, order_size_max, quanto_multiplier, symbol } = whitelistItem.contractInfo;
-    const { lastPrice } = whitelistItem.core;
+    const { lastPrice } = whitelistItem.core.gate;
     if ([order_size_min, order_size_max, quanto_multiplier, inputUSDT, lastPrice].some((v) => v === null || v === undefined)) {
         console.log(`${symbol} - Tham số không hợp lệ: `, { order_size_min, order_size_max, quanto_multiplier, inputUSDT, lastPrice });
         return "0";
@@ -53,4 +55,115 @@ export function checkSize(size: string | null | undefined): boolean {
     if (typeof size !== "string") return false;
     const s = size.trim();
     return /^[1-9]\d*$/.test(s);
+}
+
+export function handleIsLong(lastPriceGate: number, lastPriceBinance: number): boolean {
+    return lastPriceGate < lastPriceBinance;
+}
+
+export function handleIsShort(lastPriceGate: number, lastPriceBinance: number): boolean {
+    return lastPriceGate > lastPriceBinance;
+}
+
+type THandleEntryCheckAll = {
+    whitelistItem: TWhiteListItem;
+    settingUser: TSettingUsers;
+};
+type THandleEntryCheckAllRes = {
+    errString: string | null;
+    qualified: boolean;
+    result: {
+        // cả 2 đều cần
+        symbol: string;
+        sizeStr: string;
+        side: TSide | null;
+
+        // cho bot worker
+        askBest: number;
+        bidBest: number;
+        order_price_round: number;
+
+        // cho component whitelist
+        core: TCore;
+        isDepth: boolean;
+        isLong: boolean;
+        isShort: boolean;
+        isSize: boolean;
+        isSpread: boolean;
+    } | null;
+};
+
+export function handleEntryCheckAll({ whitelistItem, settingUser }: THandleEntryCheckAll): THandleEntryCheckAllRes {
+    const { core, contractInfo } = whitelistItem;
+    const {
+        askBest,
+        askSumDepth,
+        bidBest,
+        bidSumDepth,
+        imbalanceAskPercent,
+        imbalanceBidPercent,
+        lastPrice: lastPriceGate,
+        spreadPercent,
+        symbol,
+    } = core.gate ?? {};
+
+    const { lastPrice: lastPriceBinance } = core.binance ?? {};
+
+    const { order_price_round } = contractInfo;
+
+    const missing =
+        !symbol ||
+        spreadPercent == null ||
+        bidSumDepth == null ||
+        askSumDepth == null ||
+        lastPriceGate == null ||
+        lastPriceBinance == null ||
+        imbalanceAskPercent == null ||
+        imbalanceBidPercent == null ||
+        order_price_round == null;
+
+    if (missing) {
+        const msg = `❌ ${symbol ?? "UNKNOWN"} core thiếu field: ${JSON.stringify(core)}`;
+        return { errString: msg, qualified: false, result: null };
+    }
+
+    const isSpread = isSpreadPercent(spreadPercent, settingUser.minSpreadPercent, settingUser.maxSpreadPercent);
+    const isDepth = isDepthCalc(askSumDepth, bidSumDepth, settingUser.maxDepth);
+
+    const sizeStr = handleSize(whitelistItem, settingUser.inputUSDT);
+    const isSize = checkSize(sizeStr);
+
+    // const isLong = imbalanceBidPercent > settingUser.ifImbalanceBidPercent;
+    // const isShort = imbalanceAskPercent > settingUser.ifImbalanceAskPercent;
+
+    const isLong = handleIsLong(lastPriceGate, lastPriceBinance);
+    const isShort = handleIsShort(lastPriceGate, lastPriceBinance);
+
+    const side = isLong ? "long" : isShort ? "short" : null;
+
+    const qualified = isSpread && isDepth && isSize && !!side;
+
+    return {
+        errString: null,
+        qualified,
+        result: {
+            // cả 2 đều cần
+            symbol,
+            sizeStr,
+            side,
+
+            // cho bot worker
+            askBest,
+            bidBest,
+            order_price_round,
+
+            // cho component whitelist
+            core,
+            isDepth,
+            isLong,
+            isShort,
+            isSize,
+            isSpread,
+        },
+    };
 }

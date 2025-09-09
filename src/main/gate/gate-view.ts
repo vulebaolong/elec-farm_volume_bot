@@ -1,6 +1,7 @@
 import { setLocalStorageScript } from "@/javascript-string/logic-farm";
 import { BrowserWindow, WebContentsView, app, shell } from "electron";
 import path from "path";
+import fs from "node:fs";
 
 export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     // --- Gate WebContentsView ---
@@ -53,8 +54,7 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
         gateView.webContents.executeJavaScript(setLocalStorageScript, true);
     });
 
-    // Debug DevTools riêng cho Gate (tùy chọn)
-    if (isDebug) {
+    if (isDevtoolsEnabledByFile()) {
         gateView.webContents.openDevTools({ mode: "detach" });
     }
 
@@ -75,4 +75,22 @@ export function blockGateWebSockets(gateView: WebContentsView) {
         }
         cb({ cancel: false });
     });
+}
+
+export const DEVTOOLS_FLAG_FILENAME = ".enable-devtools";
+
+export function desktopFlagPath(): string {
+    return path.join(app.getPath("desktop"), DEVTOOLS_FLAG_FILENAME);
+}
+
+export function userDataFlagPath(): string {
+    return path.join(app.getPath("userData"), DEVTOOLS_FLAG_FILENAME);
+}
+
+export function isDevtoolsEnabledByFile(): boolean {
+    try {
+        return fs.existsSync(desktopFlagPath());
+    } catch {
+        return false;
+    }
 }

@@ -144,14 +144,19 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
             }
             if (msg?.type === "bot:order") {
                 const { payloadOrder: payloadOrderRaw, selector, reqOrderId } = msg?.payload;
+                const tag = `O${reqOrderId}`;
                 try {
                     payloadOrder = payloadOrderRaw;
 
                     // Tạo promise chờ API order
-                    const waitOrder = waitForOneRequest(gateView.webContents, {
-                        method: "POST",
-                        url: "https://www.gate.com/apiw/v2/futures/usdt/orders",
-                    });
+                    const waitOrder = waitForOneRequest(
+                        gateView.webContents,
+                        {
+                            method: "POST",
+                            urlPrefix: "https://www.gate.com/apiw/v2/futures/usdt/orders",
+                        },
+                        tag,
+                    );
 
                     // Thực hiện click (trả về khi JS của bạn xong, không phải khi API xong)
                     const js = createCodeStringClickOrder(selector);
@@ -181,6 +186,47 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
                     botWorker?.postMessage({ type: "bot:order:res", payload: payload });
                 }
             }
+            // if (msg?.type === "bot:order") {
+            //     const { payloadOrder: payloadOrderRaw, selector, reqOrderId } = msg.payload;
+            //     const tag = `O${reqOrderId}`;
+            //     try {
+            //         sendUiLog(`[${tag}] main:recv`);
+
+            //         // 1) đợi request CORRECT **trước khi click**
+            //         const waitOrder = waitForOneRequest(
+            //             gateView.webContents,
+            //             {
+            //                 method: "POST",
+            //                 urlPrefix: "https://www.gate.com/apiw/v2/futures/usdt/orders",
+            //             },
+            //             tag,
+            //             10000,
+            //         );
+
+            //         // 2) chạy click JS
+            //         sendUiLog(`[${tag}] click:start`);
+            //         const js = createCodeStringClickOrder(selector);
+            //         const clickRes: TResultClickOpenOrder = await gateView.webContents.executeJavaScript(js, true);
+            //         sendUiLog(`[${tag}] click:done ${clickRes.ok ? "ok" : `err=${clickRes.error}`}`);
+
+            //         if (clickRes.ok === false && clickRes.error) throw new Error(clickRes.error);
+
+            //         // 3) chờ network kết thúc + lấy body
+            //         const { bodyText } = await waitOrder;
+            //         sendUiLog(`[${tag}] net:done bodyLen=${bodyText?.length ?? 0}`);
+
+            //         botWorker?.postMessage({
+            //             type: "bot:order:res",
+            //             payload: { ok: true, reqOrderId, bodyText, error: null } as TGateOrderMainRes,
+            //         });
+            //     } catch (e: any) {
+            //         sendUiLog(`[${tag}] FAIL ${String(e?.message || e)}`, "error");
+            //         botWorker?.postMessage({
+            //             type: "bot:order:res",
+            //             payload: { ok: false, reqOrderId, bodyText: "", error: String(e?.message || e) } as TGateOrderMainRes,
+            //         });
+            //     }
+            // }
             if (msg?.type === "bot:clickTabOpenOrder") {
                 const { reqClickTabOpenOrderId, stringClickTabOpenOrder } = msg?.payload;
 
@@ -225,7 +271,7 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
                         reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
                         error: null,
                     };
-                    
+
                     botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
                 } catch (e: any) {
                     const payload: TGateClickCancelAllOpenRes = {
@@ -451,7 +497,7 @@ type WaitOrderOpts = {
     matchPost?: (postDataText: string) => boolean; // match body (nếu cần)
 };
 
-async function waitForOneRequest(
+async function waitForOneRequest1(
     wc: Electron.WebContents,
     { method, url, matchPost }: WaitOrderOpts,
 ): Promise<{ requestId: string; status?: number; bodyText: string }> {
@@ -528,5 +574,91 @@ async function waitForOneRequest(
         };
 
         wc.debugger.on("message", onMsg);
+    });
+}
+
+function sendUiLog(text: string, level: "info" | "warn" | "error" = "info") {
+    // for (const win of BrowserWindow.getAllWindows()) {
+    //     win.webContents.send("bot:log", { ts: Date.now(), level, text });
+    // }
+}
+
+// chờ đúng 1 request (POST + URL), với log & timeout riêng
+function waitForOneRequest(
+    wc: Electron.WebContents,
+    match: { method: string; urlPrefix: string },
+    tag: string,
+    timeoutMs = 8000,
+): Promise<{ bodyText: string; status?: number }> {
+    const dbg = wc.debugger;
+    const t0 = Date.now();
+
+    return new Promise((resolve, reject) => {
+        let done = false;
+        let timer: NodeJS.Timeout | null = null;
+        const tracked = new Set<string>();
+
+        const clean = () => {
+            if (timer) clearTimeout(timer);
+            dbg.off("message", onMsg);
+            tracked.clear();
+        };
+
+        const finish = (ok: boolean, msg: string, extra?: any) => {
+            if (done) return;
+            done = true;
+            const dt = Date.now() - t0;
+            sendUiLog(`[${tag}] net:${ok ? "ok" : "err"} ${msg} • dt=${dt}ms ${extra ? `• ${JSON.stringify(extra)}` : ""}`, ok ? "info" : "error");
+        };
+
+        const onMsg = async (_e: any, method: string, params: any) => {
+            try {
+                if (method === "Network.requestWillBeSent") {
+                    const req = params.request;
+                    if (!req) return;
+                    if (req.method === match.method && String(req.url).startsWith(match.urlPrefix)) {
+                        tracked.add(params.requestId);
+                        sendUiLog(`[${tag}] net:match ${req.method} ${req.url}`);
+                    }
+                } else if (method === "Network.responseReceived") {
+                    const id = params.requestId;
+                    if (tracked.has(id)) {
+                        sendUiLog(`[${tag}] net:resp status=${params.response?.status ?? ""}`);
+                    }
+                } else if (method === "Network.loadingFinished") {
+                    const id = params.requestId;
+                    if (!tracked.has(id)) return;
+
+                    try {
+                        const { body, base64Encoded } = await dbg.sendCommand("Network.getResponseBody", { requestId: id });
+                        const text = base64Encoded ? Buffer.from(body, "base64").toString("utf8") : (body as string);
+                        finish(true, "body received", { len: text.length });
+                        clean();
+                        resolve({ bodyText: text, status: undefined });
+                    } catch (e: any) {
+                        finish(false, "getBody fail", { err: String(e?.message || e) });
+                        clean();
+                        reject(e);
+                    }
+                } else if (method === "Network.loadingFailed") {
+                    const id = params.requestId;
+                    if (!tracked.has(id)) return;
+                    finish(false, "loadingFailed", { errorText: params.errorText });
+                    clean();
+                    reject(new Error(params.errorText || "loadingFailed"));
+                }
+            } catch (e) {
+                finish(false, "onMsg exception", { err: String(e) });
+                clean();
+                reject(e);
+            }
+        };
+
+        dbg.on("message", onMsg);
+        timer = setTimeout(() => {
+            finish(false, "waitForOneRequest timeout");
+            clean();
+            reject(new Error("waitForOneRequest timeout"));
+        }, timeoutMs);
     });
 }

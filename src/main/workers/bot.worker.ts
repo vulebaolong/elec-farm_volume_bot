@@ -27,7 +27,7 @@ import { TUiSelector } from "@/types/ui-selector.type";
 import { TWorkerData } from "@/types/worker.type";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
-import { checkSize, handleSize, isDepthCalc, isSpreadPercent } from "./util-bot.worker";
+import { checkSize, handleEntryCheckAll, handleIsLong, handleIsShort, handleSize, isDepthCalc, isSpreadPercent } from "./util-bot.worker";
 import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
 import { TSide } from "@/types/base.type";
 import { TGetInfoContractRes } from "@/types/contract.type";
@@ -143,17 +143,22 @@ class Bot {
                     if (isRefreshed_2_CLEAR_OPEN === false) await this.refreshSnapshot("Create Open");
                     if (this.isCheckwhitelistEntryEmty() && this.isCheckMaxOpenPO()) {
                         for (const whitelistItem of Object.values(this.whitelistEntry)) {
+                            await this.refreshSnapshot("Create Open");
+                            isRefreshed_3_CREATE_OPEN = true;
+
                             const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
 
                             // nếu đã max thì không vào thoát vòng lặp
                             if (!this.isCheckMaxOpenPO()) {
                                 this.log(`Create Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
+                                this.sendLogUi(`Create Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
                                 break;
                             }
 
                             // nếu symbol đó đã tồn tại trong orderOpens -> bỏ qua
                             if (this.isOrderExitsByContract(symbol)) {
                                 this.log(`Create Open: skip ${symbol} (already exists)`);
+                                this.sendLogUi(`Create Open: skip ${symbol} (already exists)`);
                                 continue;
                             }
 
@@ -182,13 +187,10 @@ class Bot {
                                     continue;
                                 }
                             }
-                            isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
 
+                            isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
                             this.log("✅ Create Open: done for symbol", symbol);
                         }
-                        
-                        await this.refreshSnapshot("Create Open");
-                        isRefreshed_3_CREATE_OPEN = true;
                     } else {
                         this.log(`Create Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
                     }
@@ -249,6 +251,8 @@ class Bot {
             for (const p of payloads) {
                 // console.log("Create close order:", p);
                 try {
+                    const ok = await this.changeLeverage(p.contract.replace("/", "_"), this.settingUser.leverage);
+                    if (!ok) continue;
                     await this.openEntry(p, `TP: Close`);
                 } catch (error: any) {
                     this.sendLogUi(`${error.message}`, "error");
@@ -390,6 +394,7 @@ class Bot {
         await this.refreshOrderOpens(ctx);
         await this.refreshPositions(ctx);
         this.log(`✅ ${ctx}: snapshot updated`);
+        // this.sendLogUi(`✅ ${ctx}: snapshot updated`);
     }
 
     private seq = 0;
@@ -552,17 +557,24 @@ class Bot {
         const reqOrderId = ++this.seqOrder;
         const port = this.parentPort!;
 
+        const tag = `O${reqOrderId}`; // nhãn theo dõi trong log
+        const t0 = Date.now();
+
+        // this.sendLogUi(`[${tag}] start order ${payload.contract} size=${payload.size} price=${payload.price}`);
+
         return new Promise<TOrderWorkRes<T>>((resolve) => {
             let settled = false;
             let timer: NodeJS.Timeout;
 
-            const done = (r: TFectWorkRes<T>) => {
+            const done = (r: TFectWorkRes<T>, note?: string) => {
                 if (settled) return;
                 settled = true;
                 clearTimeout(timer);
                 try {
                     port.off("message", onMsg);
                 } catch {}
+                const dt = Date.now() - t0;
+                // if (note) this.sendLogUi(`[${tag}] ${note} • dt=${dt}ms`, r.ok ? "info" : "error");
                 resolve(r);
             };
 
@@ -572,18 +584,18 @@ class Bot {
                     if (m.payload?.reqOrderId !== reqOrderId) return;
 
                     const p: TGateOrderMainRes = m.payload;
-                    if (!p.ok) return done({ ok: false, body: null, error: p.error || "Order failed" });
+                    if (!p.ok) return done({ ok: false, body: null, error: p.error || "Order failed" }, "main→order:res !ok");
 
                     let parsed: T;
                     try {
                         parsed = JSON.parse(p.bodyText) as T;
                     } catch (e) {
-                        return done({ ok: false, body: null, error: `Invalid JSON from Order: ${String(e)}` });
+                        return done({ ok: false, body: null, error: `Invalid JSON from Order: ${String(e)}` }, "parse:fail");
                     }
 
                     return done({ ok: true, body: parsed, error: null });
                 } catch (e) {
-                    return done({ ok: false, body: null, error: `Order handler error: ${String(e)}` });
+                    return done({ ok: false, body: null, error: `Order handler error: ${String(e)}` }, "handler:error");
                 }
             };
 
@@ -592,7 +604,7 @@ class Bot {
 
             // 2) timeout RPC (phòng main không hồi)
             timer = setTimeout(() => {
-                done({ ok: false, body: null, error: "Order rpc timeout" });
+                done({ ok: false, body: null, error: "Order rpc timeout" }, "timeout");
             }, timeoutMs);
 
             const data: TWorkerData<TDataOrder> = {
@@ -603,6 +615,8 @@ class Bot {
                     selector: dataSelector,
                 },
             };
+
+            // this.sendLogUi(`[${tag}] post to main`);
 
             // 3) gửi sau
             port.postMessage(data);
@@ -775,58 +789,23 @@ class Bot {
         this.whitelistEntry = []; // cho bot
 
         for (const whitelistItem of whiteListArr) {
-            const { core, contractInfo } = whitelistItem;
-            const { askBest, askSumDepth, bidBest, bidSumDepth, imbalanceAskPercent, imbalanceBidPercent, lastPrice, spreadPercent, symbol } =
-                core ?? {};
+            const { errString, qualified, result } = handleEntryCheckAll({
+                whitelistItem,
+                settingUser: this.settingUser,
+            });
 
-            const { order_price_round } = contractInfo;
-
-            const missing =
-                !symbol ||
-                spreadPercent == null ||
-                bidSumDepth == null ||
-                askSumDepth == null ||
-                lastPrice == null ||
-                imbalanceAskPercent == null ||
-                imbalanceBidPercent == null ||
-                order_price_round == null;
-
-            if (missing) {
-                const msg = `❌ ${symbol ?? "UNKNOWN"} core thiếu field: ${JSON.stringify(core)}`;
-                this.log(msg);
-                this.sendLogUi(msg, "error");
+            if (errString) {
+                this.log(errString);
+                this.sendLogUi(errString, "error");
                 continue;
-            }
-
-            const isSpread = isSpreadPercent(spreadPercent, this.settingUser.minSpreadPercent, this.settingUser.maxSpreadPercent);
-            const isDepth = isDepthCalc(askSumDepth, bidSumDepth, this.settingUser.maxDepth);
-
-            const sizeStr = handleSize(whitelistItem, this.settingUser.inputUSDT);
-            const isSize = checkSize(sizeStr);
-
-            const isLong = imbalanceBidPercent > this.settingUser.ifImbalanceBidPercent;
-            const isShort = imbalanceAskPercent > this.settingUser.ifImbalanceAskPercent;
-            const side = isLong ? "long" : isShort ? "short" : null;
-
-            const qualified = isSpread && isDepth && isSize && !!side;
-            // console.log({
-            //     symbol,
-            //     qualified,
-            //     side,
-            //     isSpread,
-            //     isDepth,
-            //     isSize,
-            // });
-
-            // Thu thập cho bot nếu đủ điều kiện
-            if (qualified && side) {
+            } else if (qualified && result && result.side) {
                 this.whitelistEntry.push({
-                    symbol,
-                    sizeStr,
-                    side,
-                    askBest,
-                    bidBest,
-                    order_price_round,
+                    symbol: result.symbol,
+                    sizeStr: result.sizeStr,
+                    side: result.side,
+                    askBest: result.askBest,
+                    bidBest: result.bidBest,
+                    order_price_round: result.order_price_round,
                 });
             }
         }
@@ -1085,11 +1064,9 @@ class Bot {
     }
 
     private isCheckMaxOpenPO() {
-        if (this.getLengthOrderInOrderOpensAndPosition() >= this.settingUser.maxTotalOpenPO) {
-            this.log(`Đã đạt giới hạn maxTotalOpenPO >= không xử lý whitelistEntry`, {
-                maxTotalOpenPO: this.settingUser.maxTotalOpenPO,
-                lengthOrderInOrderOpensAndPosition: this.getLengthOrderInOrderOpensAndPosition(),
-            });
+        const lengthOrderInOrderOpensAndPosition = this.getLengthOrderInOrderOpensAndPosition();
+        // this.sendLogUi(`isCheckMaxOpenPO:  ${lengthOrderInOrderOpensAndPosition} | ${this.settingUser.maxTotalOpenPO}`);
+        if (lengthOrderInOrderOpensAndPosition >= this.settingUser.maxTotalOpenPO) {
             return false;
         }
         return true;

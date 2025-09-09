@@ -23,7 +23,8 @@ export const setLocalStorageScript = `
     "future_no_noty_trail": "false",
     "future_no_noty_trans_prompt": "false",
     "future_no_noty_trigger_reverse": "false",
-    "future_no_noty_twap": "false"
+    "future_no_noty_twap": "false",
+    "future_clear_amount_after_order": 0
   };
 
   const notMatched = Object.entries(desiredSettings).filter(
@@ -74,20 +75,17 @@ window.state = Object.assign(window.state || {}, {...window.state, symbol: '${pa
       // clear input
       nativeInputValueSetter?.call(input, '');
 
-      await sleep(100)
 
       // set value
       nativeInputValueSetter?.call(input, window.state.amount);
       log.push({ message: 'Set input value', data: window.state.amount });
       console.info({ message: 'Set input value', data: window.state.amount });
 
-      await sleep(50)
 
       input.dispatchEvent(new Event('input', { bubbles: true }));
       log.push({ message: 'Input value', data: input.value });
       console.info({ message: 'Input value', data: input.value });
 
-      await sleep(100)
 
       const btn = document.querySelector('${payload.selector.buttonLong}');
       if (!btn) {
@@ -445,7 +443,7 @@ export const createCodeStringGetBidsAsks = (contract: string, limit: number | un
 export const createCodeStringClickOrder = (selector: TUiSelectorOrder) => {
     return `
 (async () => {
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  // const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   let log = [];
 
   // hàm set value an toàn cho input controlled (React/Vue)
@@ -471,21 +469,19 @@ export const createCodeStringClickOrder = (selector: TUiSelectorOrder) => {
 
     // --- set PRICE ---
     inputPrice.focus();
-    // clear
-    setValue(inputPrice, '');
-    // set price
-    setValue(inputPrice, '100');
+    
+    // setValue(inputPrice, ''); // clear
+    
+    setValue(inputPrice, '100'); // set price
     log.push({ message: 'Set inputPrice value', data: '100' });
 
     // --- set AMOUNT/POSITION ---
     inputPosition.focus();
-    // clear
-    setValue(inputPosition, '');
-    // set amount
-    setValue(inputPosition, '1');
+    
+    // setValue(inputPosition, ''); // clear
+    
+    setValue(inputPosition, '1'); // set amount
     log.push({ message: 'Set inputPosition value', data: '1' });
-
-    await sleep(200);
 
     // --- click BUY ---
     btn.removeAttribute('disabled');

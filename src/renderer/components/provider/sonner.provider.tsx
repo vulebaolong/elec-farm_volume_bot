@@ -11,7 +11,7 @@ export default function SonnerProvider({ children }: TProps) {
     return (
         <>
             {children}
-            <Toaster theme={theme} richColors />
+            <Toaster theme={theme} richColors position="top-right" />
         </>
     );
 }

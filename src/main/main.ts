@@ -5,9 +5,8 @@ import log from "electron-log";
 import { autoUpdater } from "electron-updater";
 import { pathToFileURL } from "node:url";
 import path from "path";
-import { blockGateWebSockets, initGateView } from "./gate/gate-view";
+import { initGateView } from "./gate/gate-view";
 import MenuBuilder from "./menu";
-import { registerMetricsIPC } from "./metrics";
 import { setupUpdaterIPC } from "./updater";
 import { resolveHtmlPath } from "./util";
 import { initBot } from "./workers/init.worker";
@@ -90,7 +89,7 @@ const createWindow = async () => {
 
     setupUpdaterIPC();
     // registerMetricsIPC();
-    const gateView = await initGateView(mainWindow, isDebug);
+    const gateView = initGateView(mainWindow, isDebug);
     // blockGateWebSockets(gateView);
     initBot(mainWindow, gateView);
 
