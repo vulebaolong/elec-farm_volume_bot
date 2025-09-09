@@ -46,11 +46,18 @@ export const useInitData = () => {
         };
         socket.on("entry", handleEntry);
 
+        const handleCheckLogin = ({ data }: TSocketRes<TWhiteList>) => {
+            console.log({ handleEntry: data });
+            getInfoMutation.mutate();
+        };
+        socket.on("check-login", handleCheckLogin);
+
         return () => {
             socket.off("setting-system", handleSettingSystem);
             socket.off("white-list-reset-in-progress", handleBlockEntryDuringWhitelistReset);
             socket.off("setting-user", handleSettingUser);
             socket.off("entry", handleEntry);
+            socket.off("check-login", handleCheckLogin);
         };
     }, [socket]);
 

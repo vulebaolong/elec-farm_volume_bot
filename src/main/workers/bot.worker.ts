@@ -24,7 +24,7 @@ import { TOrderOpen } from "@/types/order.type";
 import { TPosition } from "@/types/position.type";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TUiSelector } from "@/types/ui-selector.type";
-import { TWorkerData } from "@/types/worker.type";
+import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { checkSize, handleEntryCheckAll, handleIsLong, handleIsShort, handleSize, isDepthCalc, isSpreadPercent } from "./util-bot.worker";
@@ -86,7 +86,6 @@ class Bot {
         this.uiSelector = dataInitBot.uiSelector;
 
         this.run();
-        this.isReady();
     }
 
     private async run() {
@@ -101,6 +100,8 @@ class Bot {
                 this.beforeEach();
 
                 if (this.isStart) {
+                    this.setWhitelistEntry();
+
                     let isRefreshed_1_CREATE_CLOSE = false;
                     let isRefreshed_2_CLEAR_OPEN = false;
                     let isRefreshed_3_CREATE_OPEN = false;
@@ -233,14 +234,6 @@ class Bot {
         }
     }
 
-    private isReady() {
-        const data: TWorkerData<{ isReady: boolean }> = {
-            type: "bot:isReady",
-            payload: { isReady: true },
-        };
-        this.parentPort?.postMessage(data);
-    }
-
     private async createTPClose(isRefreshed_1_CREATE_CLOSE: boolean) {
         // ===== 1) CREATE TP CLOSE =====
         this.log("🩵🩵🩵🩵🩵 Create TP Close");
@@ -273,19 +266,19 @@ class Bot {
     }
 
     private beforeEach() {
-        this.parentPort?.postMessage({
+        this.heartbeat();
+    }
+
+    private heartbeat() {
+        const payload: TWorkerData<TWorkerHeartbeat> = {
             type: "bot:heartbeat",
             payload: {
                 ts: Date.now(),
                 isStart: this.isStart,
+                isRunning: this.running,
             },
-        });
-
-        // this.parentPort?.postMessage({ type: "bot:metrics", payload: snapshotWorkerMetrics() });
-
-        this.setWhitelistEntry();
-
-        // this.sendLogUi(`count: ${this.count}`);
+        };
+        this.parentPort?.postMessage(payload);
     }
 
     handleEvent(msg: any) {

@@ -19,6 +19,8 @@ import { useAppSelector } from "@/redux/store";
 import { GalleryVerticalEnd } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Version from "../dialog/version";
+import { useSocket } from "@/hooks/socket.hook";
+import { useEffect } from "react";
 
 export const validatePassword = [
     { re: /[0-9]/, label: "Includes number." },
@@ -62,7 +64,6 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                 setAccessToken(data.data.accessToken);
                 setRefreshToken(data.data.refreshToken);
                 navigate(ROUTER.HOME);
-                // toast.success(`Login successfully`);
             },
         });
     }

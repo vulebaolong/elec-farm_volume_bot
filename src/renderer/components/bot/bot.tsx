@@ -1,6 +1,7 @@
 import { BotIcon } from "lucide-react";
 import { PageTitle } from "../title-page/title-page";
 import Controll from "./controll";
+import Ripple from "./ripple";
 
 export default function Bot() {
     // const saveAccount = useSaveAccount();
@@ -86,7 +87,15 @@ export default function Bot() {
 
     return (
         <div className="">
-            <PageTitle title="Bot" icon={BotIcon} size="md" />
+            <PageTitle
+                title={
+                    <span className="flex items-center gap-3 text-2xl font-bold">
+                        Bot <Ripple />
+                    </span>
+                }
+                icon={BotIcon}
+                size="md"
+            />
 
             <div className="flex flex-col gap-5 h-full pb-80">
                 {/* <GateDockPanel /> */}

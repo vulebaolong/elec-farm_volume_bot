@@ -19,77 +19,93 @@ type TProps = {
 
 export default function SocketProvider({ children }: TProps) {
     const socketRef = useRef<Socket | null>(null);
-    const prevKeyRef = useRef<string | number | undefined>(undefined);
     const [isConnected, setIsConnected] = useState(false);
-    const info = useAppSelector((s) => s.user.info);
+    const info = useAppSelector((state) => state.user.info);
+    const handleRefreshToken = useRefreshToken();
 
-    const userKey = info?.id; // chỉ init khi đã có user
-    const token = getAccessToken(); // hoặc lấy từ store nếu bạn lưu ở đó
+    const initSocket = async () => {
+        if (!info) return;
 
-    useEffect(() => {
-        // Chưa có user hoặc token -> chưa init
-        if (!userKey || !token) return;
-
-        // Nếu cùng userKey và đã có socket -> không re-init
-        if (prevKeyRef.current === userKey && socketRef.current) return;
-
-        // Teardown instance cũ nếu có (user đổi)
+        // Nếu socket cũ còn tồn tại, ngắt kết nối và xoá
         if (socketRef.current) {
             socketRef.current.disconnect();
             socketRef.current = null;
         }
 
-        // Init mới
+        console.log("🔌 Initializing socket...");
+        const accessToken =  getAccessToken();
         const socket = io(BASE_DOMAIN, {
-            auth: { token },
+            auth: { token: accessToken },
             transports: ["websocket", "polling"],
         });
-        socketRef.current = socket;
-        prevKeyRef.current = userKey;
 
-        const onConnect = () => {
-          console.log(`✅ Connected: ${socket.id}`);
-          setIsConnected(true);
-        }
-        const onDisconnect = () => {
-          console.log(`❌ Disconnected: ${socket.id}`);
-          setIsConnected(false)
-        };
-        const onConnectError = async (err: any) => {
+        socketRef.current = socket;
+
+        socket.on("connect", () => {
+            console.log(`✅ Connected: ${socket.id}`);
+            setIsConnected(true);
+        });
+
+        socket.on("disconnect", () => {
+            console.log("❌ Disconnected");
+            setIsConnected(false);
+        });
+
+        socket.on("connect_error", async (err: any) => {
+            // err.message: 'NO_TOKEN' | 'TOKEN_EXPIRED' | 'INVALID_TOKEN' | 'USER_NOT_FOUND'
             console.warn("connect_error:", err.message);
+
             switch (err.message) {
-                case "TOKEN_EXPIRED": {
-                    const rt = getRefreshToken();
-                    const at = getAccessToken();
-                    if (!rt || !at) return logOut();
-                    // ... gọi refresh, xong thì:
-                    // socket.auth = { token: getAccessToken() };
-                    // socket.connect(); // thử reconnect thay vì tạo socket mới
+                case "TOKEN_EXPIRED":
+                    const refreshToken = getRefreshToken();
+                    const accessToken = getAccessToken();
+
+                    if (!refreshToken || !accessToken) {
+                        logOut();
+                        return;
+                    }
+                    const payload: TRefreshTokenReq = {
+                        refreshToken,
+                        accessToken,
+                    };
+
+                    handleRefreshToken.mutate(payload, {
+                        onSuccess: () => {
+                            console.log("🔄 Token refreshed. Reinitializing socket...");
+                            initSocket(); // 🔁 Đệ quy khởi động lại
+                        },
+                        onError: () => {
+                            logOut();
+                        },
+                    });
                     break;
-                }
+
                 case "INVALID_TOKEN":
+                    logOut();
+                    break;
+
                 case "USER_NOT_FOUND":
+                    logOut();
+                    break;
+
                 default:
                     logOut();
+                    break;
             }
-        };
+        });
+    };
 
-        socket.on("connect", onConnect);
-        socket.on("disconnect", onDisconnect);
-        socket.on("connect_error", onConnectError);
+    useEffect(() => {
+        initSocket();
 
         return () => {
-            // cleanup đúng listener
-            socket.off("connect", onConnect);
-            socket.off("disconnect", onDisconnect);
-            socket.off("connect_error", onConnectError);
-            socket.disconnect();
-            socketRef.current = null;
+            if (socketRef.current) {
+                console.log("🔌 Closing socket...");
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
         };
-    }, [userKey, token]);
+    }, [info?.id]);
 
-    // Tránh tạo object mới mỗi render
-    const value = useMemo<SocketContextType>(() => ({ socket: socketRef.current, isConnected }), [isConnected]);
-
-    return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
+    return <SocketContext.Provider value={{ socket: socketRef.current, isConnected }}>{children}</SocketContext.Provider>;
 }

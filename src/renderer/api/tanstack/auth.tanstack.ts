@@ -1,8 +1,7 @@
 import { ENDPOINT } from "@/constant/endpoint.constant";
-import { ROUTER } from "@/constant/router.constant";
 import { resError } from "@/helpers/function.helper";
-import { navigateTo } from "@/helpers/navigate.helper";
 import { SET_INFO } from "@/redux/slices/user.slice";
+import { useAppDispatch } from "@/redux/store";
 import { TRes } from "@/types/app.type";
 import { TLoginReq, TLoginRes, TRefreshTokenReq, TRefreshTokenRes } from "@/types/login.type";
 import { TRegisterReq } from "@/types/register.type";
@@ -11,7 +10,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { logOut, setAccessToken, setRefreshToken } from "../auth/app.auth";
 import api from "../axios/app.axios";
-import { useAppDispatch } from "@/redux/store";
 
 export const useGetInfoMutation = () => {
     const dispatch = useAppDispatch();
@@ -47,12 +45,19 @@ export const useGetInfoQuery = () => {
                 dispatch(SET_INFO(data.data));
                 // console.log({ useGetInfoQuery: data });
                 return data;
-            } catch (error) {
-                navigateTo(ROUTER.LOGIN);
+            } catch (error: any) {
                 console.log({ useGetInfoQuery: error });
+
+                // Nếu 403 thì không logout (có thể đang chờ refresh)
+                if (error?.response?.status === 403) return;
+
+                // Các lỗi khác thì logout
+                logOut();
+
                 return null;
             }
         },
+        refetchInterval: 1000,
     });
 };
 

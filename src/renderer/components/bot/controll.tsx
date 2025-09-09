@@ -1,40 +1,28 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { SET_IS_START } from "@/redux/slices/bot.slice";
+import { ADD_RIPPLE, SET_IS_RUNNING, SET_IS_START } from "@/redux/slices/bot.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
-import { useEffect, useState } from "react";
-import { StickyPanel } from "../log-ui/sticky-panel";
+import { Play, Square } from "lucide-react";
+import { useEffect } from "react";
 import LogsPane from "../terminal-log/log-pane";
 import PassiveSticky from "../terminal-log/passive-sticky";
-import { Play, Square } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 type TProps = {};
 
 export default function Controll({}: TProps) {
-    const [isReady, setIsReady] = useState<boolean>(false);
     const isStart = useAppSelector((state) => state.bot.isStart);
+    const isRunning = useAppSelector((state) => state.bot.isRunning);
     const dispatch = useAppDispatch();
-    const [ripples, setRipples] = useState<number[]>([]);
 
     const start = () => window.electron?.ipcRenderer.sendMessage("bot:start");
     const stop = () => window.electron?.ipcRenderer.sendMessage("bot:stop");
 
     useEffect(() => {
-        const offBotIsReady = window.electron.ipcRenderer.on("bot:isReady", (data: TWorkerData<{ isReady: boolean }>) => {
-            setIsReady(data.payload.isReady);
-        });
-
         const offBotHearbeat = window.electron.ipcRenderer.on("bot:heartbeat", (data: TWorkerData<TWorkerHeartbeat>) => {
-            if (isReady && isStart) {
-                const id = Date.now();
-                setRipples((prev) => [...prev, id]);
-                // dọn ripple sau khi kết thúc animation (match với duration ~600ms)
-                setTimeout(() => {
-                    setRipples((prev) => prev.filter((x) => x !== id));
-                }, 700);
-            }
+            dispatch(SET_IS_START(data.payload.isStart));
+            dispatch(SET_IS_RUNNING(data.payload.isRunning));
+            dispatch(ADD_RIPPLE(undefined));
         });
 
         const offBotStart = window.electron.ipcRenderer.on("bot:start", (data: TWorkerData<{ isStart: boolean }>) => {
@@ -46,12 +34,11 @@ export default function Controll({}: TProps) {
         });
 
         return () => {
-            offBotIsReady();
             offBotHearbeat();
             offBotStart();
             offBotStop();
         };
-    }, [isReady, isStart, dispatch]);
+    }, [isRunning, isStart, dispatch]);
 
     return (
         <div className="px-5 sticky top-0 z-[1]">
@@ -66,7 +53,7 @@ export default function Controll({}: TProps) {
                             {/* START */}
                             <Button
                                 size="sm"
-                                disabled={!isReady || isStart}
+                                disabled={!isRunning || isStart}
                                 onClick={start}
                                 className={[
                                     "group relative h-9 rounded-xl px-3",
@@ -79,17 +66,12 @@ export default function Controll({}: TProps) {
                             >
                                 <Play className="h-4 w-4" />
                                 Start
-                                <div className={cn("pulse-dot w-[10px] h-[10px]", isReady && isStart ? "bg-green-400" : "bg-green-500")}>
-                                    {ripples.map((id) => (
-                                        <div key={id} className="pulse-ring bg-green-500" style={{ width: `20px`, height: `20px` }} />
-                                    ))}
-                                </div>
                             </Button>
 
                             {/* STOP */}
                             <Button
                                 size="sm"
-                                disabled={!isReady || !isStart}
+                                disabled={!isRunning || !isStart}
                                 onClick={stop}
                                 className={[
                                     "group relative h-9 rounded-xl px-3",

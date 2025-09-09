@@ -6,4 +6,5 @@ export type TWorkerData<T> = {
 export type TWorkerHeartbeat = {
     ts: number;
     isStart: boolean;
+    isRunning: boolean;
 };

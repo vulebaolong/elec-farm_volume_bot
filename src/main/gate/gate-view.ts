@@ -26,6 +26,7 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     const L_PANEL = 600; // px: độ rộng panel trái cho UI của bạn
     const x = 900;
     const H_PANEL = 470;
+
     const layoutGateView = () => {
         if (!mainWindow) return;
         const { width, height } = mainWindow.getContentBounds();
@@ -36,8 +37,6 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
             height: Math.max(0, height - H_PANEL),
         });
     };
-
-    // gọi lần đầu & gắn listener resize
     layoutGateView();
     mainWindow.on("resize", layoutGateView);
 
