@@ -1,4 +1,5 @@
 import { TSide } from "@/types/base.type";
+import { EntrySignalMode } from "@/types/enum/entry-signal-mode.enum";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TCore, TWhiteListItem } from "@/types/white-list.type";
 
@@ -57,12 +58,32 @@ export function checkSize(size: string | null | undefined): boolean {
     return /^[1-9]\d*$/.test(s);
 }
 
-export function handleIsLong(lastPriceGate: number, lastPriceBinance: number): boolean {
-    return lastPriceGate < lastPriceBinance;
+const percentToFraction = (pct: number) => (Number.isFinite(pct) && pct >= 0 ? pct / 100 : 0);
+
+export function handleGapForLong(lastPriceGate: number, lastPriceBinance: number, lastPriceGapGateAndBinancePercent: number): boolean {
+    if (!(lastPriceGate > 0) || !(lastPriceBinance > 0)) return false;
+    const gap = percentToFraction(lastPriceGapGateAndBinancePercent);
+    return lastPriceBinance <= lastPriceGate * (1 - gap);
 }
 
-export function handleIsShort(lastPriceGate: number, lastPriceBinance: number): boolean {
-    return lastPriceGate > lastPriceBinance;
+export function handleGapForShort(lastPriceGate: number, lastPriceBinance: number, lastPriceGapGateAndBinancePercent: number): boolean {
+    if (!(lastPriceGate > 0) || !(lastPriceBinance > 0)) return false;
+    const gap = percentToFraction(lastPriceGapGateAndBinancePercent);
+    return lastPriceBinance >= lastPriceGate * (1 + gap);
+}
+
+// (tuỳ chọn) tiện debug: % chênh Binance vs Gate (dựa trên Gate)
+export function gapPercentBinanceVsGate(lastPriceGate: number, lastPriceBinance: number): number {
+    if (!(lastPriceGate > 0) || !(lastPriceBinance > 0)) return 0;
+    return ((lastPriceBinance - lastPriceGate) / lastPriceGate) * 100;
+}
+
+export function handleImBalanceBidForLong(imbalanceBidPercent: number, ifImbalanceBidPercent: number): boolean {
+    return imbalanceBidPercent > ifImbalanceBidPercent;
+}
+
+export function handleImBalanceAskForShort(imbalanceAskPercent: number, ifImbalanceAskPercent: number): boolean {
+    return imbalanceAskPercent > ifImbalanceAskPercent;
 }
 
 type THandleEntryCheckAll = {
@@ -90,6 +111,7 @@ type THandleEntryCheckAllRes = {
         isShort: boolean;
         isSize: boolean;
         isSpread: boolean;
+        gapPercentBiVsGate: number;
     } | null;
 };
 
@@ -136,8 +158,17 @@ export function handleEntryCheckAll({ whitelistItem, settingUser }: THandleEntry
     // const isLong = imbalanceBidPercent > settingUser.ifImbalanceBidPercent;
     // const isShort = imbalanceAskPercent > settingUser.ifImbalanceAskPercent;
 
-    const isLong = handleIsLong(lastPriceGate, lastPriceBinance);
-    const isShort = handleIsShort(lastPriceGate, lastPriceBinance);
+    const isLong =
+        settingUser.entrySignalMode === EntrySignalMode.GAP
+            ? handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent)
+            : handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
+
+    const isShort =
+        settingUser.entrySignalMode === EntrySignalMode.GAP
+            ? handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent)
+            : handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
+
+    const gapPercentBiVsGate = gapPercentBinanceVsGate(lastPriceGate, lastPriceBinance);
 
     const side = isLong ? "long" : isShort ? "short" : null;
 
@@ -164,6 +195,7 @@ export function handleEntryCheckAll({ whitelistItem, settingUser }: THandleEntry
             isShort,
             isSize,
             isSpread,
+            gapPercentBiVsGate,
         },
     };
 }

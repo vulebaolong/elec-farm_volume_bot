@@ -1,7 +1,12 @@
 // bot.worker.ts
 import { LogLevel } from "@/components/terminal-log/terminal-log";
-import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder, TOpenOrderPostOnly } from "@/javascript-string/logic-farm";
+import { BASE_URL } from "@/constant/app.constant";
+import { ENDPOINT } from "@/constant/endpoint.constant";
+import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder } from "@/javascript-string/logic-farm";
+import { TRes } from "@/types/app.type";
 import { TGateApiRes } from "@/types/base-gate.type";
+import { TSide } from "@/types/base.type";
+import { TBidsAsks } from "@/types/bids-asks.type";
 import {
     StickySetPayload,
     TChangeLeverage,
@@ -20,22 +25,17 @@ import {
     TPayloadOrder,
     TUiSelectorOrder,
 } from "@/types/bot.type";
+import { TGetInfoContractRes } from "@/types/contract.type";
 import { TOrderOpen } from "@/types/order.type";
 import { TPosition } from "@/types/position.type";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TUiSelector } from "@/types/ui-selector.type";
+import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
 import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
+import axios from "axios";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
-import { checkSize, handleEntryCheckAll, handleIsLong, handleIsShort, handleSize, isDepthCalc, isSpreadPercent } from "./util-bot.worker";
-import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
-import { TSide } from "@/types/base.type";
-import { TGetInfoContractRes } from "@/types/contract.type";
-import axios from "axios";
-import { TRes } from "@/types/app.type";
-import { BASE_URL } from "@/constant/app.constant";
-import { ENDPOINT } from "@/constant/endpoint.constant";
-import { TBidsAsks } from "@/types/bids-asks.type";
+import { handleEntryCheckAll } from "./util-bot.worker";
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 
@@ -267,6 +267,7 @@ class Bot {
 
     private beforeEach() {
         this.heartbeat();
+        console.log(`settingUser: `, this.settingUser);
     }
 
     private heartbeat() {

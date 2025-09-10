@@ -1,19 +1,20 @@
 "use client";
 
+import { useGetInfoMutation } from "@/api/tanstack/auth.tanstack";
 import { useGetSettingUserById, useUpdateSettingUser } from "@/api/tanstack/setting-user.tanstack";
 import { resError } from "@/helpers/function.helper";
 import { useAppSelector } from "@/redux/store";
+import { EntrySignalMode } from "@/types/enum/entry-signal-mode.enum";
 import { TSettingUsersUpdate } from "@/types/setting-user.type";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Checkbox, NumberInput } from "@mantine/core";
+import { Checkbox, Group, NumberInput, Radio, Stack, Text } from "@mantine/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { ButtonLoading } from "../ui/button-loading";
 import { Form } from "../ui/form";
-import { useQueryClient } from "@tanstack/react-query";
-import { useGetInfoMutation } from "@/api/tanstack/auth.tanstack";
 
 const numberFromStringOrNumber = z.union([
     z.number(),
@@ -37,18 +38,20 @@ export const FormSchema = z.object({
     maxTotalOpenPO: intField(1, "Maximum Position"),
     leverage: intField(1, "Leverage"),
     inputUSDT: intField(1, "Input USDT"),
-    ifImbalanceBidPercent: numberRange(0, 100, "Imbalance Bid %"),
-    ifImbalanceAskPercent: numberRange(0, 100, "Imbalance Ask %"),
     takeProfit: positiveNumber("Take Profit"),
     stopLoss: positiveNumber("Stop Loss"),
     timeoutMs: intField(1, "Timeout (ms)"),
     timeoutEnabled: z.boolean(),
-    max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
-    max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
     minSpreadPercent: numberRange(0, 100, "Min Spread %"),
     maxSpreadPercent: numberRange(0, 100, "Max Spread %"),
     maxDepth: positiveNumber("Max Depth"),
     timeoutClearOpenSecond: positiveNumber("Timeout Clear Open"),
+    lastPriceGapGateAndBinancePercent: numberRange(0, 100, "Max Spread %"),
+    ifImbalanceBidPercent: numberRange(0, 100, "Imbalance Bid %"),
+    ifImbalanceAskPercent: numberRange(0, 100, "Imbalance Ask %"),
+    entrySignalMode: z.enum(EntrySignalMode),
+    // max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
+    // max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
 });
 
 type FormInput = z.input<typeof FormSchema>; // kiểu dữ liệu TRƯỚC khi Zod parse ('' | string | number)
@@ -77,18 +80,20 @@ export default function SettingAdminUser({ type }: TProps) {
             maxTotalOpenPO: "",
             leverage: "",
             inputUSDT: "",
-            ifImbalanceBidPercent: "",
-            ifImbalanceAskPercent: "",
             takeProfit: "",
             stopLoss: "",
             timeoutMs: "",
             timeoutEnabled: false,
-            max24hChangeGreen: "",
-            max24hChangeRed: "",
             minSpreadPercent: "",
             maxSpreadPercent: "",
             maxDepth: "",
             timeoutClearOpenSecond: "",
+            lastPriceGapGateAndBinancePercent: "",
+            ifImbalanceBidPercent: "",
+            ifImbalanceAskPercent: "",
+            entrySignalMode: EntrySignalMode.IMBALANCE,
+            // max24hChangeGreen: "",
+            // max24hChangeRed: "",
         },
     });
 
@@ -99,18 +104,20 @@ export default function SettingAdminUser({ type }: TProps) {
                 maxTotalOpenPO: setting.maxTotalOpenPO ?? "",
                 leverage: setting.leverage ?? "",
                 inputUSDT: setting.inputUSDT ?? "",
-                ifImbalanceBidPercent: setting.ifImbalanceBidPercent ?? "",
-                ifImbalanceAskPercent: setting.ifImbalanceAskPercent ?? "",
                 takeProfit: setting.takeProfit ?? "",
                 stopLoss: setting.stopLoss ?? "",
                 timeoutMs: setting.timeoutMs ?? "",
                 timeoutEnabled: setting.timeoutEnabled ?? false,
-                max24hChangeGreen: setting.max24hChangeGreen ?? "",
-                max24hChangeRed: setting.max24hChangeRed ?? "",
                 minSpreadPercent: setting.minSpreadPercent ?? "",
                 maxSpreadPercent: setting.maxSpreadPercent ?? "",
                 maxDepth: setting.maxDepth ?? "",
                 timeoutClearOpenSecond: setting.timeoutClearOpenSecond ?? "",
+                lastPriceGapGateAndBinancePercent: setting.lastPriceGapGateAndBinancePercent ?? "",
+                ifImbalanceAskPercent: setting.ifImbalanceAskPercent ?? "",
+                ifImbalanceBidPercent: setting.ifImbalanceBidPercent ?? "",
+                entrySignalMode: setting.entrySignalMode ?? EntrySignalMode.IMBALANCE,
+                // max24hChangeGreen: setting.max24hChangeGreen ?? "",
+                // max24hChangeRed: setting.max24hChangeRed ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form]);
@@ -124,20 +131,24 @@ export default function SettingAdminUser({ type }: TProps) {
             maxTotalOpenPO: data.maxTotalOpenPO,
             leverage: data.leverage,
             inputUSDT: data.inputUSDT,
-            ifImbalanceBidPercent: data.ifImbalanceBidPercent,
-            ifImbalanceAskPercent: data.ifImbalanceAskPercent,
             takeProfit: data.takeProfit,
             stopLoss: data.stopLoss,
             timeoutMs: data.timeoutMs,
             timeoutEnabled: data.timeoutEnabled,
-            max24hChangeGreen: data.max24hChangeGreen,
-            max24hChangeRed: data.max24hChangeRed,
             minSpreadPercent: data.minSpreadPercent,
             maxSpreadPercent: data.maxSpreadPercent,
             maxDepth: data.maxDepth,
             timeoutClearOpenSecond: data.timeoutClearOpenSecond,
+            lastPriceGapGateAndBinancePercent: data.lastPriceGapGateAndBinancePercent,
+            ifImbalanceBidPercent: data.ifImbalanceBidPercent,
+            ifImbalanceAskPercent: data.ifImbalanceAskPercent,
+            entrySignalMode: data.entrySignalMode,
+            // max24hChangeGreen: data.max24hChangeGreen,
+            // max24hChangeRed: data.max24hChangeRed,
         };
+
         console.log({ updateSettingUser: payload });
+
         updateSettingUser.mutate(payload, {
             onSuccess: (data) => {
                 console.log({ type });
@@ -282,56 +293,6 @@ export default function SettingAdminUser({ type }: TProps) {
                     )}
                 />
 
-                {/* ifImbalanceBidPercent */}
-                <Controller
-                    name="ifImbalanceBidPercent"
-                    control={form.control}
-                    render={({ field }) => (
-                        <NumberInput
-                            size="xs"
-                            withAsterisk
-                            label="Imbalance Bid"
-                            placeholder="Imbalance Bid"
-                            inputWrapperOrder={["label", "input", "error"]}
-                            value={field.value ?? ""}
-                            onChange={(val) => field.onChange(val ?? "")}
-                            onBlur={field.onBlur}
-                            error={form.formState.errors.ifImbalanceBidPercent?.message}
-                            decimalSeparator="."
-                            thousandSeparator=","
-                            suffix="%"
-                            min={0}
-                            step={0.1}
-                            clampBehavior="strict"
-                        />
-                    )}
-                />
-
-                {/* ifImbalanceAskPercent */}
-                <Controller
-                    name="ifImbalanceAskPercent"
-                    control={form.control}
-                    render={({ field }) => (
-                        <NumberInput
-                            size="xs"
-                            withAsterisk
-                            label="Imbalance Ask"
-                            placeholder="Imbalance Ask"
-                            inputWrapperOrder={["label", "input", "error"]}
-                            value={field.value ?? ""}
-                            onChange={(val) => field.onChange(val ?? "")}
-                            onBlur={field.onBlur}
-                            error={form.formState.errors.ifImbalanceAskPercent?.message}
-                            decimalSeparator="."
-                            thousandSeparator=","
-                            suffix="%"
-                            min={0}
-                            step={0.1}
-                            clampBehavior="strict"
-                        />
-                    )}
-                />
-
                 {/* timeoutMs */}
                 <Controller
                     name="timeoutMs"
@@ -368,56 +329,6 @@ export default function SettingAdminUser({ type }: TProps) {
                             label="Enable Timeout"
                             checked={field.value}
                             onChange={(event) => field.onChange(event.currentTarget.checked)}
-                        />
-                    )}
-                />
-
-                {/* max24hChangeGreen */}
-                <Controller
-                    name="max24hChangeGreen"
-                    control={form.control}
-                    render={({ field }) => (
-                        <NumberInput
-                            size="xs"
-                            withAsterisk
-                            label="24h Change Green %"
-                            placeholder="24h Change Green %"
-                            inputWrapperOrder={["label", "input", "error"]}
-                            value={field.value ?? ""}
-                            onChange={(val) => field.onChange(val ?? "")}
-                            onBlur={field.onBlur}
-                            error={form.formState.errors.max24hChangeGreen?.message}
-                            decimalSeparator="."
-                            thousandSeparator=","
-                            suffix="%"
-                            min={0}
-                            step={0.1}
-                            clampBehavior="strict"
-                        />
-                    )}
-                />
-
-                {/* max24hChangeRed */}
-                <Controller
-                    name="max24hChangeRed"
-                    control={form.control}
-                    render={({ field }) => (
-                        <NumberInput
-                            size="xs"
-                            withAsterisk
-                            label="24h Change Red %"
-                            placeholder="24h Change Red %"
-                            inputWrapperOrder={["label", "input", "error"]}
-                            value={field.value ?? ""}
-                            onChange={(val) => field.onChange(val ?? "")}
-                            onBlur={field.onBlur}
-                            error={form.formState.errors.max24hChangeRed?.message}
-                            decimalSeparator="."
-                            thousandSeparator=","
-                            suffix="%"
-                            min={0}
-                            step={0.1}
-                            clampBehavior="strict"
                         />
                     )}
                 />
@@ -518,6 +429,125 @@ export default function SettingAdminUser({ type }: TProps) {
                             step={1}
                             clampBehavior="strict"
                         />
+                    )}
+                />
+
+                <Controller
+                    name="entrySignalMode"
+                    control={form.control}
+                    render={({ field: fieldEntrySignalMode }) => (
+                        <Radio.Group
+                            value={fieldEntrySignalMode.value}
+                            onChange={fieldEntrySignalMode.onChange}
+                            label="Entry signal mode"
+                            description="Choose 1 of 2 order entry mechanisms"
+                            withAsterisk
+                        >
+                            <Stack pt="md" gap="xs">
+                                <Radio.Card value={EntrySignalMode.IMBALANCE} radius="md" withBorder p={"sm"}>
+                                    <Group wrap="nowrap" align="flex-start">
+                                        <Radio.Indicator />
+                                        <div className="flex-1">
+                                            <Text fz={14} fw={600}>
+                                                Imbalance (Bid/Ask %)
+                                            </Text>
+
+                                            {/* ifImbalanceBidPercent */}
+                                            <Controller
+                                                name="ifImbalanceBidPercent"
+                                                control={form.control}
+                                                render={({ field }) => (
+                                                    <NumberInput
+                                                        disabled={fieldEntrySignalMode.value !== EntrySignalMode.IMBALANCE}
+                                                        size="xs"
+                                                        withAsterisk
+                                                        label="Imbalance Bid %"
+                                                        placeholder="Bid %"
+                                                        inputWrapperOrder={["label", "input", "error"]}
+                                                        value={field.value ?? ""}
+                                                        onChange={(val) => field.onChange(val ?? "")}
+                                                        onBlur={field.onBlur}
+                                                        error={form.formState.errors.ifImbalanceBidPercent?.message}
+                                                        decimalSeparator="."
+                                                        thousandSeparator=","
+                                                        suffix="%"
+                                                        min={0}
+                                                        step={0.1}
+                                                        clampBehavior="strict"
+                                                        hideControls
+                                                    />
+                                                )}
+                                            />
+
+                                            {/* ifImbalanceAskPercent */}
+                                            <Controller
+                                                name="ifImbalanceAskPercent"
+                                                control={form.control}
+                                                render={({ field }) => (
+                                                    <NumberInput
+                                                        disabled={fieldEntrySignalMode.value !== EntrySignalMode.IMBALANCE}
+                                                        size="xs"
+                                                        withAsterisk
+                                                        label="Imbalance Ask %"
+                                                        placeholder="Ask %"
+                                                        inputWrapperOrder={["label", "input", "error"]}
+                                                        value={field.value ?? ""}
+                                                        onChange={(val) => field.onChange(val ?? "")}
+                                                        onBlur={field.onBlur}
+                                                        error={form.formState.errors.ifImbalanceAskPercent?.message}
+                                                        decimalSeparator="."
+                                                        thousandSeparator=","
+                                                        suffix="%"
+                                                        min={0}
+                                                        step={0.1}
+                                                        clampBehavior="strict"
+                                                        hideControls
+                                                    />
+                                                )}
+                                            />
+                                        </div>
+                                    </Group>
+                                </Radio.Card>
+
+                                <Radio.Card value={EntrySignalMode.GAP} radius="md" withBorder p={"sm"}>
+                                    <Group wrap="nowrap" align="flex-start">
+                                        <Radio.Indicator />
+                                        <div className="flex-1">
+                                            <Text fz={14} fw={600}>
+                                                Price Gap (Gate vs. Binance %)
+                                            </Text>
+
+                                            {/* lastPriceGapGateAndBinancePercent */}
+                                            <Controller
+                                                name="lastPriceGapGateAndBinancePercent"
+                                                control={form.control}
+                                                render={({ field }) => (
+                                                    <NumberInput
+                                                        disabled={fieldEntrySignalMode.value !== EntrySignalMode.GAP}
+                                                        size="xs"
+                                                        withAsterisk
+                                                        label="Last Price Gap (Gate vs. Binance) %"
+                                                        placeholder="Gap %"
+                                                        inputWrapperOrder={["label", "input", "error"]}
+                                                        value={field.value ?? ""}
+                                                        onChange={(val) => field.onChange(val ?? "")}
+                                                        onBlur={field.onBlur}
+                                                        error={form.formState.errors.lastPriceGapGateAndBinancePercent?.message}
+                                                        decimalSeparator="."
+                                                        thousandSeparator=","
+                                                        suffix="%"
+                                                        min={0}
+                                                        step={0.1}
+                                                        clampBehavior="strict"
+                                                        hideControls
+                                                    />
+                                                )}
+                                            />
+                                        </div>
+                                    </Group>
+                                </Radio.Card>
+                            </Stack>
+                        </Radio.Group>
                     )}
                 />
 

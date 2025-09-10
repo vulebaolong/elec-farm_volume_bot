@@ -10,7 +10,6 @@ import { handleEntryCheckAll } from "src/main/workers/util-bot.worker";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Button } from "../ui/button";
 import { Sheet, SheetClose, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "../ui/sheet";
-import { ScrollArea } from "../ui/scroll-area";
 
 type TProps = {
     open: boolean;
@@ -29,39 +28,33 @@ export default function Whitelist({ open, onOpenChange }: TProps) {
 
         const handleEntry = ({ data }: TSocketRes<TWhiteList>) => {
             const whiteListArr = Object.values(data);
-            const result: TWhitelistUi[] = [];
+            const resultWhiteList: TWhitelistUi[] = [];
 
             for (const whitelistItem of whiteListArr) {
-                const {
-                    errString,
-                    qualified,
-                    result: r,
-                } = handleEntryCheckAll({
-                    whitelistItem,
-                    settingUser,
-                });
+                const { errString, qualified, result } = handleEntryCheckAll({ whitelistItem, settingUser });
 
                 if (errString) {
                     toast.error(errString);
                     continue;
                 }
-                if (r) {
-                    result.push({
-                        core: r.core,
-                        isDepth: r.isDepth,
-                        isLong: r.isLong,
-                        isShort: r.isShort,
-                        isSize: r.isSize,
-                        isSpread: r.isSpread,
+                if (result) {
+                    resultWhiteList.push({
+                        core: result.core,
+                        isDepth: result.isDepth,
+                        isLong: result.isLong,
+                        isShort: result.isShort,
+                        isSize: result.isSize,
+                        isSpread: result.isSpread,
                         qualified,
-                        sizeStr: r.sizeStr,
-                        side: r.side,
-                        symbol: r.symbol,
+                        sizeStr: result.sizeStr,
+                        side: result.side,
+                        symbol: result.symbol,
+                        gapPercentBiVsGate: result.gapPercentBiVsGate,
                     });
                 }
             }
 
-            setWhitelistUi(result);
+            setWhitelistUi(resultWhiteList);
         };
 
         io.on("entry", handleEntry);
@@ -107,11 +100,19 @@ export default function Whitelist({ open, onOpenChange }: TProps) {
                 <AccordionContent className="bg-background px-4 py-2 text-sm space-y-1 rounded-md">
                     <div className="text-sm text-muted-foreground">
                         <span>Last Price (gate): </span>
-                        <span className="font-medium text-foreground">{core.gate.lastPrice}</span>
+                        <Badge variant={`outline`}>{core.gate.lastPrice}</Badge>
                     </div>
+
                     <div className="text-sm text-muted-foreground">
                         <span>Last Price (binance): </span>
-                        <span className="font-medium text-foreground">{core.binance.lastPrice}</span>
+                        <Badge variant={`outline`}>{core.binance.lastPrice}</Badge>
+                    </div>
+
+                    <div className="text-sm text-muted-foreground">
+                        <span>Gap Percent (Binance vs Gate): </span>
+                        <Badge variant={`outline`}>
+                            {item.gapPercentBiVsGate.toFixed(2)}% | {settingUser?.lastPriceGapGateAndBinancePercent}%
+                        </Badge>
                     </div>
 
                     <div className="flex items-center gap-2 text-sm">

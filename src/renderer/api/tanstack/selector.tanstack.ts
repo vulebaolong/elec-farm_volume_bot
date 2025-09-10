@@ -15,8 +15,13 @@ export const useGetUiSelector = () => {
         queryKey: ["get-ui-selector", info],
         queryFn: async () => {
             const { data } = await api.get<TRes<TUiSelector[]>>(ENDPOINT.UI_SELECTOR.GET_UI_SELECTOR);
+
             console.log({ useGetUiSelector: data });
+
+            window.electron?.ipcRenderer.sendMessage("bot:uiSelector", data.data);
+
             dispatch(SET_UI_SELECTOR(data.data));
+
             return data.data;
         },
     });

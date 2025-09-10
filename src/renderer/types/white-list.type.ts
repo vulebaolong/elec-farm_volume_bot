@@ -55,4 +55,5 @@ export type TWhitelistUi = {
     core: TCore;
     isLong: boolean;
     isShort: boolean;
+    gapPercentBiVsGate: number;
 };

@@ -1,9 +1,8 @@
 import { TBaseTimestamps } from "./base.type";
+import { EntrySignalMode } from "./enum/entry-signal-mode.enum";
 
 export type TSettingUsers = {
     id: number;
-    ifImbalanceBidPercent: number;
-    ifImbalanceAskPercent: number;
     maxTotalOpenPO: number;
     maxSideLong: number;
     maxSideShort: number;
@@ -13,12 +12,16 @@ export type TSettingUsers = {
     stopLoss: number;
     timeoutEnabled: boolean;
     timeoutMs: number;
-    max24hChangeGreen: number;
-    max24hChangeRed: number;
     minSpreadPercent: number;
     maxSpreadPercent: number;
     maxDepth: number;
     timeoutClearOpenSecond: number;
+    lastPriceGapGateAndBinancePercent: number;
+    // max24hChangeGreen: number;
+    // max24hChangeRed: number;
+    ifImbalanceBidPercent: number;
+    ifImbalanceAskPercent: number;
+    entrySignalMode: EntrySignalMode;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

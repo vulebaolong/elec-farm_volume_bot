@@ -71,10 +71,6 @@ export const useInitData = () => {
             };
             window.electron?.ipcRenderer.sendMessage("bot:init", dataWorkerInit);
             countRef.current = 1;
-        } else {
-            console.log("settingUser: ", settingUser);
-            window.electron?.ipcRenderer.sendMessage("bot:settingUser", settingUser);
-            window.electron?.ipcRenderer.sendMessage("bot:uiSelector", getUiSelector.data);
         }
     }, [settingUser, getUiSelector.data]);
 
