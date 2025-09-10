@@ -63,13 +63,13 @@ const percentToFraction = (pct: number) => (Number.isFinite(pct) && pct >= 0 ? p
 export function handleGapForLong(lastPriceGate: number, lastPriceBinance: number, lastPriceGapGateAndBinancePercent: number): boolean {
     if (!(lastPriceGate > 0) || !(lastPriceBinance > 0)) return false;
     const gap = percentToFraction(lastPriceGapGateAndBinancePercent);
-    return lastPriceBinance <= lastPriceGate * (1 - gap);
+    return  lastPriceGate * (1 - gap) < lastPriceBinance;
 }
 
 export function handleGapForShort(lastPriceGate: number, lastPriceBinance: number, lastPriceGapGateAndBinancePercent: number): boolean {
     if (!(lastPriceGate > 0) || !(lastPriceBinance > 0)) return false;
     const gap = percentToFraction(lastPriceGapGateAndBinancePercent);
-    return lastPriceBinance >= lastPriceGate * (1 + gap);
+    return lastPriceGate * (1 + gap) > lastPriceBinance;
 }
 
 // (tuỳ chọn) tiện debug: % chênh Binance vs Gate (dựa trên Gate)
