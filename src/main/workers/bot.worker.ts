@@ -98,6 +98,7 @@ class Bot {
     private async run() {
         if (this.running) return;
         this.running = true;
+        this.parentPort.postMessage({ type: "bot:init:done", payload: true });
 
         for (;;) {
             const iterStart = performance.now();
@@ -198,8 +199,6 @@ class Bot {
                                 };
                                 try {
                                     await this.openEntry(payloadOpenOrder, `Open`);
-                                    this.stop();
-                                    break;
                                     placedAnyOpen = true; // có gửi lệnh
                                 } catch (error: any) {
                                     this.sendLogUi(`${error.message}`, "error");
@@ -301,8 +300,8 @@ class Bot {
 
     private beforeEach() {
         this.heartbeat();
-        console.log(`positions`, this.positions);
-        console.log(`orderOpens`, this.orderOpens);
+        console.log(`positions`, Object(this.positions).keys());
+        // console.log(`orderOpens`, this.orderOpens);
     }
 
     private heartbeat() {
@@ -1329,7 +1328,12 @@ class Bot {
 
                 case `${FLOWS_API.positions.method} ${FLOWS_API.positions.url}`:
                     const bodyPositions: TGateApiRes<TPosition[] | null> = JSON.parse(bodyText);
-                    this.replacePositions(bodyPositions.data || []);
+
+                    if (!bodyPositions.data || !Array.isArray(bodyPositions.data)) break;
+
+                    const result = bodyPositions.data.filter((pos) => Number(pos.size) !== 0);
+
+                    this.replacePositions(result);
                     break;
 
                 default:

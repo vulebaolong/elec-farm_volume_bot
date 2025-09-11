@@ -16,7 +16,7 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
             partition: "persist:gate",
 
             // nếu bạn có preload riêng cho Gate (không bắt buộc)
-            preload: path.join(app.isPackaged ? __dirname : path.join(__dirname, "../../assets"), "gate-preload.js"),
+            // preload: path.join(app.isPackaged ? __dirname : path.join(__dirname, "../../assets"), "gate-preload.js"),
         },
     });
     // add vào contentView root của window
@@ -46,7 +46,7 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
         return { action: "deny" };
     });
 
-    blockGateWebSockets(gateView);
+    // blockGateWebSockets(gateView);
 
     // load trang Gate
     gateView.webContents.loadURL("https://www.gate.com/futures/USDT/BTC_USDT").then(() => {

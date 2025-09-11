@@ -29,6 +29,7 @@ if (!isDebug) {
 }
 
 let botWorker: Worker | null = null;
+let gateView: WebContentsView | undefined;
 
 let payloadOrder: TPayloadOrder = {
     contract: "BTC_USDT",
@@ -45,50 +46,17 @@ export function initBot(mainWindow: BrowserWindow) {
 
         botWorker = new Worker(workerPath);
 
-        const gateView = initGateView(mainWindow, isDebug);
-
-        interceptRequest(gateView, botWorker);
-
-        botWorker.on("error", (err) => {
-            console.error("botWorker error:", err);
-            const payload: LogLine = { ts: Date.now(), level: "error", text: `bot error: ${err?.message}` };
-            mainWindow?.webContents.send("bot:log", payload);
-        });
-        botWorker.on("exit", (code) => {
-            console.log("botWorker exit:", code);
-            const payload: LogLine = { ts: Date.now(), level: "error", text: `bot exited code: ${code}, need to reload app` };
-            mainWindow?.webContents.send("bot:log", payload);
-            botWorker = null;
-        });
-
-        // ⬇️ Chờ thread vào trạng thái online rồi mới gửi init
-        botWorker.once("online", () => {});
-
-        // lắng nghe từ rerender
-        ipcMain.on("bot:start", (event, data) => {
-            botWorker?.postMessage({ type: "bot:start", payload: data });
-        });
-        ipcMain.on("bot:stop", (event, data) => {
-            botWorker?.postMessage({ type: "bot:stop", payload: data });
-        });
-        ipcMain.on("bot:setWhiteList", (event, data) => {
-            botWorker?.postMessage({ type: "bot:setWhiteList", payload: data });
-        });
         ipcMain.on("bot:init", (event, data) => {
             botWorker?.postMessage({ type: "bot:init", payload: data });
-        });
-        ipcMain.on("bot:settingUser", (event, data) => {
-            botWorker?.postMessage({ type: "bot:settingUser", payload: data });
-        });
-        ipcMain.on("bot:uiSelector", (event, data) => {
-            botWorker?.postMessage({ type: "bot:uiSelector", payload: data });
-        });
-        ipcMain.on("bot:blackList", (event, data) => {
-            botWorker?.postMessage({ type: "bot:blackList", payload: data });
         });
 
         // lắng nghe từ worker
         botWorker.on("message", async (msg) => {
+            if (msg?.type === "bot:init:done") {
+                gateView = initGateView(mainWindow, isDebug);
+                interceptRequest(gateView, botWorker!);
+            }
+
             if (msg?.type === "bot:heartbeat") {
                 mainWindow?.webContents.send("bot:heartbeat", msg);
             }
@@ -105,9 +73,16 @@ export function initBot(mainWindow: BrowserWindow) {
                 mainWindow?.webContents.send("bot:isReady", msg);
             }
             if (msg?.type === "bot:fetch") {
+                
                 const { url, init, reqId } = msg.payload;
+                
                 const timeoutMs = 5_000;
+                
                 try {
+                    if (!gateView) {
+                        throw new Error("gateView not found");
+                    };
+
                     const js = `
                     (async () => {
                         const ctrl = new AbortController();
@@ -154,6 +129,7 @@ export function initBot(mainWindow: BrowserWindow) {
                 }
             }
             if (msg?.type === "bot:order") {
+                if (!gateView) return;
                 const { payloadOrder: payloadOrderRaw, selector, reqOrderId } = msg?.payload;
                 const tag = `O${reqOrderId}`;
                 try {
@@ -198,6 +174,8 @@ export function initBot(mainWindow: BrowserWindow) {
                 }
             }
             if (msg?.type === "bot:clickTabOpenOrder") {
+                if (!gateView) return;
+
                 const { reqClickTabOpenOrderId, stringClickTabOpenOrder } = msg?.payload;
 
                 try {
@@ -226,6 +204,8 @@ export function initBot(mainWindow: BrowserWindow) {
                 }
             }
             if (msg?.type === "bot:clickCanelAllOpen") {
+                if (!gateView) return;
+
                 const { reqClickCanelAllOpenOrderId, stringClickCanelAllOpen } = msg?.payload;
 
                 try {
@@ -266,6 +246,8 @@ export function initBot(mainWindow: BrowserWindow) {
                 mainWindow?.webContents.send("bot:sticky:clear", msg.payload);
             }
             if (msg?.type === "bot:reloadWebContentsView:Request") {
+                if (!gateView) return;
+
                 try {
                     if (!botWorker) {
                         throw new Error("bot:reloadWebContentsView:Request: botWorker not found");
@@ -281,6 +263,40 @@ export function initBot(mainWindow: BrowserWindow) {
                     mainWindow?.webContents.send("bot:log", { ts: Date.now(), level: "error", text: String(e) });
                 }
             }
+        });
+        botWorker.on("error", (err) => {
+            console.error("botWorker error:", err);
+            const payload: LogLine = { ts: Date.now(), level: "error", text: `bot error: ${err?.message}` };
+            mainWindow?.webContents.send("bot:log", payload);
+        });
+        botWorker.on("exit", (code) => {
+            console.log("botWorker exit:", code);
+            const payload: LogLine = { ts: Date.now(), level: "error", text: `bot exited code: ${code}, need to reload app` };
+            mainWindow?.webContents.send("bot:log", payload);
+            botWorker = null;
+        });
+
+        // ⬇️ Chờ thread vào trạng thái online rồi mới gửi init
+        botWorker.once("online", () => {});
+
+        // lắng nghe từ rerender
+        ipcMain.on("bot:start", (event, data) => {
+            botWorker?.postMessage({ type: "bot:start", payload: data });
+        });
+        ipcMain.on("bot:stop", (event, data) => {
+            botWorker?.postMessage({ type: "bot:stop", payload: data });
+        });
+        ipcMain.on("bot:setWhiteList", (event, data) => {
+            botWorker?.postMessage({ type: "bot:setWhiteList", payload: data });
+        });
+        ipcMain.on("bot:settingUser", (event, data) => {
+            botWorker?.postMessage({ type: "bot:settingUser", payload: data });
+        });
+        ipcMain.on("bot:uiSelector", (event, data) => {
+            botWorker?.postMessage({ type: "bot:uiSelector", payload: data });
+        });
+        ipcMain.on("bot:blackList", (event, data) => {
+            botWorker?.postMessage({ type: "bot:blackList", payload: data });
         });
     }
 
