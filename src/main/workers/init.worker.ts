@@ -7,14 +7,17 @@ import {
     TGateClickTabOpenOrderRes,
     TGateFectMainRes,
     TGateOrderMainRes,
+    TPayloadFollowApi,
     TPayloadOrder,
     TResultClickCancelOpen,
     TResultClickOpenOrder,
     TResultClickTabOpenOrder,
 } from "@/types/bot.type";
-import { app, BrowserWindow, ipcMain, WebContentsView, Event, RenderProcessGoneDetails } from "electron";
+import { TWorkerData } from "@/types/worker.type";
+import { app, BrowserWindow, Event, ipcMain, RenderProcessGoneDetails, WebContentsView } from "electron";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
+import { initGateView } from "../gate/gate-view";
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 
@@ -34,7 +37,7 @@ let payloadOrder: TPayloadOrder = {
     size: "1",
 };
 
-export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsView) {
+export function initBot(mainWindow: BrowserWindow) {
     if (!botWorker) {
         const workerPath = app.isPackaged
             ? path.join(process.resourcesPath, "app.asar.unpacked", "dist", "main", "workers", "bot.worker.js")
@@ -42,7 +45,9 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
 
         botWorker = new Worker(workerPath);
 
-        interceptRequest(gateView);
+        const gateView = initGateView(mainWindow, isDebug);
+
+        interceptRequest(gateView, botWorker);
 
         botWorker.on("error", (err) => {
             console.error("botWorker error:", err);
@@ -101,7 +106,7 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
             }
             if (msg?.type === "bot:fetch") {
                 const { url, init, reqId } = msg.payload;
-                const timeoutMs = 5;
+                const timeoutMs = 5_000;
                 try {
                     const js = `
                     (async () => {
@@ -282,7 +287,22 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
     return botWorker!;
 }
 
-export function interceptRequest(gateView: WebContentsView) {
+export const FLOWS_API = {
+    acounts: {
+        url: "https://www.gate.com/apiw/v2/futures/usdt/accounts",
+        method: "GET",
+    },
+    orders: {
+        url: "https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open",
+        method: "GET",
+    },
+    positions: {
+        url: "https://www.gate.com/apiw/v2/futures/usdt/positions",
+        method: "GET",
+    },
+};
+
+export function interceptRequest(gateView: WebContentsView, botWorker: import("worker_threads").Worker) {
     const wc = gateView.webContents;
 
     // Attach debugger 1 lần
@@ -314,39 +334,6 @@ export function interceptRequest(gateView: WebContentsView) {
                     // console.log(`[Fetch.requestPaused] ${key}`);
 
                     switch (key) {
-                        // case "POST https://www.gate.com/apiw/v2/futures/usdt/positions/BTC_USDT/leverage":
-                        //     console.log(`[Fetch.requestPaused] ${key}`);
-
-                        //     let bodyChangeLeverage = request.postData ?? "";
-                        //     try {
-                        //         const obj = JSON.parse(bodyChangeLeverage);
-
-                        //         const modified = handlePayloadModification(obj, {
-                        //             leverage: "20",
-                        //         });
-
-                        //         const jsonText = JSON.stringify(modified);
-
-                        //         const postDataB64 = Buffer.from(jsonText, "utf8").toString("base64");
-
-                        //         // Cập nhật headers (loại bỏ content-length để Chromium tự set lại)
-                        //         // const headersArr = toHeaderArray(request.headers || {});
-                        //         // deleteHeader(headersArr, "content-length");
-                        //         // setHeader(headersArr, "content-type", "application/json; charset=utf-8");
-
-                        //         await wc.debugger.sendCommand("Fetch.continueRequest", {
-                        //             requestId,
-                        //             postData: postDataB64,
-                        //         });
-
-                        //         if (networkId) watchNetworkIds.add(networkId);
-                        //     } catch (err) {
-                        //         console.log(`có lỗi`, err);
-                        //         // Không phải JSON hoặc parse fail → cho qua
-                        //         // await wc.debugger.sendCommand("Fetch.continueRequest", { requestId });
-                        //     }
-                        //     break;
-
                         case "POST https://www.gate.com/apiw/v2/futures/usdt/orders":
                             console.log(`[Fetch.requestPaused] ${key}`);
 
@@ -401,7 +388,13 @@ export function interceptRequest(gateView: WebContentsView) {
 
                     // === GIỮ SWITCH CỦA BẠN Ở ĐÂY ===
                     switch (key) {
-                        case "GET https://www.gate.com/apiw/v2/futures/usdt/accounts":
+                        case `${FLOWS_API.acounts.method} ${FLOWS_API.acounts.url}`:
+                            tracked.set(reqId, { method, url });
+                            break;
+                        case `${FLOWS_API.orders.method} ${FLOWS_API.orders.url}`:
+                            tracked.set(reqId, { method, url });
+                            break;
+                        case `${FLOWS_API.positions.method} ${FLOWS_API.positions.url}`:
                             tracked.set(reqId, { method, url });
                             break;
                         default:
@@ -421,16 +414,37 @@ export function interceptRequest(gateView: WebContentsView) {
                 }
 
                 case "Network.loadingFinished": {
-                    // const reqId = params.requestId as string;
-                    // const rec = tracked.get(reqId);
-                    // if (!rec) break;
-                    // // Lấy body (đã giải nén). Có thể lớn → DevTools trả base64 khi cần.
-                    // const { body, base64Encoded } = await wc.debugger.sendCommand("Network.getResponseBody", { requestId: reqId });
-                    // const bodyText = base64Encoded ? Buffer.from(body, "base64").toString("utf8") : (body as string);
-                    // console.log({ method: rec.method, url: rec.url, status: rec.status, bodyText });
-                    // // Dọn state để không rò rỉ
-                    // tracked.delete(reqId);
-                    // break;
+                    const reqId = params.requestId as string;
+                    const rec = tracked.get(reqId);
+                    if (!rec) break;
+                    // Lấy body (đã giải nén). Có thể lớn → DevTools trả base64 khi cần.
+                    const { body, base64Encoded } = await wc.debugger.sendCommand("Network.getResponseBody", { requestId: reqId });
+                    const bodyText = base64Encoded ? Buffer.from(body, "base64").toString("utf8") : (body as string);
+                    const key = `${rec.method} ${rec.url}`;
+
+                    const valueFollowApi: TWorkerData<TPayloadFollowApi> = {
+                        type: "bot:followApi",
+                        payload: { method: rec.method, url: rec.url, status: rec.status, bodyText },
+                    };
+
+                    // === GIỮ SWITCH CỦA BẠN Ở ĐÂY ===
+                    switch (key) {
+                        case `${FLOWS_API.acounts.method} ${FLOWS_API.acounts.url}`:
+                            botWorker?.postMessage(valueFollowApi);
+                            break;
+                        case `${FLOWS_API.orders.method} ${FLOWS_API.orders.url}`:
+                            botWorker?.postMessage(valueFollowApi);
+                            break;
+                        case `${FLOWS_API.positions.method} ${FLOWS_API.positions.url}`:
+                            botWorker?.postMessage(valueFollowApi);
+                            break;
+                        default:
+                            break;
+                    }
+
+                    // Dọn state để không rò rỉ
+                    tracked.delete(reqId);
+                    break;
                 }
 
                 case "Network.loadingFailed":

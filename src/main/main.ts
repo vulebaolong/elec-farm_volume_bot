@@ -89,9 +89,8 @@ const createWindow = async () => {
 
     setupUpdaterIPC();
     // registerMetricsIPC();
-    const gateView = initGateView(mainWindow, isDebug);
     // blockGateWebSockets(gateView);
-    initBot(mainWindow, gateView);
+    initBot(mainWindow);
 
     mainWindow.loadURL(resolveHtmlPath("index.html"));
 

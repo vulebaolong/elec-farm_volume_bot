@@ -5,7 +5,7 @@ export type TDataInitBot = {
     parentPort: import("worker_threads").MessagePort;
     settingUser: TSettingUsers;
     uiSelector: TUiSelector[];
-    blackList: string[]
+    blackList: string[];
 };
 
 export type TChangeLeverage = {
@@ -152,7 +152,14 @@ export type TPayloadClickCancelAllOpen = {
 };
 export type TGateClickCancelAllOpenRes = {
     ok: boolean;
-    body: TResultClickCancelOpen['data'] | null;
+    body: TResultClickCancelOpen["data"] | null;
     error: string | null;
     reqClickCanelAllOpenOrderId: number;
+};
+
+export type TPayloadFollowApi = {
+    method: string;
+    url: string;
+    status?: number;
+    bodyText: string;
 };
