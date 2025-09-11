@@ -303,7 +303,7 @@ export function initBot(mainWindow: BrowserWindow) {
     return botWorker!;
 }
 
-export const FLOWS_API = {
+const FLOWS_API = {
     acounts: {
         url: "https://www.gate.com/apiw/v2/futures/usdt/accounts",
         method: "GET",

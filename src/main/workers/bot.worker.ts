@@ -37,7 +37,21 @@ import axios from "axios";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { handleEntryCheckAll } from "./util-bot.worker";
-import { FLOWS_API } from "./init.worker";
+
+const FLOWS_API = {
+    acounts: {
+        url: "https://www.gate.com/apiw/v2/futures/usdt/accounts",
+        method: "GET",
+    },
+    orders: {
+        url: "https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open",
+        method: "GET",
+    },
+    positions: {
+        url: "https://www.gate.com/apiw/v2/futures/usdt/positions",
+        method: "GET",
+    },
+};
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 
