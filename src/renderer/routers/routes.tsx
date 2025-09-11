@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { useNavigate, useRoutes } from "react-router-dom";
 import Setting from "@/components/setting/setting";
 import SettingDev from "@/components/setting-dev/setting-dev";
+import ListManager from "@/components/list-manager/list-manager";
 
 export const routes = [
     {
@@ -28,6 +29,10 @@ export const routes = [
             {
                 path: ROUTER.SETTING_DEV,
                 element: <SettingDev />,
+            },
+            {
+                path: ROUTER.LIST_MANAGER,
+                element: <ListManager />,
             },
         ],
     },

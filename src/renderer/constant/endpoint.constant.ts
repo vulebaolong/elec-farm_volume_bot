@@ -53,9 +53,17 @@ export const ENDPOINT = {
     },
     CONTRACT: {
         GET_CONTRACT: "contract",
+        GET_CONTRACT_SYMBOL: "contract/symbol",
         GET_INFO_CONTRACT: "contract/get-info-cal-contract",
     },
     HELPER: {
         LAST_PRICE: "helper/last-price-by-contract",
-    }
+    },
+    BLACK_LIST: {
+        GET_BLACK_LIST: "black-list",
+        GET_MY_BLACK_LIST: "black-list/my",
+        CREATE_BLACK_LIST: "black-list",
+        REMOVE_BLACK_LIST: "black-list",
+        CLEAR_ALL_BLACK_LIST: "black-list/clear-all",
+    },
 };

@@ -1,6 +1,6 @@
 // src/main/workers/init.worker.ts
 import { LogLine } from "@/components/terminal-log/terminal-log";
-import { createCodeStringClickOrder } from "@/javascript-string/logic-farm";
+import { createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
 import {
     TFectMainRes,
     TGateClickCancelAllOpenRes,
@@ -12,7 +12,7 @@ import {
     TResultClickOpenOrder,
     TResultClickTabOpenOrder,
 } from "@/types/bot.type";
-import { app, BrowserWindow, ipcMain, WebContentsView } from "electron";
+import { app, BrowserWindow, ipcMain, WebContentsView, Event, RenderProcessGoneDetails } from "electron";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 
@@ -61,14 +61,10 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
 
         // lắng nghe từ rerender
         ipcMain.on("bot:start", (event, data) => {
-            botWorker?.postMessage({ type: "bot:start" });
-            const payload: LogLine = { ts: Date.now(), level: "info", text: `🟢 Start` };
-            mainWindow?.webContents.send("bot:log", payload);
+            botWorker?.postMessage({ type: "bot:start", payload: data });
         });
         ipcMain.on("bot:stop", (event, data) => {
-            botWorker?.postMessage({ type: "bot:stop" });
-            const payload: LogLine = { ts: Date.now(), level: "info", text: `🔴 Stop` };
-            mainWindow?.webContents.send("bot:log", payload);
+            botWorker?.postMessage({ type: "bot:stop", payload: data });
         });
         ipcMain.on("bot:setWhiteList", (event, data) => {
             botWorker?.postMessage({ type: "bot:setWhiteList", payload: data });
@@ -81,6 +77,9 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
         });
         ipcMain.on("bot:uiSelector", (event, data) => {
             botWorker?.postMessage({ type: "bot:uiSelector", payload: data });
+        });
+        ipcMain.on("bot:blackList", (event, data) => {
+            botWorker?.postMessage({ type: "bot:blackList", payload: data });
         });
 
         // lắng nghe từ worker
@@ -102,19 +101,26 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
             }
             if (msg?.type === "bot:fetch") {
                 const { url, init, reqId } = msg.payload;
+                const timeoutMs = 5;
                 try {
                     const js = `
                     (async () => {
+                        const ctrl = new AbortController();
+                        const to = setTimeout(() => ctrl.abort(new DOMException('timeout','AbortError')), ${timeoutMs});
                         try {
                             const res = await fetch(${JSON.stringify(url)}, {
                                 ...${JSON.stringify(init || {})},
                                 credentials: 'include',
+                                signal: ctrl.signal
                             });
                             const text = await res.text();
                             return { ok: true, bodyText: text, error: null };
                         } catch (e) {
-                            return { ok: false, bodyText: '', error: String(e && e.message || e) };
-                        } 
+                            const msg = (e && e.name === 'AbortError') ? 'AbortError timeout' : String(e && e.message || e);
+                            return { ok: false, bodyText: '', error: msg };
+                        } finally {
+                            clearTimeout(to);
+                        }
                     })()
                     `;
 
@@ -186,47 +192,6 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
                     botWorker?.postMessage({ type: "bot:order:res", payload: payload });
                 }
             }
-            // if (msg?.type === "bot:order") {
-            //     const { payloadOrder: payloadOrderRaw, selector, reqOrderId } = msg.payload;
-            //     const tag = `O${reqOrderId}`;
-            //     try {
-            //         sendUiLog(`[${tag}] main:recv`);
-
-            //         // 1) đợi request CORRECT **trước khi click**
-            //         const waitOrder = waitForOneRequest(
-            //             gateView.webContents,
-            //             {
-            //                 method: "POST",
-            //                 urlPrefix: "https://www.gate.com/apiw/v2/futures/usdt/orders",
-            //             },
-            //             tag,
-            //             10000,
-            //         );
-
-            //         // 2) chạy click JS
-            //         sendUiLog(`[${tag}] click:start`);
-            //         const js = createCodeStringClickOrder(selector);
-            //         const clickRes: TResultClickOpenOrder = await gateView.webContents.executeJavaScript(js, true);
-            //         sendUiLog(`[${tag}] click:done ${clickRes.ok ? "ok" : `err=${clickRes.error}`}`);
-
-            //         if (clickRes.ok === false && clickRes.error) throw new Error(clickRes.error);
-
-            //         // 3) chờ network kết thúc + lấy body
-            //         const { bodyText } = await waitOrder;
-            //         sendUiLog(`[${tag}] net:done bodyLen=${bodyText?.length ?? 0}`);
-
-            //         botWorker?.postMessage({
-            //             type: "bot:order:res",
-            //             payload: { ok: true, reqOrderId, bodyText, error: null } as TGateOrderMainRes,
-            //         });
-            //     } catch (e: any) {
-            //         sendUiLog(`[${tag}] FAIL ${String(e?.message || e)}`, "error");
-            //         botWorker?.postMessage({
-            //             type: "bot:order:res",
-            //             payload: { ok: false, reqOrderId, bodyText: "", error: String(e?.message || e) } as TGateOrderMainRes,
-            //         });
-            //     }
-            // }
             if (msg?.type === "bot:clickTabOpenOrder") {
                 const { reqClickTabOpenOrderId, stringClickTabOpenOrder } = msg?.payload;
 
@@ -294,6 +259,22 @@ export function initBot(mainWindow: BrowserWindow | null, gateView: WebContentsV
             }
             if (msg?.type === "bot:sticky:clear") {
                 mainWindow?.webContents.send("bot:sticky:clear", msg.payload);
+            }
+            if (msg?.type === "bot:reloadWebContentsView:Request") {
+                try {
+                    if (!botWorker) {
+                        throw new Error("bot:reloadWebContentsView:Request: botWorker not found");
+                    }
+                    await reloadAndWait(gateView, botWorker, 30000);
+                    // re-inject mọi thứ cần chạy lại sau reload
+                    gateView.webContents.executeJavaScript(setLocalStorageScript, true).catch(() => {});
+                    // (nếu có) re-enable các patch WS / CDP, v.v.
+
+                    botWorker?.postMessage({ type: "bot:reloadWebContentsView:Response", payload: true });
+                } catch (e) {
+                    // log lỗi reload nếu cần
+                    mainWindow?.webContents.send("bot:log", { ts: Date.now(), level: "error", text: String(e) });
+                }
             }
         });
     }
@@ -491,92 +472,6 @@ function handlePayloadModification(data: any, dataModify: any) {
     return updated;
 }
 
-type WaitOrderOpts = {
-    method: "GET" | "POST" | "PUT" | "DELETE" | string;
-    url: string; // match endpoint
-    matchPost?: (postDataText: string) => boolean; // match body (nếu cần)
-};
-
-async function waitForOneRequest1(
-    wc: Electron.WebContents,
-    { method, url, matchPost }: WaitOrderOpts,
-): Promise<{ requestId: string; status?: number; bodyText: string }> {
-    return new Promise((resolve, reject) => {
-        const tracked = new Set<string>();
-
-        const onMsg = async (_e: any, ev: string, p: any) => {
-            try {
-                switch (ev) {
-                    case "Network.requestWillBeSent": {
-                        const m = p.request?.method as string;
-                        const u = p.request?.url as string;
-                        // if (m === method && url.test(u)) {
-                        if (m === method && url === u) {
-                            // nếu cần lọc theo body
-                            if (matchPost) {
-                                let post = p.request?.postData as string | undefined;
-                                if (post == null) {
-                                    // fallback lấy postData nếu không có trong event
-                                    try {
-                                        const r = await wc.debugger.sendCommand("Network.getRequestPostData", { requestId: p.requestId });
-                                        post = r.postData as string;
-                                    } catch {
-                                        /* ignore */
-                                    }
-                                }
-                                if (!post || !matchPost(post)) return;
-                            }
-                            tracked.add(p.requestId);
-                        }
-                        break;
-                    }
-
-                    case "Network.responseReceived": {
-                        // có thể lưu status nếu cần (ở đây lấy trực tiếp khi finished cũng được)
-                        break;
-                    }
-
-                    case "Network.loadingFinished": {
-                        const reqId = p.requestId as string;
-                        if (!tracked.has(reqId)) break;
-
-                        const { body, base64Encoded } = await wc.debugger.sendCommand("Network.getResponseBody", { requestId: reqId });
-                        const bodyText = base64Encoded ? Buffer.from(body, "base64").toString("utf8") : (body as string);
-
-                        // lấy status qua responseReceived? Hoặc bỏ qua nếu body đã đủ xác nhận
-                        // Ở đây ta thử thêm 1 call để lấy status (optional)
-                        let status: number | undefined;
-                        try {
-                            // không có API lấy status trực tiếp theo id, nên thường lưu ở responseReceived.
-                            // Nếu bạn cần status, hãy lưu ở responseReceived vào 1 Map<id,status>.
-                        } catch {}
-
-                        cleanup(undefined, { requestId: reqId, status, bodyText });
-                        break;
-                    }
-
-                    case "Network.loadingFailed": {
-                        if (tracked.has(p.requestId as string)) {
-                            cleanup(new Error("order network failed"));
-                        }
-                        break;
-                    }
-                }
-            } catch (e) {
-                cleanup(e as Error);
-            }
-        };
-
-        const cleanup = (err?: Error, res?: any) => {
-            wc.debugger.off("message", onMsg);
-            tracked.clear();
-            err ? reject(err) : resolve(res);
-        };
-
-        wc.debugger.on("message", onMsg);
-    });
-}
-
 function sendUiLog(text: string, level: "info" | "warn" | "error" = "info") {
     // for (const win of BrowserWindow.getAllWindows()) {
     //     win.webContents.send("bot:log", { ts: Date.now(), level, text });
@@ -660,5 +555,57 @@ function waitForOneRequest(
             clean();
             reject(new Error("waitForOneRequest timeout"));
         }, timeoutMs);
+    });
+}
+
+async function reloadAndWait(gateView: Electron.WebContentsView, botWorker: import("worker_threads").Worker, timeoutMs = 30000) {
+    const wc = gateView.webContents;
+
+    return new Promise<void>((resolve, reject) => {
+        let timer: NodeJS.Timeout;
+
+        const cleanup = () => {
+            clearTimeout(timer);
+            wc.off("did-finish-load", onDone);
+            wc.off("did-fail-load", onFail);
+            wc.off("render-process-gone", onGone);
+        };
+
+        const onDone = () => {
+            cleanup();
+            resolve();
+        };
+
+        const onFail: (
+            event: Event,
+            errorCode: number,
+            errorDescription: string,
+            validatedURL: string,
+            isMainFrame: boolean,
+            frameProcessId: number,
+            frameRoutingId: number,
+        ) => void = (_e, code, desc, url, isMainFrame) => {
+            if (!isMainFrame) return;
+            cleanup();
+            reject(new Error(`did-fail-load ${code} ${desc}`));
+        };
+
+        const onGone: (event: Event, details: RenderProcessGoneDetails) => void = (_e, details) => {
+            cleanup();
+            reject(new Error(`renderer gone: ${details?.reason || "unknown"}`));
+        };
+
+        timer = setTimeout(() => {
+            cleanup();
+            botWorker.postMessage({ type: "bot:webview:reload_timeout" });
+            reject(new Error("reload timeout"));
+        }, timeoutMs);
+
+        // đăng ký CHỈ cho lần reload này
+        wc.once("did-finish-load", onDone);
+        wc.once("did-fail-load", onFail);
+        wc.once("render-process-gone", onGone);
+
+        wc.reload(); // hoặc reloadIgnoringCache()
     });
 }

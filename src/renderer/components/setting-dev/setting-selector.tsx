@@ -78,7 +78,7 @@ export default function SettingSelector() {
 
     return (
         <Form {...form}>
-            <form className="w-full grid gap-2 p-5 border border-border rounded-2xl shadow-lg" onSubmit={form.handleSubmit(onSubmit)}>
+            <form className="w-full grid gap-2 p-5 border border-border rounded-2xl" onSubmit={form.handleSubmit(onSubmit)}>
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold">UI Selectors</h2>
                     <Button type="button" variant="secondary" className="rounded-2xl" onClick={addRow}>

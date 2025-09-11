@@ -168,7 +168,7 @@ export default function SettingAdminUser({ type }: TProps) {
 
     return (
         <Form {...form}>
-            <form className="w-full grid gap-2 p-5 border border-border rounded-2xl shadow-lg" onSubmit={form.handleSubmit(onSubmit)}>
+            <form className="w-full grid gap-2 p-5 border border-border rounded-2xl" onSubmit={form.handleSubmit(onSubmit)}>
                 {/* title */}
                 <p className="text-xl font-bold text-muted-foreground">{type === "admin" ? "My Setting" : "Setting User"}</p>
 

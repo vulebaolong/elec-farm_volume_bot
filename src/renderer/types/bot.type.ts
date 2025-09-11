@@ -1,7 +1,11 @@
+import { TSettingUsers } from "./setting-user.type";
+import { TUiSelector } from "./ui-selector.type";
+
 export type TDataInitBot = {
     parentPort: import("worker_threads").MessagePort;
-    settingUser: any;
-    uiSelector: any;
+    settingUser: TSettingUsers;
+    uiSelector: TUiSelector[];
+    blackList: string[]
 };
 
 export type TChangeLeverage = {

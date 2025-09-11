@@ -4,4 +4,5 @@ export const ROUTER = {
     HOME: "/",
     SETTING: "/setting",
     SETTING_DEV: "/setting-dev",
+    LIST_MANAGER: "/list-manager",
 };

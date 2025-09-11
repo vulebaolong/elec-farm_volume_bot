@@ -17,6 +17,7 @@ export type Channels =
     | "bot:stop"
     | "bot:setWhiteList"
     | "bot:settingUser"
+    | "bot:blackList"
     | "bot:uiSelector"
     | "bot:log"
     | "bot:metrics"

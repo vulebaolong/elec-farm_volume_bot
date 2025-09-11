@@ -1,5 +1,5 @@
 // bot.worker.ts
-import { LogLevel } from "@/components/terminal-log/terminal-log";
+import { LogLevel, LogLine } from "@/components/terminal-log/terminal-log";
 import { BASE_URL } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
 import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder } from "@/javascript-string/logic-farm";
@@ -53,10 +53,11 @@ parentPort!.on("message", (msg: any) => {
     switch (msg?.type) {
         case "bot:init":
             if (!bot) {
-                const dataInitBot = {
+                const dataInitBot: TDataInitBot = {
                     parentPort: parentPort!,
                     settingUser: msg.payload.settingUser,
                     uiSelector: msg.payload.uiSelector,
+                    blackList: msg.payload.blackList,
                 };
                 bot = new Bot(dataInitBot);
             }
@@ -65,6 +66,8 @@ parentPort!.on("message", (msg: any) => {
             bot?.handleEvent?.(msg); // chuyển tiếp cho bot
     }
 });
+
+const GATE_FETCH_RPC_TIMEOUT = "❌ Get Order Opens: AbortError timeout";
 
 class Bot {
     private count = 0;
@@ -79,11 +82,13 @@ class Bot {
     private whitelistEntry: TWhitelistEntry[] = [];
     private whiteList: TWhiteList = {};
     private infoContract = new Map<string, TGetInfoContractRes>();
+    private blackList: string[] = [];
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
         this.settingUser = dataInitBot.settingUser;
         this.uiSelector = dataInitBot.uiSelector;
+        this.blackList = dataInitBot.blackList;
 
         this.run();
     }
@@ -163,6 +168,11 @@ class Bot {
                                 continue;
                             }
 
+                            // nếu symbol tồn tại trong blackList -> bỏ qua
+                            if (this.isExitsBlackList(symbol)) {
+                                continue;
+                            }
+
                             this.log(`Create Open: ${symbol} ok (not exists) | side=${side} | sizeStr=${sizeStr}`);
 
                             const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
@@ -225,6 +235,9 @@ class Bot {
             } catch (err: any) {
                 this.log("❌❌❌❌❌ ITER ERROR =====", err);
                 this.sendLogUi(err.message, "error");
+                if (err.message.includes(GATE_FETCH_RPC_TIMEOUT)) {
+                    this.reloadWebContentsViewRequest();
+                }
             } finally {
                 const dt = Math.round(performance.now() - iterStart);
                 this.count += 1;
@@ -267,7 +280,6 @@ class Bot {
 
     private beforeEach() {
         this.heartbeat();
-        console.log(`settingUser: `, this.settingUser);
     }
 
     private heartbeat() {
@@ -285,13 +297,11 @@ class Bot {
     handleEvent(msg: any) {
         switch (msg.type) {
             case "bot:start":
-                this.isStart = true;
-                this.parentPort?.postMessage({ type: "bot:start", payload: { isStart: this.isStart } });
+                this.start();
                 break;
 
             case "bot:stop":
-                this.isStart = false;
-                this.parentPort?.postMessage({ type: "bot:stop", payload: { isStart: this.isStart } });
+                this.stop();
                 break;
 
             case "bot:setWhiteList":
@@ -306,13 +316,37 @@ class Bot {
                 this.setUiSelector(msg.payload);
                 break;
 
+            case "bot:blackList":
+                this.setBlackList(msg.payload);
+                break;
+
+            case "bot:reloadWebContentsView:Response":
+                this.reloadWebContentsViewResponse();
+                break;
+
             default:
                 break;
         }
     }
 
+    private start() {
+        this.isStart = true;
+        this.parentPort?.postMessage({ type: "bot:start", payload: { isStart: this.isStart } });
+        this.sendLogUi("🟢 Start", "info");
+    }
+
+    private stop() {
+        this.isStart = false;
+        this.parentPort?.postMessage({ type: "bot:stop", payload: { isStart: this.isStart } });
+        this.sendLogUi("🔴 Stop", "info");
+    }
+
     private sleep(ms: number) {
         return new Promise((r) => setTimeout(r, ms));
+    }
+
+    private setBlackList(blackList: string[]) {
+        this.blackList = blackList;
     }
 
     private async getOrderOpens() {
@@ -408,6 +442,7 @@ class Bot {
                 try {
                     port.off("message", onMsg);
                 } catch {}
+
                 resolve(r);
             };
 
@@ -437,7 +472,7 @@ class Bot {
 
             // 2) timeout RPC (phòng main không hồi)
             timer = setTimeout(() => {
-                done({ ok: false, body: null, error: "gateFetch rpc timeout" });
+                done({ ok: false, body: null, error: GATE_FETCH_RPC_TIMEOUT });
             }, timeoutMs);
 
             // 3) gửi sau
@@ -1100,6 +1135,12 @@ class Bot {
         return isExits;
     }
 
+    private isExitsBlackList(contract: string): boolean {
+        const isExits = this.blackList.includes(contract.replace("/", "_"));
+        if (isExits) this.sendLogUi(`${contract} Exits In BlackList => continue`);
+        return isExits;
+    }
+
     private async getBidsAsks(contract: string, limit: number = 10) {
         const url = `https://www.gate.com/apiw/v2/futures/usdt/order_book?limit=${limit}&contract=${contract.replace("/", "_")}`;
 
@@ -1229,4 +1270,18 @@ class Bot {
     private setUiSelector(settingUser: TUiSelector[]) {
         this.uiSelector = settingUser;
     }
+
+    private reloadWebContentsViewRequest() {
+        this.sendLogUi("🔄 Reload WebContentsView Request", "info");
+        this.stop();
+        this.parentPort?.postMessage({ type: "bot:reloadWebContentsView:Request", payload: true });
+    }
+
+    private async reloadWebContentsViewResponse() {
+        this.sendLogUi("🔄 Reload WebContentsView Response", "info");
+        await this.sleep(5000);
+        this.start();
+    }
 }
+
+// https://www.gate.com/vi/announcements/article/33995

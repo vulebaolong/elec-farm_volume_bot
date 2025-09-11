@@ -2,7 +2,7 @@ import { Settings } from "lucide-react";
 import { PageTitle } from "../title-page/title-page";
 import SettingAdminUser from "./setting-admin-user";
 
-export default function setting() {
+export default function Setting() {
     return (
         <div>
             <PageTitle title="Setting" icon={Settings} size="md" />

@@ -10,7 +10,7 @@ import { useState } from "react";
 import DialogInfo from "../dialog/dialog-info";
 import ThemeToggleV2 from "../theme-toggle/theme-toggle-v2";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import Whitelist from "../whitelist/whitelist";
+import Whitelist from "../list-manager/whitelist";
 
 export function NavMain() {
     const { isMobile, state } = useSidebar();
@@ -72,7 +72,13 @@ export function NavMain() {
                     <SidebarMenuItem>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <SidebarMenuButton onClick={() => setOpenWhitelist(true)} className="flex items-center overflow-hidden">
+                                <SidebarMenuButton
+                                    onClick={() => {
+                                        navigateTo(ROUTER.LIST_MANAGER);
+                                        srollToTop();
+                                    }}
+                                    className="flex items-center overflow-hidden"
+                                >
                                     <BadgeDollarSign className="size-4 shrink-0 " />
                                     <span className="text-sm">White List</span>
                                 </SidebarMenuButton>
@@ -146,7 +152,7 @@ export function NavMain() {
             </SidebarGroup>
 
             <DialogInfo open={openAbout} onOpenChange={setOpenAbout} />
-            <Whitelist open={openWhitelist} onOpenChange={setOpenWhitelist} />
+            {/* <Whitelist open={openWhitelist} onOpenChange={setOpenWhitelist} /> */}
         </>
     );
 }

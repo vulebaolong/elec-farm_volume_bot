@@ -1,12 +1,12 @@
 import { ENDPOINT } from "@/constant/endpoint.constant";
 import { resError } from "@/helpers/function.helper";
 import { SET_INFO } from "@/redux/slices/user.slice";
-import { useAppDispatch, useAppSelector } from "@/redux/store";
+import { useAppDispatch } from "@/redux/store";
 import { TRes } from "@/types/app.type";
 import { TLoginReq, TLoginRes, TRefreshTokenReq, TRefreshTokenRes } from "@/types/login.type";
 import { TRegisterReq } from "@/types/register.type";
 import { TUser } from "@/types/user.type";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { logOut, setAccessToken, setRefreshToken } from "../auth/app.auth";
 import api from "../axios/app.axios";

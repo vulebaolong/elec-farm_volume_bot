@@ -68,7 +68,7 @@ export default function GateDockPanel() {
 
     if (!st) {
         return (
-            <Card className="shadow-sm">
+            <Card>
                 <CardHeader>
                     <CardTitle>Gate Dock</CardTitle>
                 </CardHeader>
@@ -78,7 +78,7 @@ export default function GateDockPanel() {
     }
 
     return (
-        <Card className="shadow-sm">
+        <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle>Gate Dock</CardTitle>
                 <div className="flex gap-2">

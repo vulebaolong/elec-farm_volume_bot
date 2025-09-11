@@ -1,7 +1,7 @@
 import { setLocalStorageScript } from "@/javascript-string/logic-farm";
 import { BrowserWindow, WebContentsView, app, shell } from "electron";
-import path from "path";
 import fs from "node:fs";
+import path from "path";
 
 export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     // --- Gate WebContentsView ---

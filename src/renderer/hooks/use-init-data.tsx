@@ -8,6 +8,7 @@ import { TSettingUsersSocket } from "@/types/setting-user.type";
 import { TWhiteList } from "@/types/white-list.type";
 import { useEffect, useRef } from "react";
 import { useSocket } from "./socket.hook";
+import { useGetMyBlackList } from "@/api/tanstack/black-list.tanstack";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
@@ -16,6 +17,7 @@ export const useInitData = () => {
     const getUiSelector = useGetUiSelector();
     const countRef = useRef(0);
     const getInfoMutation = useGetInfoMutation();
+    const getMyBlackList = useGetMyBlackList();
 
     useEffect(() => {
         if (!socket) return;
@@ -62,17 +64,18 @@ export const useInitData = () => {
     }, [socket]);
 
     useEffect(() => {
-        if (!settingUser || !getUiSelector.data) return;
+        if (!settingUser || !getUiSelector.data || !getMyBlackList.data) return;
 
         if (countRef.current === 0) {
             const dataWorkerInit = {
                 settingUser: settingUser,
                 uiSelector: getUiSelector.data,
+                blackList: getMyBlackList.data.map((item) => item.symbol),
             };
             window.electron?.ipcRenderer.sendMessage("bot:init", dataWorkerInit);
             countRef.current = 1;
         }
-    }, [settingUser, getUiSelector.data]);
+    }, [settingUser, getUiSelector.data, getMyBlackList.data]);
 
     return {};
 };

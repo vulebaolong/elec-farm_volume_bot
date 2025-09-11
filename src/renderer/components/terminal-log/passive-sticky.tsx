@@ -36,7 +36,7 @@ export default function PassiveSticky() {
                 </span>
             </div>
 
-            <div className="w-[320px] max-w-[80vw] flex-1 rounded-xl border bg-black/85 text-neutral-100 shadow-xl backdrop-blur">
+            <div className="w-[320px] max-w-[80vw] flex-1 rounded-xl border bg-black/85 text-neutral-100 backdrop-blur">
                 <ScrollArea className="max-h-[50vh] p-2">
                     <ul className="space-y-1">
                         {list.map((it) => (

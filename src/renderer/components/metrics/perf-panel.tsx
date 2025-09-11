@@ -28,7 +28,7 @@ export default function PerfPanel() {
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card className="shadow-sm">
+            <Card>
                 <CardHeader>
                     <CardTitle>CPU (main)</CardTitle>
                 </CardHeader>
@@ -53,7 +53,7 @@ export default function PerfPanel() {
                 </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
+            <Card>
                 <CardHeader>
                     <CardTitle>Memory</CardTitle>
                 </CardHeader>
@@ -80,7 +80,7 @@ export default function PerfPanel() {
                 </CardContent>
             </Card>
 
-            <Card className="shadow-sm">
+            <Card>
                 <CardHeader>
                     <CardTitle>Event-loop lag (p95)</CardTitle>
                 </CardHeader>

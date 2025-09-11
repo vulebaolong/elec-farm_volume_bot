@@ -149,6 +149,12 @@ export function handleEntryCheckAll({ whitelistItem, settingUser }: THandleEntry
         return { errString: msg, qualified: false, result: null };
     }
 
+    const isZero = lastPriceGate <= 0 || lastPriceBinance <= 0;
+    if (isZero) {
+        const msg = `❌ ${symbol} core có field giá trị 0: ${JSON.stringify(core)}`;
+        return { errString: msg, qualified: false, result: null };
+    }
+
     const isSpread = isSpreadPercent(spreadPercent, settingUser.minSpreadPercent, settingUser.maxSpreadPercent);
     const isDepth = isDepthCalc(askSumDepth, bidSumDepth, settingUser.maxDepth);
 
