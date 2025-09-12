@@ -1,29 +1,33 @@
 import { IS_PRODUCTION } from "@/constant/app.constant";
 import { app, BrowserWindow, ipcMain, powerMonitor, shell } from "electron";
 import { installExtension, REDUX_DEVTOOLS } from "electron-devtools-installer";
-import log from "electron-log";
+import log from "electron-log/main";
 import { autoUpdater } from "electron-updater";
 import { pathToFileURL } from "node:url";
 import path from "path";
-import { initGateView } from "./gate/gate-view";
 import MenuBuilder from "./menu";
 import { setupUpdaterIPC } from "./updater";
 import { resolveHtmlPath } from "./util";
 import { initBot } from "./workers/init.worker";
+import { initLog } from "./log";
+
+const mainLog = initLog();
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 
 if (!isDebug) {
-    console.log = () => {};
-    console.debug = () => {};
-    console.info = () => {};
-    console.trace = () => {};
+    // console.log = () => {};
+    // console.debug = () => {};
+    // console.info = () => {};
+    // console.trace = () => {};
+    // redirect để tất cả console.* ghi vào file log
+    Object.assign(console, log.functions);
 }
 
 class AppUpdater {
     constructor() {
-        log.transports.file.level = "info";
-        autoUpdater.logger = log;
+        // log.transports.file.level = "info";
+        // autoUpdater.logger = log;
         autoUpdater.checkForUpdatesAndNotify();
     }
 }
@@ -90,7 +94,7 @@ const createWindow = async () => {
     setupUpdaterIPC();
     // registerMetricsIPC();
     // blockGateWebSockets(gateView);
-    initBot(mainWindow);
+    initBot(mainWindow, mainLog);
 
     mainWindow.loadURL(resolveHtmlPath("index.html"));
 

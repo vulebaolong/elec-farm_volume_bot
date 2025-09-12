@@ -1,5 +1,5 @@
 // src/main/workers/init.worker.ts
-import { LogLine } from "@/components/terminal-log/terminal-log";
+import { LogLine } from "@/components/log/terminal-log/terminal-log";
 import { createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
 import {
     TFectMainRes,
@@ -18,6 +18,7 @@ import { app, BrowserWindow, Event, ipcMain, RenderProcessGoneDetails, WebConten
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { initGateView } from "../gate/gate-view";
+import Logger from "electron-log";
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 
@@ -38,26 +39,30 @@ let payloadOrder: TPayloadOrder = {
     size: "1",
 };
 
-export function initBot(mainWindow: BrowserWindow) {
+export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions) {
     if (!botWorker) {
         const workerPath = app.isPackaged
             ? path.join(process.resourcesPath, "app.asar.unpacked", "dist", "main", "workers", "bot.worker.js")
             : path.join(__dirname, "workers", "bot.worker.bundle.dev.js");
 
         botWorker = new Worker(workerPath);
+        mainLog.info("New bot worker | threadId: ", botWorker.threadId);
 
         ipcMain.on("bot:init", (event, data) => {
+            mainLog.info("bot:init");
             botWorker?.postMessage({ type: "bot:init", payload: data });
         });
 
         // lắng nghe từ worker
         botWorker.on("message", async (msg) => {
             if (msg?.type === "bot:init:done") {
+                mainLog.info("bot:init:done");
                 gateView = initGateView(mainWindow, isDebug);
                 interceptRequest(gateView, botWorker!);
             }
 
             if (msg?.type === "bot:heartbeat") {
+                mainLog.info("bot:heartbeat - heartbeatheartbeatheartbeatheartbeatheartbeatheartbeatheartbeatheartbeatheartbeat");
                 mainWindow?.webContents.send("bot:heartbeat", msg);
             }
             if (msg?.type === "bot:metrics") {
@@ -73,15 +78,14 @@ export function initBot(mainWindow: BrowserWindow) {
                 mainWindow?.webContents.send("bot:isReady", msg);
             }
             if (msg?.type === "bot:fetch") {
-                
                 const { url, init, reqId } = msg.payload;
-                
+
                 const timeoutMs = 5_000;
-                
+
                 try {
                     if (!gateView) {
                         throw new Error("gateView not found");
-                    };
+                    }
 
                     const js = `
                     (async () => {

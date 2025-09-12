@@ -28,7 +28,13 @@ export type Channels =
     | "gate:toggle"
     | "bot:sticky:set"
     | "bot:sticky:remove"
-    | "bot:sticky:clear";
+    | "bot:sticky:clear"
+    | "logs:path"
+    | "logs:size"
+    | "logs:read"
+    | "logs:clear"
+    | "logs:reveal"
+    | "log:append";
 
 const electronHandler = {
     ipcRenderer: {
@@ -52,12 +58,6 @@ const electronHandler = {
         // gọi hàm & nhận Promise (cần kết quả).
         invoke(channel: Channels, ...args: any) {
             return ipcRenderer.invoke(channel, ...args);
-        },
-    },
-
-    webview: {
-        getPreloadUrl(): Promise<string> {
-            return ipcRenderer.invoke("get-webview-preload-url");
         },
     },
 };

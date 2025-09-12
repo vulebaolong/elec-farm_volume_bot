@@ -1,5 +1,5 @@
 // bot.worker.ts
-import { LogLevel, LogLine } from "@/components/terminal-log/terminal-log";
+import { LogLevel, LogLine } from "@/components/log/terminal-log/terminal-log";
 import { BASE_URL } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
 import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder } from "@/javascript-string/logic-farm";

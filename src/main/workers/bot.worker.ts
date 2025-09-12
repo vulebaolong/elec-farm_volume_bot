@@ -1,5 +1,5 @@
 // bot.worker.ts
-import { LogLevel } from "@/components/terminal-log/terminal-log";
+import { LogLevel } from "@/components/log/terminal-log/terminal-log";
 import { BASE_URL } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
 import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder } from "@/javascript-string/logic-farm";
@@ -124,38 +124,22 @@ class Bot {
                 if (this.isStart) {
                     this.setWhitelistEntry();
 
-                    let isRefreshed_1_CREATE_CLOSE = false;
-                    let isRefreshed_2_CLEAR_OPEN = false;
-                    let isRefreshed_3_CREATE_OPEN = false;
-                    let isRefreshed_4_SL_ROI = false;
-
                     // ===== 1) CREATE CLOSE ==============================================
-                    // createTPClose() tự quyết định có refresh khi có thay đổi hay không
-                    isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
+                    await this.createTPClose();
 
                     // ===== 2) CLEAR OPEN =================================================
                     this.log("🟢🟢🟢🟢🟢 Clear Open");
                     if (this.orderOpens.length > 0) {
-                        // Lý do: nếu bước 1 KHÔNG làm gì, cần ảnh chụp mới nhất trước khi xét timeout/cancel
-                        // if (!isRefreshed_1_CREATE_CLOSE) await this.refreshSnapshot("Clear Open (pre-check)");
-                        // let isShouldRefresh = false;
-
                         const contractsToCancel = this.contractsToCancelWithEarliest();
                         for (const contract of contractsToCancel) {
                             if (this.isTimedOutClearOpen(contract.earliest, contract.contract)) {
                                 await this.clickCanelAllOpen(contract.contract);
-                                // isShouldRefresh = true; // có hành động => cần refresh sau vòng for
                             }
                         }
 
-                        // Cập nhật TP-close xen kẽ như bạn đang có
-                        isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
+                        // Cập nhật TP-close xen kẽ
+                       await this.createTPClose();
 
-                        // Lý do: chỉ refresh khi thực sự có lệnh bị huỷ
-                        // if (isShouldRefresh) {
-                        //     await this.refreshSnapshot("Clear Open (post-cancel)");
-                        //     isRefreshed_2_CLEAR_OPEN = true;
-                        // }
 
                         this.log("✅ Clear Open: done");
                     } else {
@@ -167,11 +151,7 @@ class Bot {
                     // ===== 3) CREATE OPEN ===============================================
                     this.log("🔵🔵🔵🔵🔵 Create Open");
 
-                    // Lý do: nếu bước 2 không hề refresh, lấy snapshot mới 1 LẦN trước khi quét danh sách vào lệnh
-                    // if (!isRefreshed_2_CLEAR_OPEN) await this.refreshSnapshot("Create Open (pre-loop)");
-
                     if (this.isCheckwhitelistEntryEmty() && this.isCheckMaxOpenPO()) {
-                        // let placedAnyOpen = false; // để quyết định refresh 1 lần cuối bước 3
 
                         for (const whitelistItem of Object.values(this.whitelistEntry)) {
                             const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
@@ -213,23 +193,17 @@ class Bot {
                                 };
                                 try {
                                     await this.openEntry(payloadOpenOrder, `Open`);
-                                    // placedAnyOpen = true; // có gửi lệnh
                                 } catch (error: any) {
                                     this.sendLogUi(`${error.message}`, "error");
                                     continue;
                                 }
                             }
 
-                            // cập nhật TP-close như bạn đang có
-                            isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
+                            // cập nhật TP-close
+                            await this.createTPClose();
                             this.log("✅ Create Open: done for symbol", symbol);
                         }
 
-                        // Lý do: chỉ refresh 1 LẦN sau vòng for nếu thực sự đã đặt lệnh open
-                        // if (placedAnyOpen) {
-                        //     await this.refreshSnapshot("Create Open (post-place)");
-                        //     isRefreshed_3_CREATE_OPEN = true;
-                        // }
                     } else {
                         this.log(`Create Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
                     }
@@ -242,12 +216,8 @@ class Bot {
                         for (const [, pos] of this.positions) {
                             await this.handleRoi(pos);
                             // (giữ nguyên nếu bạn không muốn gọi TP-close ở đây)
-                            // isRefreshed_1_CREATE_CLOSE = await this.createTPClose(isRefreshed_1_CREATE_CLOSE);
+                            // await this.createTPClose();
                         }
-
-                        // Lý do: handleRoi có thể vừa gửi close → refresh 1 lần để tránh đặt trùng ở vòng sau
-                        // await this.refreshSnapshot("Roi (post-handle)");
-                        // isRefreshed_4_SL_ROI = true;
 
                         this.log("✅ Roi: done");
                     } else {
@@ -256,13 +226,6 @@ class Bot {
                     }
                     this.log("🟣🟣🟣🟣🟣 SL/Timeout");
                     console.log("\n\n");
-
-                    // ===== Fallback ======================================================
-                    // Lý do: vòng này KHÔNG có bước nào thay đổi/truy vấn tình trạng
-                    // nhưng ta vẫn cần 1 refresh định kỳ để phát hiện fill bất ngờ (kể cả khi positions=0).
-                    // if (!isRefreshed_1_CREATE_CLOSE && !isRefreshed_2_CLEAR_OPEN && !isRefreshed_3_CREATE_OPEN && !isRefreshed_4_SL_ROI) {
-                    //     await this.refreshSnapshot("All (periodic / detect fills)");
-                    // }
                 } else {
                     this.log("isStart=false → skip all work");
                 }
@@ -281,7 +244,7 @@ class Bot {
         }
     }
 
-    private async createTPClose(isRefreshed_1_CREATE_CLOSE: boolean) {
+    private async createTPClose() {
         // ===== 1) CREATE TP CLOSE =====
         this.log("🩵🩵🩵🩵🩵 Create TP Close");
         // this.sendLogUi("💋 Check TP")
@@ -289,7 +252,6 @@ class Bot {
             const payloads = await this.getCloseOrderPayloads(); // 1 bước: tính + build payload
 
             for (const p of payloads) {
-                // console.log("Create close order:", p);
                 try {
                     const ok = await this.changeLeverage(p.contract.replace("/", "_"), this.settingUser.leverage);
                     if (!ok) continue;
@@ -300,16 +262,12 @@ class Bot {
                 }
             }
 
-            // await this.refreshSnapshot("Close");
-            // isRefreshed_1_CREATE_CLOSE = true;
-
             this.log("✅ Create Close: done");
         } else {
             this.log("Create Close: no positions");
         }
         this.log("🩵🩵🩵🩵🩵 Create TP Close");
         console.log("\n\n");
-        return isRefreshed_1_CREATE_CLOSE;
     }
 
     private beforeEach() {
@@ -389,45 +347,6 @@ class Bot {
         this.blackList = blackList;
     }
 
-    private async getOrderOpens() {
-        const url = "https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open";
-
-        const { body, error, ok } = await this.gateFetch<TGateApiRes<TOrderOpen[] | null>>(url);
-        if (ok === false || error || body === null) {
-            const msg = `❌ Get Order Opens: ${error}`;
-            throw new Error(msg);
-        }
-
-        if (body?.code >= 400 || body?.code < 0) {
-            const msg = `❌ Get Order Opens: ${body?.message || "Unknown"}`;
-            throw new Error(msg);
-        }
-
-        if (body?.data === null || body?.data === undefined) return [];
-
-        return body.data;
-    }
-
-    private async getPositions() {
-        const url = "https://www.gate.com/apiw/v2/futures/usdt/positions";
-
-        const { body, error, ok } = await this.gateFetch<TGateApiRes<TPosition[] | null>>(url);
-        if (ok === false || error || body === null) {
-            const msg = `❌ Get Positions: ${error}`;
-            throw new Error(msg);
-        }
-
-        if (body?.code >= 400 || body?.code < 0) {
-            const msg = `❌ Get Position: ${body?.message || "Unknown"}`;
-            throw new Error(msg);
-        }
-
-        if (body?.data === null || body?.data === undefined) return [];
-
-        const openPositionsList = body.data.filter((pos) => Number(pos.size) !== 0);
-        return openPositionsList;
-    }
-
     private setOrderOpens(orderOpens: TOrderOpen[]) {
         this.orderOpens = orderOpens || [];
     }
@@ -442,28 +361,6 @@ class Bot {
         const key = `${contract}-${marginMode}-${side}-${value.leverage}`;
         this.positions.set(contract, value);
     }
-
-    /** Làm mới orderOpens kèm timeout & log */
-    private async refreshOrderOpens(ctx = "Refresh"): Promise<void> {
-        const orderOpens = await this.getOrderOpens();
-        this.setOrderOpens(orderOpens || []);
-        this.log(`${ctx}: refresh orderOpens`);
-    }
-
-    /** Làm mới positions kèm timeout & log */
-    private async refreshPositions(ctx = "Refresh"): Promise<void> {
-        const pos = await this.getPositions();
-        this.replacePositions(pos);
-        this.log(`${ctx}: refresh positions`);
-    }
-
-    /** Combo: làm mới cả orderOpens & positions (tuần tự để tránh đè webview) */
-    // private async refreshSnapshot(ctx = "Refresh"): Promise<void> {
-    //     // await this.refreshOrderOpens(ctx);
-    //     // await this.refreshPositions(ctx);
-    //     // this.log(`✅ ${ctx}: snapshot updated`);
-    //     // this.sendLogUi(`✅ ${ctx}: snapshot updated`);
-    // }
 
     private seq = 0;
 

@@ -3,6 +3,10 @@ import App from "./App";
 import Provider from "./components/provider/provider";
 import { IS_PRODUCTION } from "./constant/app.constant";
 
+import log from "electron-log/renderer";
+export const rerender = log.scope("renderer");
+rerender.info("Renderer started");
+
 if (process.env.NODE_ENV === "production") {
     console.log = () => {};
     console.debug = () => {};

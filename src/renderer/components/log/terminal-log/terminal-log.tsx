@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Copy, Pause, Play, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import WorkerMetrics from "../worker-metrics/worker-metrics";
+import WorkerMetrics from "../../worker-metrics/worker-metrics";
 
 export type LogLevel = "info" | "warn" | "error";
 export type LogLine = { ts: number; level: LogLevel; text: string };

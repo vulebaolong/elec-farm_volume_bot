@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import TerminalLog, { LogLine } from "./terminal-log";
+import { rerender } from "@/index";
 
 export default function LogsPane() {
     const [lines, setLines] = useState<LogLine[]>([]);
 
     useEffect(() => {
+        rerender.info("LogsPane started");
         const off = window.electron.ipcRenderer.on("bot:log", (l: LogLine) => {
             setLines((prev) => [...prev, l]);
         });

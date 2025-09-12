@@ -5,8 +5,9 @@ import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
 import { Play, Square } from "lucide-react";
 import { useEffect } from "react";
-import LogsPane from "../terminal-log/log-pane";
-import PassiveSticky from "../terminal-log/passive-sticky";
+import LogsPane from "../log/terminal-log/log-pane";
+import PassiveSticky from "../log/terminal-log/passive-sticky";
+import Log from "../log/log";
 
 type TProps = {};
 
@@ -89,7 +90,7 @@ export default function Controll({}: TProps) {
                     </div>
 
                     <div className="flex gap-2">
-                        <LogsPane />
+                        <Log className="max-w-[500px]" />
                         <PassiveSticky />
                     </div>
                 </CardContent>
