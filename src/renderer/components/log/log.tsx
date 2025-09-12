@@ -62,9 +62,11 @@ export default function Log({ className }: { className?: string }) {
     const [size, setSize] = useState<number | null>(null);
     const [level, setLevel] = useState<Level>("all");
     const [entries, setEntries] = useState<Entry[]>([]);
-    const [autoScroll, setAutoScroll] = useState(true);
 
     const viewportRef = useRef<HTMLDivElement | null>(null);
+
+    const autoScrollRef = useRef(true);
+
 
     useEffect(() => {
         let off: undefined | (() => void);
@@ -89,12 +91,12 @@ export default function Log({ className }: { className?: string }) {
                     return next.length > MAX_LINES ? next.slice(-MAX_LINES) : next;
                 });
                 window.electron.ipcRenderer.invoke("logs:size").then((n) => setSize(Number(n) || 0));
-                if (autoScroll) queueMicrotask(scrollToBottom); // ← chỉ dính nếu vẫn ở đáy
+                if (autoScrollRef.current) queueMicrotask(scrollToBottom); // ← chỉ dính nếu vẫn ở đáy
             });
         })();
         return () => off?.();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [autoScroll]);
+    }, []);
 
     const filtered = useMemo(() => (level === "all" ? entries : entries.filter((e) => e.level === level)), [entries, level]);
 
@@ -105,14 +107,14 @@ export default function Log({ className }: { className?: string }) {
     }
 
     useEffect(() => {
-        if (autoScroll) scrollToBottom();
-    }, [filtered, autoScroll]);
+        if (autoScrollRef.current) scrollToBottom();
+    }, [filtered]);
 
     function onViewportScroll() {
         const n = viewportRef.current;
         if (!n) return;
         const atBottom = n.scrollTop + n.clientHeight >= n.scrollHeight - BOTTOM_EPS;
-        setAutoScroll(atBottom);
+        autoScrollRef.current = atBottom;
     }
 
     async function onClear() {
@@ -130,7 +132,7 @@ export default function Log({ className }: { className?: string }) {
     return (
         <TooltipProvider>
             <Card className={cn("p-0 gap-0", className)}>
-                <CardHeader className="p-2 gap-0">
+                <CardHeader className="p-2 gap-0 border-b">
                     <div className="flex items-center gap-3 flex-wrap">
                         {/* Level filter */}
                         <div className="flex items-center gap-2">
@@ -149,10 +151,8 @@ export default function Log({ className }: { className?: string }) {
                             </Select>
                         </div>
 
-                        <Separator orientation="vertical" className="h-6" />
-
                         {/* Size */}
-                        <Badge variant="outline" className="text-xs ">
+                        <Badge variant="outline" className="text-xs">
                             <p className="truncate max-w-[50px]">{humanBytes(size)}</p>
                         </Badge>
 
@@ -175,11 +175,11 @@ export default function Log({ className }: { className?: string }) {
 
                         <div className="ml-auto flex items-center gap-2">
                             <Button
-                                disabled={autoScroll}
+                                disabled={autoScrollRef.current}
                                 className="h-6 w-6"
                                 variant="default"
                                 onClick={() => {
-                                    setAutoScroll(true);
+                                    autoScrollRef.current = true;
                                     scrollToBottom();
                                 }}
                             >
@@ -204,7 +204,7 @@ export default function Log({ className }: { className?: string }) {
                                 Showing <span className="font-medium text-foreground">{filtered.length}</span> line{filtered.length !== 1 ? "s" : ""}
                             </div>
                             <div className="text-[11px] text-muted-foreground">
-                                Autoscroll: <span className={autoScroll ? "text-foreground" : ""}>{autoScroll ? "on" : "off"}</span>
+                                Autoscroll: <span className={autoScrollRef.current ? "text-foreground" : ""}>{autoScrollRef.current ? "on" : "off"}</span>
                             </div>
                         </div>
 
@@ -213,8 +213,6 @@ export default function Log({ className }: { className?: string }) {
                         {/* 🔽 Scroll area bằng Radix primitives để có ref vào Viewport */}
                         <ScrollArea.Root type="auto" className="relative overflow-hidden">
                             <ScrollArea.Viewport ref={viewportRef} onScroll={onViewportScroll} className="h-[360px] w-full rounded-[inherit]">
-                                {/* min-w-full: nếu nội dung ngắn hơn viewport thì vẫn full width
-        px/py giữ padding; font-mono + text-xs như cũ */}
                                 <div className="min-w-full px-3 py-2 font-mono text-xs leading-relaxed">
                                     {filtered.length === 0 ? (
                                         <div className="text-muted-foreground">No entries</div>

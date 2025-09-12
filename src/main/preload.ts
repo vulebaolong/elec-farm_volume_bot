@@ -34,7 +34,12 @@ export type Channels =
     | "logs:read"
     | "logs:clear"
     | "logs:reveal"
-    | "log:append";
+    | "log:append"
+    | "rate:counts:path"
+    | "rate:counts:snapshot"
+    | "rate:counts:clear"
+    | "rate:counts:reveal"
+    | "rate:counts:update";
 
 const electronHandler = {
     ipcRenderer: {

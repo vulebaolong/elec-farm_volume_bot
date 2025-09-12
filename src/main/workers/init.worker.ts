@@ -1,5 +1,4 @@
 // src/main/workers/init.worker.ts
-import { LogLine } from "@/components/log/terminal-log/terminal-log";
 import { createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
 import {
     TFectMainRes,
@@ -13,12 +12,16 @@ import {
     TResultClickOpenOrder,
     TResultClickTabOpenOrder,
 } from "@/types/bot.type";
-import { TWorkerData } from "@/types/worker.type";
+import { TWorkerData, TWorkLog } from "@/types/worker.type";
 import { app, BrowserWindow, Event, ipcMain, RenderProcessGoneDetails, WebContentsView } from "electron";
+import Logger from "electron-log";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import { initGateView } from "../gate/gate-view";
-import Logger from "electron-log";
+import { GateRateCounter } from "../endpoint-counter";
+import { setupRateIpc } from "../rate-ipc";
+
+export const GATE_TIMEOUT = "GATE_TIMEOUT";
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 
@@ -31,6 +34,8 @@ if (!isDebug) {
 
 let botWorker: Worker | null = null;
 let gateView: WebContentsView | undefined;
+const endpointCounter = new GateRateCounter("endpoint-counts.json"); // true = kèm host
+const { broadcast: broadcastRate } = setupRateIpc(endpointCounter);
 
 let payloadOrder: TPayloadOrder = {
     contract: "BTC_USDT",
@@ -39,30 +44,37 @@ let payloadOrder: TPayloadOrder = {
     size: "1",
 };
 
-export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions) {
+export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions, workerLog: Logger.LogFunctions) {
     if (!botWorker) {
         const workerPath = app.isPackaged
             ? path.join(process.resourcesPath, "app.asar.unpacked", "dist", "main", "workers", "bot.worker.js")
             : path.join(__dirname, "workers", "bot.worker.bundle.dev.js");
 
         botWorker = new Worker(workerPath);
-        mainLog.info("New bot worker | threadId: ", botWorker.threadId);
+        mainLog.info("New Worker | threadId: ", botWorker.threadId);
 
         ipcMain.on("bot:init", (event, data) => {
-            mainLog.info("bot:init");
             botWorker?.postMessage({ type: "bot:init", payload: data });
+            mainLog.info("1) bot:init - send  | threadId ", botWorker?.threadId);
         });
 
         // lắng nghe từ worker
         botWorker.on("message", async (msg) => {
+            if (msg?.type === "bot:log") {
+                const { level = "info", text = "" }: TWorkLog = msg.payload;
+                // map level cơ bản
+                if (level === "error") workerLog.error(text);
+                else if (level === "warn") workerLog.warn(text);
+                else if (level === "debug") workerLog.debug?.(text);
+                else workerLog.info(text);
+            }
             if (msg?.type === "bot:init:done") {
-                mainLog.info("bot:init:done");
+                mainLog.info("3) bot:init:done");
                 gateView = initGateView(mainWindow, isDebug);
                 interceptRequest(gateView, botWorker!);
             }
-
             if (msg?.type === "bot:heartbeat") {
-                mainLog.info("bot:heartbeat - heartbeatheartbeatheartbeatheartbeatheartbeatheartbeatheartbeatheartbeatheartbeat");
+                // mainLog.info("bot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeat");
                 mainWindow?.webContents.send("bot:heartbeat", msg);
             }
             if (msg?.type === "bot:metrics") {
@@ -100,8 +112,10 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions)
                             const text = await res.text();
                             return { ok: true, bodyText: text, error: null };
                         } catch (e) {
-                            const msg = (e && e.name === 'AbortError') ? 'AbortError timeout' : String(e && e.message || e);
-                            return { ok: false, bodyText: '', error: msg };
+                            if (e && e.name === 'AbortError') {
+                                return { ok: false, bodyText: '', error: '${GATE_TIMEOUT}' };
+                            }
+                            return { ok: false, bodyText: '', error: String(e && e.message || e) };
                         } finally {
                             clearTimeout(to);
                         }
@@ -123,11 +137,13 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions)
 
                     botWorker?.postMessage({ type: "bot:fetch:res", payload });
                 } catch (e: any) {
+                    const msg = String(e?.message || e);
+                    const looksTimeout = /\btime(?:d\s+)?out\b/i.test(msg) || e?.name === "AbortError" || e?.code === "ETIMEDOUT";
                     const payload: TGateFectMainRes = {
                         ok: false,
                         reqId,
                         bodyText: "",
-                        error: String(e?.message || e),
+                        error: looksTimeout ? GATE_TIMEOUT : msg, // <-- chuẩn hoá thêm lần nữa
                     };
                     botWorker?.postMessage({ type: "bot:fetch:res", payload });
                 }
@@ -237,9 +253,6 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions)
                     botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
                 }
             }
-            if (msg?.type === "bot:log") {
-                mainWindow?.webContents.send("bot:log", msg.payload as { ts: number; level: "info" | "warn" | "error"; text: string });
-            }
             if (msg?.type === "bot:sticky:set") {
                 mainWindow?.webContents.send("bot:sticky:set", msg.payload);
             }
@@ -250,7 +263,10 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions)
                 mainWindow?.webContents.send("bot:sticky:clear", msg.payload);
             }
             if (msg?.type === "bot:reloadWebContentsView:Request") {
-                if (!gateView) return;
+                if (!gateView) {
+                    mainLog.error("bot:reloadWebContentsView:Request: gateView not found");
+                    return;
+                }
 
                 try {
                     if (!botWorker) {
@@ -264,24 +280,21 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions)
                     botWorker?.postMessage({ type: "bot:reloadWebContentsView:Response", payload: true });
                 } catch (e) {
                     // log lỗi reload nếu cần
-                    mainWindow?.webContents.send("bot:log", { ts: Date.now(), level: "error", text: String(e) });
+                    workerLog.error(`bot:reloadWebContentsView:Request: ${e}`);
                 }
             }
         });
         botWorker.on("error", (err) => {
-            console.error("botWorker error:", err);
-            const payload: LogLine = { ts: Date.now(), level: "error", text: `bot error: ${err?.message}` };
-            mainWindow?.webContents.send("bot:log", payload);
+            workerLog.error(err);
         });
         botWorker.on("exit", (code) => {
-            console.log("botWorker exit:", code);
-            const payload: LogLine = { ts: Date.now(), level: "error", text: `bot exited code: ${code}, need to reload app` };
-            mainWindow?.webContents.send("bot:log", payload);
+            workerLog.error(`bot exited code: ${code}, need to reload app`);
             botWorker = null;
         });
 
-        // ⬇️ Chờ thread vào trạng thái online rồi mới gửi init
-        botWorker.once("online", () => {});
+        botWorker.once("online", () => {
+            workerLog.info(`Worker Online`);
+        });
 
         // lắng nghe từ rerender
         ipcMain.on("bot:start", (event, data) => {
@@ -372,11 +385,6 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
 
                                 const postDataB64 = Buffer.from(jsonText, "utf8").toString("base64");
 
-                                // Cập nhật headers (loại bỏ content-length để Chromium tự set lại)
-                                // const headersArr = toHeaderArray(request.headers || {});
-                                // deleteHeader(headersArr, "content-length");
-                                // setHeader(headersArr, "content-type", "application/json; charset=utf-8");
-
                                 await wc.debugger.sendCommand("Fetch.continueRequest", {
                                     requestId,
                                     postData: postDataB64,
@@ -385,7 +393,6 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
                                 if (networkId) watchNetworkIds.add(networkId);
                             } catch (err) {
                                 console.log(`có lỗi`, err);
-                                // Không phải JSON hoặc parse fail → cho qua
                                 // await wc.debugger.sendCommand("Fetch.continueRequest", { requestId });
                             }
                             break;
@@ -420,6 +427,10 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
                         default:
                             break;
                     }
+
+                    endpointCounter.bumpFromHttp(method, url);
+                    broadcastRate();
+                    
                     break;
                 }
 
@@ -506,12 +517,6 @@ function handlePayloadModification(data: any, dataModify: any) {
     return updated;
 }
 
-function sendUiLog(text: string, level: "info" | "warn" | "error" = "info") {
-    // for (const win of BrowserWindow.getAllWindows()) {
-    //     win.webContents.send("bot:log", { ts: Date.now(), level, text });
-    // }
-}
-
 // chờ đúng 1 request (POST + URL), với log & timeout riêng
 function waitForOneRequest(
     wc: Electron.WebContents,
@@ -536,8 +541,6 @@ function waitForOneRequest(
         const finish = (ok: boolean, msg: string, extra?: any) => {
             if (done) return;
             done = true;
-            const dt = Date.now() - t0;
-            sendUiLog(`[${tag}] net:${ok ? "ok" : "err"} ${msg} • dt=${dt}ms ${extra ? `• ${JSON.stringify(extra)}` : ""}`, ok ? "info" : "error");
         };
 
         const onMsg = async (_e: any, method: string, params: any) => {
@@ -547,12 +550,10 @@ function waitForOneRequest(
                     if (!req) return;
                     if (req.method === match.method && String(req.url).startsWith(match.urlPrefix)) {
                         tracked.add(params.requestId);
-                        sendUiLog(`[${tag}] net:match ${req.method} ${req.url}`);
                     }
                 } else if (method === "Network.responseReceived") {
                     const id = params.requestId;
                     if (tracked.has(id)) {
-                        sendUiLog(`[${tag}] net:resp status=${params.response?.status ?? ""}`);
                     }
                 } else if (method === "Network.loadingFinished") {
                     const id = params.requestId;
@@ -585,9 +586,9 @@ function waitForOneRequest(
 
         dbg.on("message", onMsg);
         timer = setTimeout(() => {
-            finish(false, "waitForOneRequest timeout");
+            finish(false, `waitForOneRequest ${GATE_TIMEOUT}`);
             clean();
-            reject(new Error("waitForOneRequest timeout"));
+            reject(new Error(`waitForOneRequest ${GATE_TIMEOUT}`));
         }, timeoutMs);
     });
 }

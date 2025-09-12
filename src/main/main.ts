@@ -1,7 +1,6 @@
 import { IS_PRODUCTION } from "@/constant/app.constant";
 import { app, BrowserWindow, ipcMain, powerMonitor, shell } from "electron";
 import { installExtension, REDUX_DEVTOOLS } from "electron-devtools-installer";
-import log from "electron-log/main";
 import { autoUpdater } from "electron-updater";
 import { pathToFileURL } from "node:url";
 import path from "path";
@@ -11,7 +10,12 @@ import { resolveHtmlPath } from "./util";
 import { initBot } from "./workers/init.worker";
 import { initLog } from "./log";
 
-const mainLog = initLog();
+const log = initLog();
+
+const mainLog = log.scope("main");
+const workerLog = log.scope("worker");
+
+mainLog.info("✅ Main started =================");
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 
@@ -94,7 +98,7 @@ const createWindow = async () => {
     setupUpdaterIPC();
     // registerMetricsIPC();
     // blockGateWebSockets(gateView);
-    initBot(mainWindow, mainLog);
+    initBot(mainWindow, mainLog, workerLog);
 
     mainWindow.loadURL(resolveHtmlPath("index.html"));
 

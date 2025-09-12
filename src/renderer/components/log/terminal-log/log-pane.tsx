@@ -7,13 +7,13 @@ export default function LogsPane() {
 
     useEffect(() => {
         rerender.info("LogsPane started");
-        const off = window.electron.ipcRenderer.on("bot:log", (l: LogLine) => {
-            setLines((prev) => [...prev, l]);
-        });
+        // const off = window.electron.ipcRenderer.on("bot:log", (l: LogLine) => {
+        //     setLines((prev) => [...prev, l]);
+        // });
         const onClear = () => setLines([]);
         window.addEventListener("terminal:clear", onClear);
         return () => {
-            off?.();
+            // off?.();
             window.removeEventListener("terminal:clear", onClear);
         };
     }, []);

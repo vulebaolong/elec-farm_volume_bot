@@ -32,11 +32,12 @@ import { TPosition } from "@/types/position.type";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TUiSelector } from "@/types/ui-selector.type";
 import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
-import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
+import { TWorkerData, TWorkerHeartbeat, TWorkLog } from "@/types/worker.type";
 import axios from "axios";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { handleEntryCheckAll } from "./util-bot.worker";
+import { LogFunctions } from "electron-log";
 
 const FLOWS_API = {
     acounts: {
@@ -68,6 +69,14 @@ parentPort!.on("message", (msg: any) => {
     // console.log({ type: msg?.type }); // giữ nếu cần debug
     switch (msg?.type) {
         case "bot:init":
+            const payload: TWorkerData<TWorkLog> = {
+                type: "bot:log",
+                payload: {
+                    level: "info",
+                    text: "2) bot:init - received",
+                },
+            };
+            parentPort?.postMessage(payload);
             if (!bot) {
                 const dataInitBot: TDataInitBot = {
                     parentPort: parentPort!,
@@ -83,7 +92,8 @@ parentPort!.on("message", (msg: any) => {
     }
 });
 
-const GATE_FETCH_RPC_TIMEOUT = "❌ Get Order Opens: AbortError timeout";
+export const GATE_TIMEOUT = "GATE_TIMEOUT";
+const INSUFFICIENT_AVAILABLE = `INSUFFICIENT_AVAILABLE`;
 
 class Bot {
     private count = 0;
@@ -128,7 +138,6 @@ class Bot {
                     await this.createTPClose();
 
                     // ===== 2) CLEAR OPEN =================================================
-                    this.log("🟢🟢🟢🟢🟢 Clear Open");
                     if (this.orderOpens.length > 0) {
                         const contractsToCancel = this.contractsToCancelWithEarliest();
                         for (const contract of contractsToCancel) {
@@ -138,35 +147,30 @@ class Bot {
                         }
 
                         // Cập nhật TP-close xen kẽ
-                       await this.createTPClose();
+                        await this.createTPClose();
 
-
-                        this.log("✅ Clear Open: done");
+                        this.log("🟢 ✅ Clear Open: done");
                     } else {
-                        this.log("Clear Open: no order open");
+                        this.log("🟢 Clear Open: no order open");
                     }
-                    this.log("🟢🟢🟢🟢🟢 Clear Open");
                     console.log("\n\n");
 
                     // ===== 3) CREATE OPEN ===============================================
-                    this.log("🔵🔵🔵🔵🔵 Create Open");
-
                     if (this.isCheckwhitelistEntryEmty() && this.isCheckMaxOpenPO()) {
-
                         for (const whitelistItem of Object.values(this.whitelistEntry)) {
                             const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
 
                             // nếu đã max thì không vào thoát vòng lặp
                             if (!this.isCheckMaxOpenPO()) {
-                                this.log(`Create Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
-                                this.sendLogUi(`Create Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
+                                this.log(`🔵 Create Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
+                                this.logWorker.info(`Create Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
                                 break;
                             }
 
                             // nếu symbol đó đã tồn tại trong orderOpens -> bỏ qua
                             if (this.isOrderExitsByContract(symbol)) {
-                                this.log(`Create Open: skip ${symbol} (already exists)`);
-                                this.sendLogUi(`Create Open: skip ${symbol} (already exists)`);
+                                this.log(`🔵 Create Open: skip ${symbol} (already exists)`);
+                                this.logWorker.info(`Create Open: skip ${symbol} (already exists)`);
                                 continue;
                             }
 
@@ -175,14 +179,13 @@ class Bot {
                                 continue;
                             }
 
-                            this.log(`Create Open: ${symbol} ok (not exists) | side=${side} | sizeStr=${sizeStr}`);
+                            this.log(`🔵 Create Open: ${symbol} ok (not exists) | side=${side} | sizeStr=${sizeStr}`);
 
                             const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
                             if (!ok) continue;
 
                             const bidsAsks = await this.getBidsAsks(symbol);
                             const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, 5 + 1);
-                            this.log(`Create Open: ${prices.length} ladder order(s)`, prices);
 
                             for (const price of prices) {
                                 const payloadOpenOrder: TPayloadOrder = {
@@ -194,24 +197,26 @@ class Bot {
                                 try {
                                     await this.openEntry(payloadOpenOrder, `Open`);
                                 } catch (error: any) {
-                                    this.sendLogUi(`${error.message}`, "error");
+                                    if (error?.message === INSUFFICIENT_AVAILABLE) {
+                                        throw new Error(INSUFFICIENT_AVAILABLE);
+                                    }
+                                    if (this.isTimeoutError(error)) {
+                                        throw new Error(error);
+                                    }
+                                    this.logWorker.error(error?.message);
                                     continue;
                                 }
                             }
 
                             // cập nhật TP-close
                             await this.createTPClose();
-                            this.log("✅ Create Open: done for symbol", symbol);
                         }
-
                     } else {
-                        this.log(`Create Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
+                        this.log(`🔵 Create Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
                     }
-                    this.log("🔵🔵🔵🔵🔵 Create Open");
                     console.log("\n\n");
 
                     // ===== 4) SL / ROI ===================================================
-                    this.log("🟣🟣🟣🟣🟣 SL/Timeout");
                     if (this.positions.size > 0) {
                         for (const [, pos] of this.positions) {
                             await this.handleRoi(pos);
@@ -219,20 +224,22 @@ class Bot {
                             // await this.createTPClose();
                         }
 
-                        this.log("✅ Roi: done");
+                        this.log("🟣 Roi: done");
                     } else {
                         this.log("SL/Timeout: no positions");
                         // Không refresh ngay ở đây — để block “All” quyết định bên dưới
                     }
-                    this.log("🟣🟣🟣🟣🟣 SL/Timeout");
                     console.log("\n\n");
                 } else {
                     this.log("isStart=false → skip all work");
                 }
             } catch (err: any) {
-                this.log("❌❌❌❌❌ ITER ERROR =====", err);
-                this.sendLogUi(err.message, "error");
-                if (err.message.includes(GATE_FETCH_RPC_TIMEOUT)) {
+                console.log("err: ", err);
+                this.logWorker.error(err.message, "error");
+                if (err?.message === INSUFFICIENT_AVAILABLE) {
+                    this.stop();
+                }
+                if (this.isTimeoutError(err)) {
                     this.reloadWebContentsViewRequest();
                 }
             } finally {
@@ -246,8 +253,6 @@ class Bot {
 
     private async createTPClose() {
         // ===== 1) CREATE TP CLOSE =====
-        this.log("🩵🩵🩵🩵🩵 Create TP Close");
-        // this.sendLogUi("💋 Check TP")
         if (this.positions.size > 0) {
             const payloads = await this.getCloseOrderPayloads(); // 1 bước: tính + build payload
 
@@ -257,16 +262,19 @@ class Bot {
                     if (!ok) continue;
                     await this.openEntry(p, `TP: Close`);
                 } catch (error: any) {
-                    this.sendLogUi(`${error.message}`, "error");
+                    if (error?.message === INSUFFICIENT_AVAILABLE) {
+                        throw new Error(INSUFFICIENT_AVAILABLE);
+                    }
+                    if (this.isTimeoutError(error)) {
+                        throw new Error(error);
+                    }
+                    this.logWorker.error(`${error.message}`, "error");
                     continue;
                 }
             }
-
-            this.log("✅ Create Close: done");
         } else {
-            this.log("Create Close: no positions");
+            this.log("🩵 Create Close: no positions");
         }
-        this.log("🩵🩵🩵🩵🩵 Create TP Close");
         console.log("\n\n");
     }
 
@@ -330,13 +338,13 @@ class Bot {
     private start() {
         this.isStart = true;
         this.parentPort?.postMessage({ type: "bot:start", payload: { isStart: this.isStart } });
-        this.sendLogUi("🟢 Start", "info");
+        this.logWorker.info("🟢 Start");
     }
 
     private stop() {
         this.isStart = false;
         this.parentPort?.postMessage({ type: "bot:stop", payload: { isStart: this.isStart } });
-        this.sendLogUi("🔴 Stop", "info");
+        this.logWorker.info("🔴 Stop");
     }
 
     private sleep(ms: number) {
@@ -409,18 +417,11 @@ class Bot {
 
             // 2) timeout RPC (phòng main không hồi)
             timer = setTimeout(() => {
-                done({ ok: false, body: null, error: GATE_FETCH_RPC_TIMEOUT });
+                done({ ok: false, body: null, error: GATE_TIMEOUT });
             }, timeoutMs);
 
             // 3) gửi sau
             port.postMessage({ type: "bot:fetch", payload: { url, init, reqId, timeoutMs } });
-        });
-    }
-
-    private sendLogUi(text: string, level: LogLevel | undefined = "info") {
-        this.parentPort?.postMessage({
-            type: "bot:log",
-            payload: { ts: Date.now(), level, text: text },
         });
     }
 
@@ -455,7 +456,7 @@ class Bot {
         if (code >= 400 || code < 0) {
             const msg = `❌ Change Leverage: ${symbol} | code:${code} | ${message}`;
             this.log(msg);
-            this.sendLogUi(msg, `error`);
+            this.logWorker.error(msg, `error`);
             return false;
         }
 
@@ -467,14 +468,14 @@ class Bot {
         if (data?.[0]?.leverage !== leverageString || data?.[1]?.leverage !== leverageString) {
             const msg = `❌ Change Leverage: ${symbol} | mismatched leverage`;
             this.log(msg);
-            this.sendLogUi(msg, `error`);
+            this.logWorker.error(msg, `error`);
             return false;
         }
 
         this.changedLaveragelist.add(symbol);
         const msg = `✅ Change Leverage: ${symbol} | ${leverageString}`;
         this.log(msg);
-        this.sendLogUi(msg, `info`);
+        this.logWorker.info(msg, `info`);
 
         return true;
     }
@@ -496,6 +497,12 @@ class Bot {
 
         const { body, error, ok } = await this.createOrder<TGateApiRes<TOrderOpen | null>>(payload, dataSelector);
 
+        if ((body as any)?.label === "INSUFFICIENT_AVAILABLE") {
+            const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: INSUFFICIENT_AVAILABLE`;
+            this.logWorker.error(msg);
+            throw new Error(`INSUFFICIENT_AVAILABLE`);
+        }
+
         if (ok === false || error || body === null) {
             const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${error}`;
             throw new Error(msg);
@@ -511,8 +518,8 @@ class Bot {
             throw new Error(msg);
         }
 
-        const status = `✅ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}`;
-        this.sendLogUi(status);
+        const status = ` ✅ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}`;
+        this.logWorker.info(status);
 
         return body.data;
     }
@@ -668,7 +675,7 @@ class Bot {
 
         const selectorTableOrderPanel = this.uiSelector?.find((item) => item.code === "tableOrderPanel")?.selectorValue;
         if (!selectorTableOrderPanel) {
-            console.log(`Not found selector`, { selectorTableOrderPanel });
+            this.log(`🟢 Not found selector`, { selectorTableOrderPanel });
             throw new Error(`Not found selector`);
         }
         const stringClickCanelAllOpen = createCodeStringClickCancelAllOpen({
@@ -679,11 +686,11 @@ class Bot {
         const { body, error, ok } = await this.sendClickCanelAllOpen<TGateClickCancelAllOpenRes["body"]>(stringClickCanelAllOpen);
 
         if (ok === false || error || body === null) {
-            const msg = `❌ Click Cancel All Order error: ${error} ${body} ${ok}`;
+            const msg = `🟢 ❌ Click Cancel All Order error: ${error} ${body} ${ok}`;
             throw new Error(msg);
         }
 
-        this.sendLogUi(`✅ ${contract} Cancel All Open: ${body.clicked}`);
+        this.logWorker.info(`✅ ${contract} Cancel All Open: ${body.clicked}`);
         this.removeSticky(`timeout:${contract}`);
 
         return body;
@@ -762,7 +769,7 @@ class Bot {
 
             if (errString) {
                 this.log(errString);
-                this.sendLogUi(errString, "error");
+                this.logWorker.info(errString, "error");
                 continue;
             } else if (qualified && result && result.side) {
                 this.whitelistEntry.push({
@@ -793,7 +800,7 @@ class Bot {
             const infoContract = await this.getInfoContract(contract);
             if (!infoContract) {
                 console.log(`❌ getCloseOrderPayloads: infoContract not found: ${contract}`);
-                this.sendLogUi(`❌ getCloseOrderPayloads: infoContract not found: ${contract}`, "error");
+                this.logWorker.info(`❌ getCloseOrderPayloads: infoContract not found: ${contract}`, "error");
                 continue;
             }
             const tickSize = infoContract.order_price_round;
@@ -806,7 +813,7 @@ class Bot {
             const lastPrice = await this.getLastPrice(contract);
             if (!lastPrice) {
                 console.log(`❌ getLastPrice: lastPrice not found: ${contract}`);
-                this.sendLogUi(`❌ getLastPrice: lastPrice not found: ${contract}`, "error");
+                this.logWorker.info(`❌ getLastPrice: lastPrice not found: ${contract}`, "error");
                 continue;
             }
             this.log(`✅ getLastPrice: lastPrice: ${lastPrice}`);
@@ -967,7 +974,7 @@ class Bot {
         if (stats.length === 0) this.clearStickies();
         return stats.filter(({ contract }) => {
             if (this.positions.has(contract)) {
-                this.log(`${contract} có trong position => bỏ qua`);
+                this.log(`🟢 ${contract} có trong position => bỏ qua`);
                 this.removeSticky(`timeout:${contract}`);
                 return false;
             } else {
@@ -1006,7 +1013,7 @@ class Bot {
         const created = this.toSec(create_time_sec);
         const nowSec = Math.floor(Date.now() / 1000);
 
-        this.sendLogUi(`⏰ ${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
+        this.logWorker.info(`⏰ ${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
         this.setSticky(`timeout:${contract}`, `${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
 
         return nowSec - created >= this.settingUser.timeoutClearOpenSecond;
@@ -1023,7 +1030,7 @@ class Bot {
 
     private isCheckwhitelistEntryEmty() {
         if (this.whitelistEntry.length <= 0) {
-            this.log(`whitelistEntry rỗng => không xử lý whitelistEntry`, this.whitelistEntry.length);
+            this.log(`🔵 whitelistEntry rỗng => không xử lý whitelistEntry`, this.whitelistEntry.length);
             return false;
         }
         return true;
@@ -1054,18 +1061,18 @@ class Bot {
         }
 
         const length = pairs.size;
-        this.log(`lengthOrderInOrderOpensAndPosition: ${length}`);
+        this.log(`🔵 lengthOrderInOrderOpensAndPosition: ${length}`);
 
         return length;
     }
 
     private isOrderExitsByContract(contract: string): boolean {
         const isExitsOrderOpens = !!this.orderOpens.find((item) => item.contract === contract.replace("_", "/") && !item.is_reduce_only);
-        if (isExitsOrderOpens) this.log(`${contract} đã tồn tại trong orderOpens => bỏ qua | isExitsOrderOpens: ${isExitsOrderOpens}`);
+        if (isExitsOrderOpens) this.log(`🔵 ${contract} đã tồn tại trong orderOpens => bỏ qua | isExitsOrderOpens: ${isExitsOrderOpens}`);
 
         // console.log("contract: ", contract);
         const isExitsPosition = this.positions.has(contract);
-        if (isExitsPosition) this.log(`${contract} tồn tại trong position => bỏ qua | isExitsPosition: ${isExitsPosition}`);
+        if (isExitsPosition) this.log(`🔵 ${contract} tồn tại trong position => bỏ qua | isExitsPosition: ${isExitsPosition}`);
 
         const isExits = isExitsOrderOpens || isExitsPosition;
 
@@ -1074,7 +1081,7 @@ class Bot {
 
     private isExitsBlackList(contract: string): boolean {
         const isExits = this.blackList.includes(contract.replace("/", "_"));
-        if (isExits) this.sendLogUi(`${contract} Exits In BlackList => continue`);
+        if (isExits) this.logWorker.info(`🔵 ${contract} Exits In BlackList => continue`);
         return isExits;
     }
 
@@ -1168,7 +1175,7 @@ class Bot {
 
         try {
             // await this.openEntry(payload, "SL: Close");
-            this.sendLogUi(
+            this.logWorker.info(
                 [
                     `🧪 ROI DEBUG — ${symbol}`,
                     `  • side: ${size > 0 ? "long" : "short"}  size: ${size}`,
@@ -1183,7 +1190,7 @@ class Bot {
                 "info",
             );
         } catch (error: any) {
-            this.sendLogUi(`${error.message}`, "error");
+            this.logWorker.log(`${error.message}`, "error");
         }
         return;
     }
@@ -1209,13 +1216,13 @@ class Bot {
     }
 
     private reloadWebContentsViewRequest() {
-        this.sendLogUi("🔄 Reload WebContentsView Request", "info");
+        this.logWorker.info("🔄 Reload WebContentsView Request", "info");
         this.stop();
         this.parentPort?.postMessage({ type: "bot:reloadWebContentsView:Request", payload: true });
     }
 
     private async reloadWebContentsViewResponse() {
-        this.sendLogUi("🔄 Reload WebContentsView Response", "info");
+        this.logWorker.info("🔄 Reload WebContentsView Response", "info");
         await this.sleep(5000);
         this.start();
     }
@@ -1251,8 +1258,103 @@ class Bot {
                     break;
             }
         } catch (error) {
-            this.sendLogUi(`❌ handleFollowApi: ${String(error)}`, "error");
+            this.logWorker.info(`❌ handleFollowApi: ${String(error)}`, "error");
         }
+    }
+
+    private logWorker: LogFunctions = {
+        info: (...params: any[]) => {
+            const payload: TWorkerData<TWorkLog> = {
+                type: "bot:log",
+                payload: {
+                    level: "info",
+                    text: params.map(String).join(" "),
+                },
+            };
+            parentPort?.postMessage(payload);
+        },
+        error: (...params: any[]) => {
+            const payload: TWorkerData<TWorkLog> = {
+                type: "bot:log",
+                payload: {
+                    level: "error",
+                    text: params.map(String).join(" "),
+                },
+            };
+            parentPort?.postMessage(payload);
+        },
+        warn: (...params: any[]) => {
+            const payload: TWorkerData<TWorkLog> = {
+                type: "bot:log",
+                payload: {
+                    level: "warn",
+                    text: params.map(String).join(" "),
+                },
+            };
+            parentPort?.postMessage(payload);
+        },
+        debug: (...params: any[]) => {
+            const payload: TWorkerData<TWorkLog> = {
+                type: "bot:log",
+                payload: {
+                    level: "debug",
+                    text: params.map(String).join(" "),
+                },
+            };
+            parentPort?.postMessage(payload);
+        },
+        log: (...params: any[]) => {
+            const payload: TWorkerData<TWorkLog> = {
+                type: "bot:log",
+                payload: {
+                    level: "info",
+                    text: params.map(String).join(" "),
+                },
+            };
+            parentPort?.postMessage(payload);
+        },
+        silly: (...params: any[]) => {
+            const payload: TWorkerData<TWorkLog> = {
+                type: "bot:log",
+                payload: {
+                    level: "silly",
+                    text: params.map(String).join(" "),
+                },
+            };
+            parentPort?.postMessage(payload);
+        },
+        verbose: (...params: any[]) => {
+            const payload: TWorkerData<TWorkLog> = {
+                type: "bot:log",
+                payload: {
+                    level: "verbose",
+                    text: params.map(String).join(" "),
+                },
+            };
+            parentPort?.postMessage(payload);
+        },
+    };
+
+    private isTimeoutError(err: any): boolean {
+        const TIMEOUT_PATTERNS = [
+            /\btime(?:d\s*)?out\b/i, // timeout, timed out, time out
+            /ERR_?TIMED_?OUT/i, // Chromium: net::ERR_TIMED_OUT
+            /\bETIMEDOUT\b/i,
+            /\bESOCKETTIMEDOUT\b/i,
+            /\bECONNABORTED\b/i,
+            /\bAbortError\b/i,
+            /\bTimeoutError\b/i,
+            /\bGATE_TIMEOUT\b/i,
+        ];
+        const msg = [
+            String(err?.message ?? ""),
+            String((err as any)?.errorText ?? ""), // từ Network.loadingFailed
+            String(err ?? ""),
+            String((err as any)?.name ?? ""),
+            String((err as any)?.code ?? ""),
+        ].join(" ");
+
+        return TIMEOUT_PATTERNS.some((re) => re.test(msg));
     }
 }
 

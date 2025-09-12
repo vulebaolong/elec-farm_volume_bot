@@ -28,7 +28,7 @@ export default function PassiveSticky() {
     // if (list.length === 0) return null;
 
     return (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 h-[300px]">
             <div className="flex items-center gap-2">
                 <Badge variant="secondary">Sticky</Badge>
                 <span className="text-xs text-muted-foreground">

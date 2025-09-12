@@ -97,7 +97,7 @@ export default function Bot() {
                 size="md"
             />
 
-            <div className="flex flex-col gap-5 h-full pb-80">
+            <div className="flex flex-col gap-5 h-full pb-[500px]">
                 {/* <GateDockPanel /> */}
                 <Controll />
             </div>
