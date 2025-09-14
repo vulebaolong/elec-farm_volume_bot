@@ -210,7 +210,7 @@ export default function SettingAdminUser({ type }: TProps) {
                             withAsterisk
                             label="Stop Loss"
                             placeholder="Stop Loss"
-                            inputWrapperOrder={["label", "input", "error"]}
+                            inputWrapperOrder={["label", "input", "description", "error"]}
                             value={field.value ?? ""}
                             onChange={(val) => field.onChange(val ?? "")}
                             onBlur={field.onBlur}
@@ -220,6 +220,7 @@ export default function SettingAdminUser({ type }: TProps) {
                             min={0}
                             step={0.1}
                             clampBehavior="strict"
+                            description={"If 100 OFF SL | 1 = 1%"}
                         />
                     )}
                 />
