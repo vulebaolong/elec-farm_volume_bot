@@ -22,6 +22,7 @@ export type TSettingUsers = {
     ifImbalanceBidPercent: number;
     ifImbalanceAskPercent: number;
     entrySignalMode: EntrySignalMode;
+    delayForPairsMs: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

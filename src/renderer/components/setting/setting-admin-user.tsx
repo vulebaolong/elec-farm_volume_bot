@@ -50,6 +50,7 @@ export const FormSchema = z.object({
     ifImbalanceBidPercent: numberRange(0, 100, "Imbalance Bid %"),
     ifImbalanceAskPercent: numberRange(0, 100, "Imbalance Ask %"),
     entrySignalMode: z.enum(EntrySignalMode),
+    delayForPairsMs: intField(1, "Delay For Pairs (ms)"),
     // max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
     // max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
 });
@@ -92,6 +93,7 @@ export default function SettingAdminUser({ type }: TProps) {
             ifImbalanceBidPercent: "",
             ifImbalanceAskPercent: "",
             entrySignalMode: EntrySignalMode.IMBALANCE,
+            delayForPairsMs: "",
             // max24hChangeGreen: "",
             // max24hChangeRed: "",
         },
@@ -116,6 +118,7 @@ export default function SettingAdminUser({ type }: TProps) {
                 ifImbalanceAskPercent: setting.ifImbalanceAskPercent ?? "",
                 ifImbalanceBidPercent: setting.ifImbalanceBidPercent ?? "",
                 entrySignalMode: setting.entrySignalMode ?? EntrySignalMode.IMBALANCE,
+                delayForPairsMs: setting.delayForPairsMs ?? "",
                 // max24hChangeGreen: setting.max24hChangeGreen ?? "",
                 // max24hChangeRed: setting.max24hChangeRed ?? "",
             });
@@ -143,6 +146,7 @@ export default function SettingAdminUser({ type }: TProps) {
             ifImbalanceBidPercent: data.ifImbalanceBidPercent,
             ifImbalanceAskPercent: data.ifImbalanceAskPercent,
             entrySignalMode: data.entrySignalMode,
+            delayForPairsMs: data.delayForPairsMs,
             // max24hChangeGreen: data.max24hChangeGreen,
             // max24hChangeRed: data.max24hChangeRed,
         };
@@ -548,6 +552,32 @@ export default function SettingAdminUser({ type }: TProps) {
                                 </Radio.Card>
                             </Stack>
                         </Radio.Group>
+                    )}
+                />
+
+                {/* delayForPairsMs */}
+                <Controller
+                    name="delayForPairsMs"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Delay for pairs (ms)"
+                            placeholder="Delay (ms)"
+                            inputWrapperOrder={["label", "input", "description", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.timeoutMs?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix="ms"
+                            min={0}
+                            step={1000}
+                            clampBehavior="strict"
+                            description={"If 0 then no delay | 1000ms = 1second"}
+                        />
                     )}
                 />
 

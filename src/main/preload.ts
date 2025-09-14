@@ -29,6 +29,7 @@ export type Channels =
     | "bot:sticky:set"
     | "bot:sticky:remove"
     | "bot:sticky:clear"
+    | "bot:reloadWebContentsView"
     | "logs:path"
     | "logs:size"
     | "logs:read"
@@ -39,7 +40,8 @@ export type Channels =
     | "rate:counts:snapshot"
     | "rate:counts:clear"
     | "rate:counts:reveal"
-    | "rate:counts:update";
+    | "rate:counts:update"
+    | "devtools:toggle";
 
 const electronHandler = {
     ipcRenderer: {

@@ -4,10 +4,12 @@ import { ADD_RIPPLE, SET_IS_RUNNING, SET_IS_START } from "@/redux/slices/bot.sli
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
 import { Play, Square } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Log from "../log/log";
 import PassiveSticky from "../log/terminal-log/passive-sticky";
 import RateCountsPanel from "../rate-counts-panel/RateCountsPanel";
+import { ButtonLoading } from "../ui/button-loading";
+import { useToggleDevTool } from "@/api/tanstack/devtool.tanstack";
 
 type TProps = {};
 
@@ -15,9 +17,15 @@ export default function Controll({}: TProps) {
     const isStart = useAppSelector((state) => state.bot.isStart);
     const isRunning = useAppSelector((state) => state.bot.isRunning);
     const dispatch = useAppDispatch();
+    const [loadingReloadWebContent, setLoadingReloadWebContent] = useState(false);
+    const toggleDevTool = useToggleDevTool();
 
     const start = () => window.electron?.ipcRenderer.sendMessage("bot:start");
     const stop = () => window.electron?.ipcRenderer.sendMessage("bot:stop");
+    const reloadWebContentsView = () => {
+        window.electron?.ipcRenderer.sendMessage("bot:reloadWebContentsView");
+        setLoadingReloadWebContent(true);
+    };
 
     useEffect(() => {
         const offBotHearbeat = window.electron.ipcRenderer.on("bot:heartbeat", (data: TWorkerData<TWorkerHeartbeat>) => {
@@ -34,10 +42,15 @@ export default function Controll({}: TProps) {
             dispatch(SET_IS_START(data.payload.isStart));
         });
 
+        const offReloadWebContentsView = window.electron.ipcRenderer.on("bot:reloadWebContentsView", (data: TWorkerData<{ isStart: boolean }>) => {
+            setLoadingReloadWebContent(false);
+        });
+
         return () => {
             offBotHearbeat();
             offBotStart();
             offBotStop();
+            offReloadWebContentsView();
         };
     }, [isRunning, isStart, dispatch]);
 
@@ -86,6 +99,30 @@ export default function Controll({}: TProps) {
                                 <Square className="h-4 w-4" />
                                 Stop
                             </Button>
+
+                            {/* Reload Web */}
+                            <ButtonLoading
+                                loading={loadingReloadWebContent}
+                                className="w-[100px]"
+                                variant={"outline"}
+                                size="sm"
+                                onClick={reloadWebContentsView}
+                            >
+                                Reload Web
+                            </ButtonLoading>
+
+                            {/* Devtool */}
+                            <ButtonLoading
+                                loading={toggleDevTool.isPending}
+                                className="w-[100px]"
+                                variant={"outline"}
+                                size="sm"
+                                onClick={() => {
+                                    toggleDevTool.mutate();
+                                }}
+                            >
+                                {!toggleDevTool?.data ? "Open" : "Close"} Devtool
+                            </ButtonLoading>
                         </div>
                     </div>
 

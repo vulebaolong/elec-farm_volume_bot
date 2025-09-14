@@ -1,3 +1,4 @@
+import { IS_PRODUCTION } from "@/constant/app.constant";
 import { setLocalStorageScript } from "@/javascript-string/logic-farm";
 import { BrowserWindow, WebContentsView, app, shell } from "electron";
 import fs from "node:fs";
@@ -53,7 +54,11 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
         gateView.webContents.executeJavaScript(setLocalStorageScript, true);
     });
 
-    if (isDevtoolsEnabledByFile()) {
+    if (IS_PRODUCTION) {
+        if (isDevtoolsEnabledByFile()) {
+            gateView.webContents.openDevTools({ mode: "detach" });
+        }
+    } else {
         gateView.webContents.openDevTools({ mode: "detach" });
     }
 

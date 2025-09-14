@@ -86,6 +86,9 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
             if (msg?.type === "bot:stop") {
                 mainWindow?.webContents.send("bot:stop", msg);
             }
+            if (msg?.type === "bot:reloadWebContentsView") {
+                mainWindow?.webContents.send("bot:reloadWebContentsView", msg);
+            }
             if (msg?.type === "bot:isReady") {
                 mainWindow?.webContents.send("bot:isReady", msg);
             }
@@ -272,12 +275,13 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
                     if (!botWorker) {
                         throw new Error("bot:reloadWebContentsView:Request: botWorker not found");
                     }
+
                     await reloadAndWait(gateView, botWorker, 30000);
                     // re-inject mọi thứ cần chạy lại sau reload
                     gateView.webContents.executeJavaScript(setLocalStorageScript, true).catch(() => {});
                     // (nếu có) re-enable các patch WS / CDP, v.v.
 
-                    botWorker?.postMessage({ type: "bot:reloadWebContentsView:Response", payload: true });
+                    botWorker?.postMessage({ type: "bot:reloadWebContentsView:Response", payload: msg?.payload });
                 } catch (e) {
                     // log lỗi reload nếu cần
                     workerLog.error(`bot:reloadWebContentsView:Request: ${e}`);
@@ -291,7 +295,6 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
             workerLog.error(`bot exited code: ${code}, need to reload app`);
             botWorker = null;
         });
-
         botWorker.once("online", () => {
             workerLog.info(`Worker Online`);
         });
@@ -302,6 +305,9 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
         });
         ipcMain.on("bot:stop", (event, data) => {
             botWorker?.postMessage({ type: "bot:stop", payload: data });
+        });
+        ipcMain.on("bot:reloadWebContentsView", (event, data) => {
+            botWorker?.postMessage({ type: "bot:reloadWebContentsView", payload: data });
         });
         ipcMain.on("bot:setWhiteList", (event, data) => {
             botWorker?.postMessage({ type: "bot:setWhiteList", payload: data });
@@ -314,6 +320,16 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
         });
         ipcMain.on("bot:blackList", (event, data) => {
             botWorker?.postMessage({ type: "bot:blackList", payload: data });
+        });
+        ipcMain.handle("devtools:toggle", () => {
+            if (!gateView) return { ok: false, opened: false, error: "gateView not found" };
+            if (gateView.webContents.isDevToolsOpened()) {
+                gateView.webContents.closeDevTools();
+                return { ok: true, opened: false };
+            } else {
+                gateView.webContents.openDevTools({ mode: "detach" });
+                return { ok: true, opened: true };
+            }
         });
     }
 
@@ -430,7 +446,7 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
 
                     endpointCounter.bumpFromHttp(method, url);
                     broadcastRate();
-                    
+
                     break;
                 }
 
@@ -643,4 +659,26 @@ async function reloadAndWait(gateView: Electron.WebContentsView, botWorker: impo
 
         wc.reload(); // hoặc reloadIgnoringCache()
     });
+}
+
+async function applyNoThrottle(dbg: Electron.Debugger): Promise<void> {
+    try {
+        await dbg.sendCommand("Network.enable");
+        await dbg.sendCommand("Network.setCacheDisabled", { cacheDisabled: false });
+
+        // Ép No throttling (Network)
+        await dbg.sendCommand("Network.emulateNetworkConditions", {
+            offline: false,
+            latency: 0,
+            downloadThroughput: 0,
+            uploadThroughput: 0,
+        });
+
+        // Ép No throttling (CPU)
+        await dbg.sendCommand("Emulation.setCPUThrottlingRate", { rate: 1 });
+
+        console.log("[applyNoThrottle] done");
+    } catch (e) {
+        console.error("[applyNoThrottle]", e);
+    }
 }

@@ -1,5 +1,4 @@
 // bot.worker.ts
-import { LogLevel } from "@/components/log/terminal-log/terminal-log";
 import { BASE_URL } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
 import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder } from "@/javascript-string/logic-farm";
@@ -34,10 +33,10 @@ import { TUiSelector } from "@/types/ui-selector.type";
 import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
 import { TWorkerData, TWorkerHeartbeat, TWorkLog } from "@/types/worker.type";
 import axios from "axios";
+import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { handleEntryCheckAll } from "./util-bot.worker";
-import { LogFunctions } from "electron-log";
 
 const FLOWS_API = {
     acounts: {
@@ -109,6 +108,7 @@ class Bot {
     private whiteList: TWhiteList = {};
     private infoContract = new Map<string, TGetInfoContractRes>();
     private blackList: string[] = [];
+    private nextOpenAt = new Map<string, number>();
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
@@ -160,6 +160,12 @@ class Bot {
                         for (const whitelistItem of Object.values(this.whitelistEntry)) {
                             const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
 
+                            // chưa hết thoi gian (delayForPairsMs) -> bỏ qua symbol này, vòng lặp vẫn tiếp tục cho symbol khác
+                            if (this.isDelayForPairsMs(symbol)) {
+                                this.logWorker.debug(`Create Open: skip ${symbol} (delayForPairsMs ${this.cooldownLeft(symbol)}ms)`);
+                                continue;
+                            }
+
                             // nếu đã max thì không vào thoát vòng lặp
                             if (!this.isCheckMaxOpenPO()) {
                                 this.log(`🔵 Create Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
@@ -210,6 +216,9 @@ class Bot {
 
                             // cập nhật TP-close
                             await this.createTPClose();
+
+                            // ✅ đặt cooldown cho symbol này sau khi xử lý xong
+                            this.postponePair(symbol, this.settingUser.delayForPairsMs);
                         }
                     } else {
                         this.log(`🔵 Create Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
@@ -280,8 +289,9 @@ class Bot {
 
     private beforeEach() {
         this.heartbeat();
-        console.log(`positions`, Object(this.positions).keys());
+        // console.log(`positions`, Object(this.positions).keys());
         // console.log(`orderOpens`, this.orderOpens);
+        // console.log(`settingUser`, this.settingUser);
     }
 
     private heartbeat() {
@@ -323,11 +333,15 @@ class Bot {
                 break;
 
             case "bot:reloadWebContentsView:Response":
-                this.reloadWebContentsViewResponse();
+                this.reloadWebContentsViewResponse(msg.payload);
                 break;
 
             case "bot:followApi":
                 this.handleFollowApi(msg.payload);
+                break;
+
+            case "bot:reloadWebContentsView":
+                this.reloadWebContentsViewRequest();
                 break;
 
             default:
@@ -1216,15 +1230,20 @@ class Bot {
     }
 
     private reloadWebContentsViewRequest() {
-        this.logWorker.info("🔄 Reload WebContentsView Request", "info");
-        this.stop();
-        this.parentPort?.postMessage({ type: "bot:reloadWebContentsView:Request", payload: true });
+        this.logWorker.info("🔄 Reload WebContentsView Request");
+        let isStop = false;
+        if (this.isStart) {
+            this.stop();
+            isStop = true;
+        }
+        this.parentPort?.postMessage({ type: "bot:reloadWebContentsView:Request", payload: { isStop } });
     }
 
-    private async reloadWebContentsViewResponse() {
-        this.logWorker.info("🔄 Reload WebContentsView Response", "info");
-        await this.sleep(5000);
-        this.start();
+    private async reloadWebContentsViewResponse({ isStop }: { isStop: boolean }) {
+        this.logWorker.info("🔄 Reload WebContentsView Response");
+        await this.sleep(1000);
+        if (isStop) this.start();
+        this.parentPort?.postMessage({ type: "bot:reloadWebContentsView", payload: true });
     }
 
     private handleFollowApi(payloadFollowApi: TPayloadFollowApi) {
@@ -1355,6 +1374,23 @@ class Bot {
         ].join(" ");
 
         return TIMEOUT_PATTERNS.some((re) => re.test(msg));
+    }
+
+    private isDelayForPairsMs(symbol: string) {
+        if (!this.settingUser.delayForPairsMs) {
+            return false;
+        } else {
+            const t = this.nextOpenAt.get(symbol) ?? 0;
+            return Date.now() < t;
+        }
+    }
+    private cooldownLeft(symbol: string) {
+        return Math.max(0, (this.nextOpenAt.get(symbol) ?? 0) - Date.now());
+    }
+    private postponePair(symbol: string, delayForPairsMs: number) {
+        if (delayForPairsMs) {
+            this.nextOpenAt.set(symbol, Date.now() + delayForPairsMs);
+        }
     }
 }
 
