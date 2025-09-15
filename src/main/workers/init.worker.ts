@@ -474,7 +474,6 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
                         payload: { method: rec.method, url: rec.url, status: rec.status, bodyText },
                     };
 
-                    // === GIỮ SWITCH CỦA BẠN Ở ĐÂY ===
                     switch (key) {
                         case `${FLOWS_API.acounts.method} ${FLOWS_API.acounts.url}`:
                             botWorker?.postMessage(valueFollowApi);

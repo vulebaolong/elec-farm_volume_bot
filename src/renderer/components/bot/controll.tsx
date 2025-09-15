@@ -16,6 +16,7 @@ type TProps = {};
 export default function Controll({}: TProps) {
     const isStart = useAppSelector((state) => state.bot.isStart);
     const isRunning = useAppSelector((state) => state.bot.isRunning);
+    const roleId = useAppSelector((state) => state.user.info?.roleId);
     const dispatch = useAppDispatch();
     const [loadingReloadWebContent, setLoadingReloadWebContent] = useState(false);
     const toggleDevTool = useToggleDevTool();
@@ -112,17 +113,19 @@ export default function Controll({}: TProps) {
                             </ButtonLoading>
 
                             {/* Devtool */}
-                            <ButtonLoading
-                                loading={toggleDevTool.isPending}
-                                className="w-[100px]"
-                                variant={"outline"}
-                                size="sm"
-                                onClick={() => {
-                                    toggleDevTool.mutate();
-                                }}
-                            >
-                                {!toggleDevTool?.data ? "Open" : "Close"} Devtool
-                            </ButtonLoading>
+                            {roleId === 3 && (
+                                <ButtonLoading
+                                    loading={toggleDevTool.isPending}
+                                    className="w-[100px]"
+                                    variant={"outline"}
+                                    size="sm"
+                                    onClick={() => {
+                                        toggleDevTool.mutate();
+                                    }}
+                                >
+                                    {!toggleDevTool?.data ? "Open" : "Close"} Devtool
+                                </ButtonLoading>
+                            )}
                         </div>
                     </div>
 

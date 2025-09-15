@@ -37,6 +37,7 @@ import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { handleEntryCheckAll } from "./util-bot.worker";
+import { TAccount } from "@/types/account.type";
 
 const FLOWS_API = {
     acounts: {
@@ -92,7 +93,6 @@ parentPort!.on("message", (msg: any) => {
 });
 
 export const GATE_TIMEOUT = "GATE_TIMEOUT";
-const INSUFFICIENT_AVAILABLE = `INSUFFICIENT_AVAILABLE`;
 
 class Bot {
     private count = 0;
@@ -100,7 +100,7 @@ class Bot {
     private parentPort: import("worker_threads").MessagePort;
     private isStart = false;
     private orderOpens: TOrderOpen[] = [];
-    private positions = new Map<string, TPosition>();
+    private positions = new Map<string, TPosition>(); // "BTC_USDT"
     private changedLaveragelist: Set<string> = new Set();
     private settingUser: TSettingUsers;
     private uiSelector: TUiSelector[];
@@ -108,7 +108,7 @@ class Bot {
     private whiteList: TWhiteList = {};
     private infoContract = new Map<string, TGetInfoContractRes>();
     private blackList: string[] = [];
-    private nextOpenAt = new Map<string, number>();
+    private nextOpenAt: number = 0;
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
@@ -161,14 +161,13 @@ class Bot {
                             const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
 
                             // chưa hết thoi gian (delayForPairsMs) -> bỏ qua symbol này, vòng lặp vẫn tiếp tục cho symbol khác
-                            if (this.isDelayForPairsMs(symbol)) {
-                                this.logWorker.debug(`Create Open: skip ${symbol} (delayForPairsMs ${this.cooldownLeft(symbol)}ms)`);
+                            if (this.isDelayForPairsMs()) {
+                                this.logWorker.info(`🔵 Create Open: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
                                 continue;
                             }
 
                             // nếu đã max thì không vào thoát vòng lặp
                             if (!this.isCheckMaxOpenPO()) {
-                                this.logWorker.info(`🔵 Create Open: break by maxTotalOpenPO: ${this.settingUser.maxTotalOpenPO}`);
                                 break;
                             }
 
@@ -201,9 +200,6 @@ class Bot {
                                 try {
                                     await this.openEntry(payloadOpenOrder, `Open`);
                                 } catch (error: any) {
-                                    if (error?.message === INSUFFICIENT_AVAILABLE) {
-                                        throw new Error(INSUFFICIENT_AVAILABLE);
-                                    }
                                     if (this.isTimeoutError(error)) {
                                         throw new Error(error);
                                     }
@@ -216,22 +212,17 @@ class Bot {
                             await this.createTPClose();
 
                             // ✅ đặt cooldown cho symbol này sau khi xử lý xong
-                            this.postponePair(symbol, this.settingUser.delayForPairsMs);
+                            this.postponePair(this.settingUser.delayForPairsMs);
                         }
-                    } else {
-                        this.log(`🔵 Create Open: skipped by isCheckwhitelistEntryEmty and isCheckMaxOpenPO`);
                     }
                     console.log("\n\n");
 
                     // ===== 4) SL / ROI ===================================================
                     if (this.isHandleSL()) {
-
                         for (const [, pos] of this.positions) {
                             await this.handleRoi(pos);
                             await this.createTPClose();
                         }
-
-                        this.log("🟣 Roi: done");
                     }
                     console.log("\n\n");
                 } else {
@@ -239,9 +230,6 @@ class Bot {
                 }
             } catch (err: any) {
                 this.logWorker.error(err?.message);
-                if (err?.message === INSUFFICIENT_AVAILABLE) {
-                    this.stop();
-                }
                 if (this.isTimeoutError(err)) {
                     this.reloadWebContentsViewRequest();
                 }
@@ -265,9 +253,6 @@ class Bot {
                     if (!ok) continue;
                     await this.openEntry(p, `TP: Close`);
                 } catch (error: any) {
-                    if (error?.message === INSUFFICIENT_AVAILABLE) {
-                        throw new Error(INSUFFICIENT_AVAILABLE);
-                    }
                     if (this.isTimeoutError(error)) {
                         throw new Error(error);
                     }
@@ -1032,7 +1017,7 @@ class Bot {
 
     private isCheckwhitelistEntryEmty() {
         if (this.whitelistEntry.length <= 0) {
-            this.log(`🔵 whitelistEntry rỗng => không xử lý whitelistEntry`, this.whitelistEntry.length);
+            this.logWorker.info(`🔵 Create Open: skip White list entry empty`, this.whitelistEntry.length);
             return false;
         }
         return true;
@@ -1040,8 +1025,8 @@ class Bot {
 
     private isCheckMaxOpenPO() {
         const lengthOrderInOrderOpensAndPosition = this.getLengthOrderInOrderOpensAndPosition();
-        // this.sendLogUi(`isCheckMaxOpenPO:  ${lengthOrderInOrderOpensAndPosition} | ${this.settingUser.maxTotalOpenPO}`);
         if (lengthOrderInOrderOpensAndPosition >= this.settingUser.maxTotalOpenPO) {
+            this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${lengthOrderInOrderOpensAndPosition} / ${this.settingUser.maxTotalOpenPO}`);
             return false;
         }
         return true;
@@ -1063,7 +1048,6 @@ class Bot {
         }
 
         const length = pairs.size;
-        this.log(`🔵 lengthOrderInOrderOpensAndPosition: ${length}`);
 
         return length;
     }
@@ -1113,10 +1097,84 @@ class Bot {
         return data;
     }
 
+    // 1) Lấy toàn bộ lệnh close (reduce_only) đang mở cho 1 symbol
+    private getOpenCloseOrdersBySymbol(symbol: string): TOrderOpen[] {
+        const pos = this.positions.get(symbol.replace("/", "_")); // "BTC/USDT" -> "BTC_USDT"
+        if (!pos) return [];
+        return this.orderOpens.filter((o) => this.isCloseOrderForPosition(pos, o));
+    }
+
+    // 2) Phân biệt SL hay TP dựa trên vị thế & giá so với entry
+    //    long:  SL khi price <= entry ; TP khi price >= entry
+    //    short: SL khi price >= entry ; TP khi price <= entry
+    private isSLCloseOrderForPosition(pos: TPosition, ord: TOrderOpen): boolean {
+        if (!this.isCloseOrderForPosition(pos, ord)) return false;
+        const price = Number((ord as any).price);
+        const entry = Number(pos.entry_price);
+        const side = this.getPosSide(pos);
+        if (!Number.isFinite(price) || !Number.isFinite(entry)) return false;
+
+        if (side === "long") return price <= entry;
+        else return price >= entry;
+    }
+
+    /**
+     * Từ các lệnh TP (reduce_only, cùng phía đóng với position),
+     * tạo payload mới với price = L2 của orderbook (bids[1] hoặc asks[1]),
+     * còn lại giữ nguyên (contract/size/reduce_only).
+     */
+    private async buildClosePayloadsFromExistingTP(symbol: string, pos: TPosition): Promise<TPayloadOrder[]> {
+        // 1) lấy info & orderbook
+        const info = await this.getInfoContract(symbol);
+        if (!info) {
+            this.logWorker.error(`❌ buildClosePayloadsFromExistingTP: infoContract not found: ${symbol}`);
+            return [];
+        }
+
+        // 3) lọc các lệnh close hiện có theo symbol rồi loại SL → chỉ lấy TP
+        const all = this.getOpenCloseOrdersBySymbol(symbol);
+        const takeProfitArr = all.filter((o) => !this.isSLCloseOrderForPosition(pos, o));
+
+        if (takeProfitArr.length === 0) {
+            this.logWorker.info(`${symbol} haved SL orders, skip...`);
+            return [];
+        }
+        // console.log("takeProfitArr: ", takeProfitArr);
+
+        const book = await this.getBidsAsks(symbol);
+        // console.dir({ book }, { depth: null, colors: true });
+        const bestBidL2 = Number(book?.bids?.[1]?.p ?? book?.bids?.[0]?.p);
+        const bestAskL2 = Number(book?.asks?.[1]?.p ?? book?.asks?.[0]?.p);
+        if (!Number.isFinite(bestBidL2) || !Number.isFinite(bestAskL2)) {
+            this.logWorker.error(`❌ buildClosePayloadsFromExistingTP: invalid L2 book for ${symbol}`);
+            return [];
+        }
+
+        // 2) xác định phía phải đóng theo position
+
+        // 4) map thành payload: giữ nguyên size/reduce_only/contract (đổi "/" -> "_"), chỉ thay price
+        const payloads: TPayloadOrder[] = takeProfitArr.map((orderTakeProfit) => {
+            const posSide: "long" | "short" = Number(orderTakeProfit.size) > 0 ? "long" : "short";
+            const price = posSide === "long" ? bestBidL2 : bestAskL2; // SELL dùng bid L2, BUY dùng ask L2
+            const sizeStr = String(orderTakeProfit.size);
+            return {
+                contract: symbol,
+                price: String(price),
+                size: sizeStr,
+                reduce_only: true, // TP close luôn là reduce_only
+            };
+        });
+
+        return payloads;
+    }
+
     private async handleRoi(pos: TPosition): Promise<void> {
         const symbol = pos.contract.replace("/", "_");
         const info = await this.getInfoContract(symbol);
-        if (!info) return;
+        if (!info) {
+            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get info contract fail`);
+            return;
+        }
 
         const size = Number(pos.size);
         const entryPrice = Number(pos.entry_price);
@@ -1127,11 +1185,26 @@ class Bot {
         const nowMs = Date.now();
 
         // Bỏ qua nếu dữ liệu không hợp lệ
-        if (!Number.isFinite(size) || size === 0) return;
-        if (!Number.isFinite(entryPrice) || entryPrice <= 0) return;
-        if (!Number.isFinite(leverage) || leverage <= 0) return;
-        if (!Number.isFinite(quanto) || quanto <= 0) return;
-        if (!Number.isFinite(lastPrice) || lastPrice <= 0) return;
+        if (!Number.isFinite(size) || size === 0) {
+            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get size ${size} contract fail`);
+            return;
+        }
+        if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
+            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get entryPrice ${entryPrice} contract fail`);
+            return;
+        }
+        if (!Number.isFinite(leverage) || leverage <= 0) {
+            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get leverage ${leverage} contract fail`);
+            return;
+        }
+        if (!Number.isFinite(quanto) || quanto <= 0) {
+            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get quanto ${quanto} contract fail`);
+            return;
+        }
+        if (!Number.isFinite(lastPrice) || lastPrice <= 0) {
+            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get lastPrice ${lastPrice} contract fail`);
+            return;
+        }
 
         const initialMargin = (entryPrice * Math.abs(size) * quanto) / leverage;
         const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
@@ -1140,59 +1213,34 @@ class Bot {
         const { stopLoss, timeoutEnabled, timeoutMs } = this.settingUser;
         const createdAtMs = openTimeSec > 0 ? openTimeSec * 1000 : nowMs;
         const isSL = returnPercent <= -stopLoss;
-        const timedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
+        const isTimedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
 
-        if (!isSL && !timedOut) return;
+        this.logWorker.info(
+            [
+                `🟣 ${symbol}`,
+                `sl: ${returnPercent.toFixed(2)}%/-${stopLoss}%  → ${isSL}`,
+                `timeout: ${timeoutEnabled ? "ON" : "OFF"} (${((nowMs - createdAtMs) / 1000).toFixed(1)}s / ${(timeoutMs / 1000).toFixed(1)}s) → ${isTimedOut}`,
+                `${size > 0 ? "long" : "short"}  ${size}`,
+                // `entry: ${entryPrice}  last: ${lastPrice}  lev: ${leverage}x  quanto: ${quanto}`,
+            ].join(" | "),
+        );
 
-        // Lấy order book
-        const book = await this.getBidsAsks(symbol);
-        const bestBid = Number(book?.bids?.[0]?.p);
-        const bestAsk = Number(book?.asks?.[0]?.p);
-        if (!Number.isFinite(bestBid) || !Number.isFinite(bestAsk)) return;
-
-        // Chọn giá maker đúng phía
-        const tick = Number(info.order_price_round) || 0;
-        const aggressiveTicks = 2; // có thể lấy từ setting
-        const toFixed = (n: number) => {
-            const dec = this.decimalsFromTick(tick || 0.00000001);
-            return n.toFixed(dec);
-        };
-
-        let priceNum: number;
-        if (size > 0) {
-            // close long = SELL → đặt >= bestAsk để là maker
-            priceNum = bestAsk + (tick * aggressiveTicks || 0);
-        } else {
-            // close short = BUY → đặt <= bestBid để là maker
-            priceNum = bestBid - (tick * aggressiveTicks || 0);
+        if (!isSL && !isTimedOut) {
+            return;
         }
-        const priceStr = toFixed(priceNum);
 
-        const payload: TPayloadOrder = {
-            contract: symbol,
-            price: priceStr,
-            size: this.flipSignStr(size),
-            reduce_only: true,
-        };
+        const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
+        // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
 
-        try {
-            this.logWorker.info(
-                [
-                    `🧪 ROI DEBUG — ${symbol}`,
-                    `  • side: ${size > 0 ? "long" : "short"}  size: ${size}`,
-                    `  • entry: ${entryPrice}  last: ${lastPrice}  lev: ${leverage}x  quanto: ${quanto}`,
-                    `  • PnL: ${unrealizedPnL.toFixed(6)}  IM: ${initialMargin.toFixed(6)}  ROI: ${returnPercent.toFixed(2)}%`,
-                    `  • SL(threshold): -${stopLoss}%  → isSL=${isSL}`,
-                    `  • timeout: ${timeoutEnabled}  age: ${((nowMs - createdAtMs) / 1000).toFixed(1)}s / ${(timeoutMs / 1000).toFixed(1)}s  → timedOut=${timedOut}`,
-                    `  • orderbook: bestBid=${bestBid}  bestAsk=${bestAsk}  tick=${tick}  aggTicks=${aggressiveTicks}`,
-                    `  • chosenPrice: ${priceStr}`,
-                    `  • payload: ${JSON.stringify(payload)}`,
-                ].join("\n"),
-            );
-            await this.openEntry(payload, "SL: Close");
-        } catch (error: any) {
-            this.logWorker.log(`${error.message}`, "error");
+        for (const payload of payloads) {
+            this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
+            try {
+                await this.openEntry(payload, "SL: Close");
+            } catch (error: any) {
+                this.logWorker.error(`🟣 ${error.message}`);
+            }
         }
+
         return;
     }
 
@@ -1243,6 +1291,8 @@ class Bot {
 
             switch (key) {
                 case `${FLOWS_API.acounts.method} ${FLOWS_API.acounts.url}`:
+                    const bodyAccounts: TGateApiRes<TAccount[] | null> = JSON.parse(bodyText);
+                    this.handleAccountWebGate(bodyAccounts.data || []);
                     break;
 
                 case `${FLOWS_API.orders.method} ${FLOWS_API.orders.url}`:
@@ -1363,20 +1413,19 @@ class Bot {
         return TIMEOUT_PATTERNS.some((re) => re.test(msg));
     }
 
-    private isDelayForPairsMs(symbol: string) {
+    private isDelayForPairsMs() {
         if (!this.settingUser.delayForPairsMs) {
             return false;
         } else {
-            const t = this.nextOpenAt.get(symbol) ?? 0;
-            return Date.now() < t;
+            return Date.now() < this.nextOpenAt;
         }
     }
-    private cooldownLeft(symbol: string) {
-        return Math.max(0, (this.nextOpenAt.get(symbol) ?? 0) - Date.now());
+    private cooldownLeft() {
+        return Math.max(0, this.nextOpenAt - Date.now());
     }
-    private postponePair(symbol: string, delayForPairsMs: number) {
+    private postponePair(delayForPairsMs: number) {
         if (delayForPairsMs) {
-            this.nextOpenAt.set(symbol, Date.now() + delayForPairsMs);
+            this.nextOpenAt = Date.now() + delayForPairsMs;
         }
     }
 
@@ -1386,15 +1435,28 @@ class Bot {
 
         // 1) Không có position -> không cần check SL
         if (this.positions.size === 0) {
-            this.logWorker.info("SL: skip — no positions");
+            this.logWorker.info("🟣 SL: skip — no positions");
             return false;
         }
 
         // 2) 100 hoặc hơn = tắt SL
         if (sl >= 100) {
-            this.logWorker.info(`SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
+            this.logWorker.info(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
             return false;
         }
+
+        return true;
+    }
+
+    private handleAccountWebGate(accounts: TAccount[]) {
+        const account = accounts[0];
+        if (Number(account.available) <= 0) {
+            this.logWorker.info(`available: ${account.available}`);
+            if (this.isStart) this.stop();
+        } 
+        // else {
+        //     if (!this.isStart) this.start();
+        // }
     }
 }
 
