@@ -93,6 +93,7 @@ parentPort!.on("message", (msg: any) => {
 });
 
 export const GATE_TIMEOUT = "GATE_TIMEOUT";
+const INSUFFICIENT_AVAILABLE = "INSUFFICIENT_AVAILABLE";
 
 class Bot {
     private count = 0;
@@ -109,6 +110,7 @@ class Bot {
     private infoContract = new Map<string, TGetInfoContractRes>();
     private blackList: string[] = [];
     private nextOpenAt: number = 0;
+    private accounts: TAccount[] = [];
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
@@ -188,7 +190,7 @@ class Bot {
                             if (!ok) continue;
 
                             const bidsAsks = await this.getBidsAsks(symbol);
-                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, 5 + 1);
+                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, 3 + 1);
 
                             for (const price of prices) {
                                 const payloadOpenOrder: TPayloadOrder = {
@@ -200,6 +202,9 @@ class Bot {
                                 try {
                                     await this.openEntry(payloadOpenOrder, `Open`);
                                 } catch (error: any) {
+                                    if (error?.message === INSUFFICIENT_AVAILABLE) {
+                                        throw new Error(error);
+                                    }
                                     if (this.isTimeoutError(error)) {
                                         throw new Error(error);
                                     }
@@ -253,6 +258,9 @@ class Bot {
                     if (!ok) continue;
                     await this.openEntry(p, `TP: Close`);
                 } catch (error: any) {
+                    if (error?.message === INSUFFICIENT_AVAILABLE) {
+                        throw new Error(error);
+                    }
                     if (this.isTimeoutError(error)) {
                         throw new Error(error);
                     }
@@ -471,6 +479,12 @@ class Bot {
     }
 
     private async openEntry(payload: TPayloadOrder, label: string) {
+        if (Number(this.accounts[0].available || 0) <= 0) {
+            const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${INSUFFICIENT_AVAILABLE}`;
+            this.logWorker.error(msg);
+            throw new Error(INSUFFICIENT_AVAILABLE);
+        }
+
         const selectorInputPosition = this.uiSelector?.find((item) => item.code === "inputPosition")?.selectorValue;
         const selectorInputPrice = this.uiSelector?.find((item) => item.code === "inputPrice")?.selectorValue;
         const selectorButtonLong = this.uiSelector?.find((item) => item.code === "buttonLong")?.selectorValue;
@@ -487,11 +501,11 @@ class Bot {
 
         const { body, error, ok } = await this.createOrder<TGateApiRes<TOrderOpen | null>>(payload, dataSelector);
 
-        if ((body as any)?.label === "INSUFFICIENT_AVAILABLE") {
-            const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: INSUFFICIENT_AVAILABLE`;
-            this.logWorker.error(msg);
-            throw new Error(`INSUFFICIENT_AVAILABLE`);
-        }
+        // if ((body as any)?.label === "INSUFFICIENT_AVAILABLE") {
+        //     const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: INSUFFICIENT_AVAILABLE`;
+        //     this.logWorker.error(msg);
+        //     throw new Error(`INSUFFICIENT_AVAILABLE`);
+        // }
 
         if (ok === false || error || body === null) {
             const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${error}`;
@@ -1215,6 +1229,10 @@ class Bot {
         const isSL = returnPercent <= -stopLoss;
         const isTimedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
 
+        if (!isSL && !isTimedOut) {
+            return;
+        }
+
         this.logWorker.info(
             [
                 `🟣 ${symbol}`,
@@ -1225,18 +1243,20 @@ class Bot {
             ].join(" | "),
         );
 
-        if (!isSL && !isTimedOut) {
-            return;
-        }
-
         const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
         // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
 
         for (const payload of payloads) {
-            this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
+            // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
             try {
                 await this.openEntry(payload, "SL: Close");
             } catch (error: any) {
+                if (error?.message === INSUFFICIENT_AVAILABLE) {
+                    throw new Error(error);
+                }
+                if (this.isTimeoutError(error)) {
+                    throw new Error(error);
+                }
                 this.logWorker.error(`🟣 ${error.message}`);
             }
         }
@@ -1449,14 +1469,7 @@ class Bot {
     }
 
     private handleAccountWebGate(accounts: TAccount[]) {
-        const account = accounts[0];
-        if (Number(account.available) <= 0) {
-            this.logWorker.info(`available: ${account.available}`);
-            if (this.isStart) this.stop();
-        } 
-        // else {
-        //     if (!this.isStart) this.start();
-        // }
+        this.accounts = accounts;
     }
 }
 

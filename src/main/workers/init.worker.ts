@@ -384,7 +384,7 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
 
                     switch (key) {
                         case "POST https://www.gate.com/apiw/v2/futures/usdt/orders":
-                            console.log(`[Fetch.requestPaused] ${key}`);
+                            // console.log(`[Fetch.requestPaused] ${key}`);
 
                             let bodyOrder = request.postData ?? "";
                             try {
