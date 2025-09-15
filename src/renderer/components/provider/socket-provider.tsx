@@ -1,6 +1,7 @@
 import { getAccessToken, getRefreshToken, logOut } from "@/api/auth/app.auth";
 import { useRefreshToken } from "@/api/tanstack/auth.tanstack";
 import { BASE_DOMAIN } from "@/constant/app.constant";
+import { logRenderer } from "@/index";
 import { useAppSelector } from "@/redux/store";
 import { TRefreshTokenReq } from "@/types/login.type";
 import { createContext, useEffect, useMemo, useRef, useState } from "react";
@@ -33,7 +34,7 @@ export default function SocketProvider({ children }: TProps) {
         }
 
         console.log("🔌 Initializing socket...");
-        const accessToken =  getAccessToken();
+        const accessToken = getAccessToken();
         const socket = io(BASE_DOMAIN, {
             auth: { token: accessToken },
             transports: ["websocket", "polling"],
@@ -54,6 +55,7 @@ export default function SocketProvider({ children }: TProps) {
         socket.on("connect_error", async (err: any) => {
             // err.message: 'NO_TOKEN' | 'TOKEN_EXPIRED' | 'INVALID_TOKEN' | 'USER_NOT_FOUND'
             console.warn("connect_error:", err.message);
+            logRenderer.info("connect_error", String(err.message));
 
             switch (err.message) {
                 case "TOKEN_EXPIRED":
@@ -61,6 +63,7 @@ export default function SocketProvider({ children }: TProps) {
                     const accessToken = getAccessToken();
 
                     if (!refreshToken || !accessToken) {
+                        logRenderer.info("!refreshToken || !accessToken", JSON.stringify({ refreshToken, accessToken }));
                         logOut();
                         return;
                     }
@@ -74,21 +77,25 @@ export default function SocketProvider({ children }: TProps) {
                             console.log("🔄 Token refreshed. Reinitializing socket...");
                             initSocket(); // 🔁 Đệ quy khởi động lại
                         },
-                        onError: () => {
+                        onError: (error) => {
+                            logRenderer.info("handleRefreshToken", String(error));
                             logOut();
                         },
                     });
                     break;
 
                 case "INVALID_TOKEN":
+                    logRenderer.info("INVALID_TOKEN", String(err));
                     logOut();
                     break;
 
                 case "USER_NOT_FOUND":
+                    logRenderer.info("USER_NOT_FOUND", String(err));
                     logOut();
                     break;
 
                 default:
+                    logRenderer.info("default", String(err));
                     logOut();
                     break;
             }

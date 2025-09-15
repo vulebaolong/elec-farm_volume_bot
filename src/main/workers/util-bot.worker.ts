@@ -164,15 +164,30 @@ export function handleEntryCheckAll({ whitelistItem, settingUser }: THandleEntry
     // const isLong = imbalanceBidPercent > settingUser.ifImbalanceBidPercent;
     // const isShort = imbalanceAskPercent > settingUser.ifImbalanceAskPercent;
 
-    const isLong =
-        settingUser.entrySignalMode === EntrySignalMode.GAP
-            ? handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent)
-            : handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
+    // const isLong =
+    //     settingUser.entrySignalMode === EntrySignalMode.GAP
+    //         ? handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent)
+    //         : handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
 
-    const isShort =
-        settingUser.entrySignalMode === EntrySignalMode.GAP
-            ? handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent)
-            : handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
+    // const isShort =
+    //     settingUser.entrySignalMode === EntrySignalMode.GAP
+    //         ? handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent)
+    //         : handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
+
+    const gapLong = handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+    const gapShort = handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+
+    const imbLong = handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
+    const imbShort = handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
+
+    // 3) Kết hợp theo mode (mặc định BOTH = AND)
+    const mode = settingUser.entrySignalMode;
+
+    const isLong = mode === EntrySignalMode.GAP ? gapLong : mode === EntrySignalMode.IMBALANCE ? imbLong : gapLong && imbLong; // BOTH → AND
+    // : (gapLong || imbLong);   // BOTH → OR (nếu muốn OR thì dùng dòng này)
+
+    const isShort = mode === EntrySignalMode.GAP ? gapShort : mode === EntrySignalMode.IMBALANCE ? imbShort : gapShort && imbShort; // BOTH → AND
+    // : (gapShort || imbShort);  // BOTH → OR (nếu muốn OR thì dùng dòng này)
 
     const gapPercentBiVsGate = gapPercentBinanceVsGate(lastPriceGate, lastPriceBinance);
 

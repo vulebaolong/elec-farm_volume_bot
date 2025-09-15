@@ -158,15 +158,9 @@ class Bot {
                     console.log("\n\n");
 
                     // ===== 3) CREATE OPEN ===============================================
-                    if (this.isCheckwhitelistEntryEmty() && this.isCheckMaxOpenPO()) {
+                    if (this.isCheckwhitelistEntryEmty() && this.isCheckMaxOpenPO() && !this.isDelayForPairsMs()) {
                         for (const whitelistItem of Object.values(this.whitelistEntry)) {
                             const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
-
-                            // chưa hết thoi gian (delayForPairsMs) -> bỏ qua symbol này, vòng lặp vẫn tiếp tục cho symbol khác
-                            if (this.isDelayForPairsMs()) {
-                                this.logWorker.info(`🔵 Create Open: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
-                                continue;
-                            }
 
                             // nếu đã max thì không vào thoát vòng lặp
                             if (!this.isCheckMaxOpenPO()) {
@@ -1437,7 +1431,11 @@ class Bot {
         if (!this.settingUser.delayForPairsMs) {
             return false;
         } else {
-            return Date.now() < this.nextOpenAt;
+            const result = Date.now() < this.nextOpenAt;
+            if (result) {
+                this.logWorker.info(`🔵 Create Open: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
+            }
+            return result;
         }
     }
     private cooldownLeft() {
