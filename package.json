@@ -198,7 +198,7 @@
         "webpack-merge": "^6.0.1"
     },
     "build": {
-        "productName": "BotFarmVolume_v1_0_43",
+        "productName": "BotFarmVolume_v1_0_44",
         "appId": "org.erb.BotFarmVolume",
         "asar": true,
         "afterSign": ".erb/scripts/notarize.js",
