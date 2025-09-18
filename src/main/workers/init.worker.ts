@@ -1,5 +1,5 @@
 // src/main/workers/init.worker.ts
-import { createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
+import { codeStringKillMantineToasts, createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
 import {
     TFectMainRes,
     TGateClickCancelAllOpenRes,
@@ -17,9 +17,8 @@ import { app, BrowserWindow, Event, ipcMain, RenderProcessGoneDetails, WebConten
 import Logger from "electron-log";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
-import { initGateView } from "../gate/gate-view";
 import { GateRateCounter } from "../endpoint-counter";
-import { setupRateIpc } from "../rate-ipc";
+import { initGateView } from "../gate/gate-view";
 
 export const GATE_TIMEOUT = "GATE_TIMEOUT";
 
@@ -35,7 +34,7 @@ if (!isDebug) {
 let botWorker: Worker | null = null;
 let gateView: WebContentsView | undefined;
 const endpointCounter = new GateRateCounter("endpoint-counts.json"); // true = kèm host
-const { broadcast: broadcastRate } = setupRateIpc(endpointCounter);
+// const { broadcast: broadcastRate } = setupRateIpc(endpointCounter);
 
 let payloadOrder: TPayloadOrder = {
     contract: "BTC_USDT",
@@ -279,6 +278,7 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
                     await reloadAndWait(gateView, botWorker, 30000);
                     // re-inject mọi thứ cần chạy lại sau reload
                     gateView.webContents.executeJavaScript(setLocalStorageScript, true).catch(() => {});
+                    gateView.webContents.executeJavaScript(codeStringKillMantineToasts, true).catch(() => {});
                     // (nếu có) re-enable các patch WS / CDP, v.v.
 
                     botWorker?.postMessage({ type: "bot:reloadWebContentsView:Response", payload: msg?.payload });
@@ -286,6 +286,9 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
                     // log lỗi reload nếu cần
                     workerLog.error(`bot:reloadWebContentsView:Request: ${e}`);
                 }
+            }
+            if (msg?.type === "bot:rateCounter") {
+                mainWindow?.webContents.send("bot:rateCounter", msg);
             }
         });
         botWorker.on("error", (err) => {
@@ -320,6 +323,9 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
         });
         ipcMain.on("bot:blackList", (event, data) => {
             botWorker?.postMessage({ type: "bot:blackList", payload: data });
+        });
+        ipcMain.on("bot:rateMax:set", (event, data) => {
+            botWorker?.postMessage({ type: "bot:rateMax:set", payload: data });
         });
         ipcMain.handle("devtools:toggle", () => {
             if (!gateView) return { ok: false, opened: false, error: "gateView not found" };
@@ -445,7 +451,7 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
                     }
 
                     endpointCounter.bumpFromHttp(method, url);
-                    broadcastRate();
+                    // broadcastRate();
 
                     break;
                 }

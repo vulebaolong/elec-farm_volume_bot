@@ -3,50 +3,70 @@ import { TUiSelectorOrder } from "@/types/bot.type";
 import { TPayloadLeverage } from "@/types/leverage.type";
 
 // "future-order-type-usdt": "market",
-export const setLocalStorageScript = `
-(function () {
-  const desiredSettings = {
-    "future-order-type-usdt": "prolimit",
-    "similar.introduction": "false",
-    "f-usdt-unit-type-pro": "unit",
-    "future_no_noty_all_orders": "false",
-    "future_no_noty_all_positions": "false",
-    "future_no_noty_chaseOrder": "false",
-    "future_no_noty_chase_limit": "false",
-    "future_no_noty_iceberg_pro": "false",
-    "future_no_noty_limit": "false",
-    "future_no_noty_market": "false",
-    "future_no_noty_orders_fill": "false",
-    "future_no_noty_reverse": "false",
-    "future_no_noty_scaled": "false",
-    "future_no_noty_stop": "false",
-    "future_no_noty_trail": "false",
-    "future_no_noty_trans_prompt": "false",
-    "future_no_noty_trigger_reverse": "false",
-    "future_no_noty_twap": "false",
-    "future_clear_amount_after_order": 0
-  };
+export const setLocalStorageScript = `(function () {
+  try {
+    var desiredSettings = {
+      "future-order-type-usdt": "prolimit",
+      "similar.introduction": "false",
+      "f-usdt-unit-type-pro": "unit",
+      "future_no_noty_all_orders": "false",
+      "future_no_noty_all_positions": "false",
+      "future_no_noty_chaseOrder": "false",
+      "future_no_noty_chase_limit": "false",
+      "future_no_noty_iceberg_pro": "false",
+      "future_no_noty_limit": "false",
+      "future_no_noty_market": "false",
+      "future_no_noty_orders_fill": "false",
+      "future_no_noty_reverse": "false",
+      "future_no_noty_scaled": "false",
+      "future_no_noty_stop": "false",
+      "future_no_noty_trail": "false",
+      "future_no_noty_trans_prompt": "false",
+      "future_no_noty_trigger_reverse": "false",
+      "future_no_noty_twap": "false",
+      "future_clear_amount_after_order": 0,
+      "show_favorites": 0,
+      "custom_default_trade_show_layout_1.4.1856": {
+        "charts": false,
+        "marketList": false,
+        "orderPanel": true,
+        "entrustInfo": false,
+        "trading": true,
+        "assets": false,
+        "topMovers": false
+      },
+      "trade_event_setting": 0,
+      "PRO_FUTURE_SAVE_CURRENCY_TITLES": ["fullHoursSettle"],
+    };
 
-  const notMatched = Object.entries(desiredSettings).filter(
-    ([key, value]) => localStorage.getItem(key) !== value
-  );
+    function toStore(v) {
+      if (v === null || v === undefined) return '';
+      var t = typeof v;
+      if (t === 'string') return v;
+      if (t === 'number' || t === 'boolean') return String(v);
+      // array / object
+      try { return JSON.stringify(v); } catch(_) { return String(v); }
+    }
 
-  if (notMatched.length === 0) {
-    console.info("✅ localStorage đã đúng, không cần reload");
+    var changed = [];
+    for (var k in desiredSettings) {
+      if (!Object.prototype.hasOwnProperty.call(desiredSettings, k)) continue;
+      var want = toStore(desiredSettings[k]);
+      var cur  = localStorage.getItem(k);
+      if (cur !== want) {
+        localStorage.setItem(k, want);
+        changed.push([k, cur, want]);
+      }
+    }
+
+    console.info('[localStorage] updated:', changed.length, changed);
     window.ready = true;
-    return { done: true, message: "✅ localStorage OK" };
+    return { done: true, updated: changed.length };
+  } catch (e) {
+    console.error('[localStorage] error:', e);
+    return { done: false, error: String(e) };
   }
-
-  for (const [key, value] of notMatched) {
-    localStorage.setItem(key, value);
-  }
-
-  console.info("⚠️ Đã cập nhật localStorage:", notMatched);
-
-  // Đã reload rồi mà vẫn sai
-  return { done: false, message: "❌ localStorage chưa đúng dù đã reload" };
-})();
-`;
+})();`;
 
 export type TOpenOrder = {
     symbol: string;
@@ -495,3 +515,56 @@ export const createCodeStringClickOrder = (selector: TUiSelectorOrder) => {
 })();
 `;
 };
+
+export const codeStringKillMantineToasts = `
+(function () {
+  try {
+    if (window.__killMantineToasts) { 
+      // console.log('mantine-toasts: already active'); 
+      return; 
+    }
+
+    // 1) CSS: ẩn toàn bộ notifications của Mantine
+    var style = document.createElement('style');
+    style.id = '__kill_mantine_toasts_css__';
+    style.textContent = [
+      '.mantine-Notification-root,',
+      '[class*="mantine-Notification-root"],',
+      '[class*="mantine-Notification-"],',
+      // container Gate bọc Mantine (để chắc ăn):
+      '[data-pos][style*="--gui-notification-base-zIndex"]',
+      '{display:none!important;visibility:hidden!important;pointer-events:none!important;}'
+    ].join(' ');
+    document.documentElement.appendChild(style);
+
+    // 2) Observer: xóa mọi node toast mới sinh ra
+    var SEL = '.mantine-Notification-root,[class*="mantine-Notification-root"],[class*="mantine-Notification-"]';
+    var mo = new MutationObserver(function(muts){
+      for (var i=0;i<muts.length;i++){
+        var nodes = muts[i].addedNodes || [];
+        for (var j=0;j<nodes.length;j++){
+          var n = nodes[j];
+          if (!n || n.nodeType !== 1) continue;
+          var el = (n.matches && n.matches(SEL)) ? n : (n.querySelector ? n.querySelector(SEL) : null);
+          if (el) try { el.remove(); } catch(e) {}
+        }
+      }
+    });
+    try { mo.observe(document.body, { childList: true, subtree: true }); } catch(e) {}
+
+    // Expose handle để bật lại khi cần
+    window.__killMantineToasts = {
+      off: function(){
+        try { mo.disconnect(); } catch(e) {}
+        try { var s = document.getElementById('__kill_mantine_toasts_css__'); if (s) s.remove(); } catch(e) {}
+        try { delete window.__killMantineToasts; } catch(e) {}
+        console.log('mantine-toasts: restored');
+      }
+    };
+
+    // console.log('mantine-toasts: suppressed (call __killMantineToasts.off() to restore)');
+  } catch (e) { 
+    // console.error('mantine-toasts error:', e); 
+  }
+})();
+`;

@@ -1,3 +1,4 @@
+import { useToggleDevTool } from "@/api/tanstack/devtool.tanstack";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ADD_RIPPLE, SET_IS_RUNNING, SET_IS_START } from "@/redux/slices/bot.slice";
@@ -7,9 +8,8 @@ import { Play, Square } from "lucide-react";
 import { useEffect, useState } from "react";
 import Log from "../log/log";
 import PassiveSticky from "../log/terminal-log/passive-sticky";
-import RateCountsPanel from "../rate-counts-panel/RateCountsPanel";
 import { ButtonLoading } from "../ui/button-loading";
-import { useToggleDevTool } from "@/api/tanstack/devtool.tanstack";
+import RateCounter from "../rate-counter/rate-counter";
 
 type TProps = {};
 
@@ -130,9 +130,10 @@ export default function Controll({}: TProps) {
                     </div>
 
                     <div className="grid gap-5">
+                        <RateCounter />
                         <Log />
                         <PassiveSticky />
-                        <RateCountsPanel />
+                        {/* <RateCountsPanel /> */}
                     </div>
                 </CardContent>
             </Card>

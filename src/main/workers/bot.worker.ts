@@ -1,7 +1,8 @@
 // bot.worker.ts
-import { BASE_URL } from "@/constant/app.constant";
+import { BASE_URL, IS_PRODUCTION } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
 import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder } from "@/javascript-string/logic-farm";
+import { TAccount } from "@/types/account.type";
 import { TRes } from "@/types/app.type";
 import { TGateApiRes } from "@/types/base-gate.type";
 import { TSide } from "@/types/base.type";
@@ -37,7 +38,6 @@ import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { handleEntryCheckAll } from "./util-bot.worker";
-import { TAccount } from "@/types/account.type";
 
 const FLOWS_API = {
     acounts: {
@@ -94,6 +94,7 @@ parentPort!.on("message", (msg: any) => {
 
 export const GATE_TIMEOUT = "GATE_TIMEOUT";
 const INSUFFICIENT_AVAILABLE = "INSUFFICIENT_AVAILABLE";
+const TOO_MANY_REQUEST = "TOO_MANY_REQUEST";
 
 class Bot {
     private count = 0;
@@ -111,6 +112,15 @@ class Bot {
     private blackList: string[] = [];
     private nextOpenAt: number = 0;
     private accounts: TAccount[] = [];
+    private rateCounter = new SlidingRateCounter();
+    private rateMax: Record<WindowKey, number> = {
+        "1s": 0,
+        "1m": 0,
+        "5m": 0,
+        "15m": 0,
+        "30m": 0,
+        "1h": 0,
+    };
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
@@ -158,12 +168,23 @@ class Bot {
                     console.log("\n\n");
 
                     // ===== 3) CREATE OPEN ===============================================
-                    if (this.isCheckwhitelistEntryEmty() && this.isCheckMaxOpenPO() && !this.isDelayForPairsMs()) {
+                    if (this.isHandleCreateOpen()) {
                         for (const whitelistItem of Object.values(this.whitelistEntry)) {
                             const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
 
+                            if (this.isCheckLimit()) {
+                                this.logWorker.info(`🔵 Create Open: skip rate limit hit`);
+                                break;
+                            }
+
+                            if (this.isCheckDelayForPairsMs()) {
+                                this.logWorker.info(`🔵 Create Open: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
+                                break;
+                            }
+
                             // nếu đã max thì không vào thoát vòng lặp
-                            if (!this.isCheckMaxOpenPO()) {
+                            if (this.isCheckMaxOpenPO()) {
+                                this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${this.getLengthOrderInOrderOpensAndPosition()}`);
                                 break;
                             }
 
@@ -178,18 +199,19 @@ class Bot {
                                 continue;
                             }
 
-                            this.log(`🔵 Create Open: ${symbol} ok (not exists) | side=${side} | sizeStr=${sizeStr}`);
-
                             const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
                             if (!ok) continue;
 
                             const bidsAsks = await this.getBidsAsks(symbol);
-                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, 3 + 1);
+                            const end = IS_PRODUCTION ? 3 : 5;
+                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, end + 1);
+
+                            const size = IS_PRODUCTION ? sizeStr : `1`;
 
                             for (const price of prices) {
                                 const payloadOpenOrder: TPayloadOrder = {
                                     contract: symbol,
-                                    size: side === "long" ? sizeStr : `-${sizeStr}`,
+                                    size: side === "long" ? size : `-${size}`,
                                     price: price.p,
                                     reduce_only: false,
                                 };
@@ -270,6 +292,8 @@ class Bot {
 
     private beforeEach() {
         this.heartbeat();
+        this.rateCounterSendRenderer();
+        // this.logWorker.log(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
         // console.log(`positions`, Object(this.positions).keys());
         // console.log(`orderOpens`, this.orderOpens);
         // console.log(`settingUser`, this.settingUser);
@@ -283,6 +307,14 @@ class Bot {
                 isStart: this.isStart,
                 isRunning: this.running,
             },
+        };
+        this.parentPort?.postMessage(payload);
+    }
+
+    private rateCounterSendRenderer() {
+        const payload: TWorkerData<Record<WindowKey, number>> = {
+            type: "bot:rateCounter",
+            payload: this.rateCounter.counts(),
         };
         this.parentPort?.postMessage(payload);
     }
@@ -325,6 +357,10 @@ class Bot {
                 this.reloadWebContentsViewRequest();
                 break;
 
+            case "bot:rateMax:set":
+                this.handleMaxRate(msg);
+                break;
+
             default:
                 break;
         }
@@ -344,6 +380,34 @@ class Bot {
 
     private sleep(ms: number) {
         return new Promise((r) => setTimeout(r, ms));
+    }
+
+    private isHandleCreateOpen(): boolean {
+        const isLimit = this.isCheckLimit();
+        if (isLimit) {
+            this.logWorker.info(`🔵 Create Open: skip hit limit 800/15m`);
+            return false;
+        }
+
+        const isWhiteListEntryEmpty = this.isCheckWhitelistEntryEmty();
+        if (isWhiteListEntryEmpty) {
+            this.logWorker.info(`🔵 Create Open: skip White list entry empty`, this.whitelistEntry.length);
+            return false;
+        }
+
+        const isMaxOpenPO = this.isCheckMaxOpenPO();
+        if (isMaxOpenPO) {
+            this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${this.getLengthOrderInOrderOpensAndPosition()}`);
+            return false;
+        }
+
+        const isDelayForPairsMs = this.isCheckDelayForPairsMs();
+        if (isDelayForPairsMs) {
+            this.logWorker.info(`🔵 Create Open: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
+            return false;
+        }
+
+        return true;
     }
 
     private setBlackList(blackList: string[]) {
@@ -428,7 +492,7 @@ class Bot {
 
     private async changeLeverage(symbol: string, leverageNumber: number): Promise<boolean> {
         if (this.changedLaveragelist.has(symbol)) {
-            this.log(`✅ Change Leverage [EXISTS] ${symbol} skip => `, this.changedLaveragelist);
+            // this.log(`✅ Change Leverage [EXISTS] ${symbol} skip => `, this.changedLaveragelist);
             return true;
         }
 
@@ -493,13 +557,21 @@ class Bot {
             buttonLong: selectorButtonLong,
         };
 
+        this.rateCounter.startAttempt();
+
         const { body, error, ok } = await this.createOrder<TGateApiRes<TOrderOpen | null>>(payload, dataSelector);
 
-        // if ((body as any)?.label === "INSUFFICIENT_AVAILABLE") {
-        //     const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: INSUFFICIENT_AVAILABLE`;
-        //     this.logWorker.error(msg);
-        //     throw new Error(`INSUFFICIENT_AVAILABLE`);
-        // }
+        if ((body as any)?.label === TOO_MANY_REQUEST) {
+            // this.rateCounter.rollback(ticket); // không tính lần attempt đụng limit
+            // this.rateCounter.stop(); // từ giờ ngừng đếm
+
+            const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${body?.message || TOO_MANY_REQUEST}`;
+            this.logWorker.error(msg);
+
+            this.logWorker.warn(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
+
+            throw new Error(msg);
+        }
 
         if (ok === false || error || body === null) {
             const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${error}`;
@@ -640,7 +712,7 @@ class Bot {
                 try {
                     if (m?.type !== "bot:clickTabOpenOrder:res") return;
                     if (m.payload?.reqClickTabOpenOrderId !== reqClickTabOpenOrderId) return;
-                    console.log(`ClickTabOpenOrder res`, m.payload);
+                    // console.log(`ClickTabOpenOrder res`, m.payload);
                     const p: TGateClickTabOpenOrderRes = m.payload;
                     if (!p.ok) return done({ ok: false, body: null, error: p.error || "ClickTabOpenOrder failed" });
 
@@ -719,7 +791,7 @@ class Bot {
                     if (m?.type !== "bot:clickCanelAllOpen:res") return;
                     if (m.payload?.reqClickCanelAllOpenOrderId !== reqClickCanelAllOpenOrderId) return;
                     const p: TGateClickCancelAllOpenRes = m.payload;
-                    console.log(`clickCanelAllOpen res`, m.payload);
+                    // console.log(`clickCanelAllOpen res`, m.payload);
                     if (!p.ok) return done({ ok: false, body: null, error: p.error || "clickCanelAllOpen failed" });
 
                     return done({ ok: true, body: p.body as T, error: null });
@@ -1023,21 +1095,19 @@ class Bot {
         this.parentPort?.postMessage({ type: "bot:sticky:set", payload });
     }
 
-    private isCheckwhitelistEntryEmty() {
+    private isCheckWhitelistEntryEmty() {
         if (this.whitelistEntry.length <= 0) {
-            this.logWorker.info(`🔵 Create Open: skip White list entry empty`, this.whitelistEntry.length);
-            return false;
+            return true;
         }
-        return true;
+        return false;
     }
 
     private isCheckMaxOpenPO() {
         const lengthOrderInOrderOpensAndPosition = this.getLengthOrderInOrderOpensAndPosition();
         if (lengthOrderInOrderOpensAndPosition >= this.settingUser.maxTotalOpenPO) {
-            this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${lengthOrderInOrderOpensAndPosition} / ${this.settingUser.maxTotalOpenPO}`);
-            return false;
+            return true;
         }
-        return true;
+        return false;
     }
 
     private getLengthOrderInOrderOpensAndPosition(): number {
@@ -1100,7 +1170,7 @@ class Bot {
             throw new Error(msg);
         }
 
-        this.log(`✅ Get Bids & Asks [SUCCESS]: ${contract} | limit: ${limit}`);
+        // this.log(`✅ Get Bids & Asks [SUCCESS]: ${contract} | limit: ${limit}`);
 
         return data;
     }
@@ -1427,14 +1497,11 @@ class Bot {
         return TIMEOUT_PATTERNS.some((re) => re.test(msg));
     }
 
-    private isDelayForPairsMs() {
+    private isCheckDelayForPairsMs() {
         if (!this.settingUser.delayForPairsMs) {
             return false;
         } else {
             const result = Date.now() < this.nextOpenAt;
-            if (result) {
-                this.logWorker.info(`🔵 Create Open: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
-            }
             return result;
         }
     }
@@ -1468,6 +1535,115 @@ class Bot {
 
     private handleAccountWebGate(accounts: TAccount[]) {
         this.accounts = accounts;
+    }
+
+    private isCheckLimit(): boolean {
+        const countsByWindow = this.rateCounter.counts(); // { "1s":..., "1m":..., ...}
+        const configuredWindows = Object.keys(this.rateMax) as WindowKey[];
+
+        for (const windowKey of configuredWindows) {
+            const configuredMax = this.rateMax[windowKey] ?? 0;
+            const currentCount = countsByWindow[windowKey] ?? 0;
+
+            if (configuredMax > 0 && currentCount >= configuredMax) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private handleMaxRate(message: TWorkerData<Record<WindowKey, number>>) {
+        const incomingMaxByWindow = message.payload as Record<string, number>;
+
+        // Sanitize từng window và ghép vào cấu hình hiện tại
+        const updatedMaxByWindow: Record<WindowKey, number> = { ...this.rateMax };
+
+        (Object.keys(updatedMaxByWindow) as WindowKey[]).forEach((windowKey) => {
+            const rawValue = incomingMaxByWindow[windowKey];
+            const normalizedMax = Math.max(0, Number(rawValue ?? 0));
+            updatedMaxByWindow[windowKey] = Number.isFinite(normalizedMax) ? normalizedMax : 0;
+        });
+
+        this.rateMax = updatedMaxByWindow;
+    }
+}
+
+export type WindowKey = "1s" | "1m" | "5m" | "15m" | "30m" | "1h";
+
+const WINDOW_MS: Record<WindowKey, number> = {
+    "1s": 1_000,
+    "1m": 60_000,
+    "5m": 5 * 60_000,
+    "15m": 15 * 60_000,
+    "30m": 30 * 60_000,
+    "1h": 60 * 60_000,
+};
+
+class SlidingRateCounter {
+    private queues: Record<WindowKey, number[]> = {
+        "1s": [],
+        "1m": [],
+        "5m": [],
+        "15m": [],
+        "30m": [],
+        "1h": [],
+    };
+    private stopped = false;
+
+    /** Bắt đầu một lần đếm (đếm ngay lập tức). Trả token để có thể rollback. */
+    startAttempt(): { token: number } {
+        if (this.stopped) return { token: -1 };
+        const now = Date.now();
+        (Object.keys(this.queues) as WindowKey[]).forEach((k) => {
+            const q = this.queues[k];
+            q.push(now);
+            this.prune(k, now);
+        });
+        return { token: now };
+    }
+
+    /** Nếu gặp TOO_MANY_REQUEST thì rollback lần đếm vừa add. */
+    rollback(h: { token: number }) {
+        if (this.stopped || h.token < 0) return;
+        (Object.keys(this.queues) as WindowKey[]).forEach((k) => {
+            const q = this.queues[k];
+            const i = q.lastIndexOf(h.token);
+            if (i !== -1) q.splice(i, 1);
+        });
+    }
+
+    /** Với các trường hợp khác (thành công / lỗi khác 429) thì giữ nguyên. */
+    commit(_h: { token: number }) {
+        // no-op vì đã add ở startAttempt()
+    }
+
+    /** Ngừng đếm từ bây giờ. */
+    stop() {
+        this.stopped = true;
+    }
+    isStopped() {
+        return this.stopped;
+    }
+
+    /** Lấy số liệu hiện tại (tự prune trước khi trả). */
+    counts(): Record<WindowKey, number> {
+        const now = Date.now();
+        (Object.keys(this.queues) as WindowKey[]).forEach((k) => this.prune(k, now));
+        return {
+            "1s": this.queues["1s"].length,
+            "1m": this.queues["1m"].length,
+            "5m": this.queues["5m"].length,
+            "15m": this.queues["15m"].length,
+            "30m": this.queues["30m"].length,
+            "1h": this.queues["1h"].length,
+        };
+    }
+
+    private prune(k: WindowKey, now: number) {
+        const q = this.queues[k];
+        const edge = now - WINDOW_MS[k];
+        // loại bỏ mọi timestamp <= edge
+        while (q.length && q[0] <= edge) q.shift();
     }
 }
 

@@ -1,5 +1,5 @@
 import { IS_PRODUCTION } from "@/constant/app.constant";
-import { setLocalStorageScript } from "@/javascript-string/logic-farm";
+import { codeStringKillMantineToasts, setLocalStorageScript } from "@/javascript-string/logic-farm";
 import { BrowserWindow, WebContentsView, app, shell } from "electron";
 import fs from "node:fs";
 import path from "path";
@@ -52,6 +52,7 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     // load trang Gate
     gateView.webContents.loadURL("https://www.gate.com/futures/USDT/BTC_USDT").then(() => {
         gateView.webContents.executeJavaScript(setLocalStorageScript, true);
+        gateView.webContents.executeJavaScript(codeStringKillMantineToasts, true);
     });
 
     if (IS_PRODUCTION) {

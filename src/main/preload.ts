@@ -30,6 +30,8 @@ export type Channels =
     | "bot:sticky:remove"
     | "bot:sticky:clear"
     | "bot:reloadWebContentsView"
+    | "bot:rateCounter"
+    | "bot:rateMax:set"
     | "logs:path"
     | "logs:size"
     | "logs:read"

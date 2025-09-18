@@ -50,7 +50,7 @@ export const FormSchema = z.object({
     ifImbalanceBidPercent: numberRange(0, 100, "Imbalance Bid %"),
     ifImbalanceAskPercent: numberRange(0, 100, "Imbalance Ask %"),
     entrySignalMode: z.enum(EntrySignalMode),
-    delayForPairsMs: intField(1, "Delay For Pairs (ms)"),
+    delayForPairsMs: intField(0, "Delay For Pairs (ms)"),
     // max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
     // max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
 });
