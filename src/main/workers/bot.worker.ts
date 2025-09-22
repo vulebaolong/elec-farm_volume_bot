@@ -154,7 +154,7 @@ class Bot {
                     if (this.orderOpens.length > 0) {
                         const contractsToCancel = this.contractsToCancelWithEarliest();
                         for (const contract of contractsToCancel) {
-                            if (this.isTimedOutClearOpen(contract.earliest, contract.contract)) {
+                            if (this.isClearOpen(contract.earliest, contract.contract)) {
                                 await this.clickCanelAllOpen(contract.contract);
                             }
                         }
@@ -1081,14 +1081,25 @@ class Bot {
         this.parentPort?.postMessage({ type: "bot:sticky:clear" });
     }
 
-    private isTimedOutClearOpen(create_time_sec: number, contract: string) {
-        const created = this.toSec(create_time_sec);
+    private toSeconds(input: number): number {
+        const n = Number(input);
+        if (!Number.isFinite(n) || n <= 0) return 0;
+        // nếu lớn hơn ~ 10^11 thì coi là milli-giây (Unix ms)
+        return n > 1e11 ? Math.floor(n / 1000) : Math.floor(n);
+    }
+
+    private isClearOpen(createdAtRaw: number, contract: string): boolean {
+        const createdSec = this.toSeconds(createdAtRaw);
         const nowSec = Math.floor(Date.now() / 1000);
 
-        this.logWorker.info(`⏰ ${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
-        this.setSticky(`timeout:${contract}`, `${contract}: ${nowSec - created} / ${this.settingUser.timeoutClearOpenSecond}`);
+        const timeoutLimit = Math.max(0, Number(this.settingUser.timeoutClearOpenSecond) || 0);
+        const elapsed = Math.max(0, nowSec - createdSec);
 
-        return nowSec - created >= this.settingUser.timeoutClearOpenSecond;
+        // log rõ ràng + đơn vị giây
+        this.logWorker.info(`⏰ ${contract}: ${elapsed}s / ${timeoutLimit}s`);
+        this.setSticky(`timeout:${contract}`, `${contract}: ${elapsed}s / ${timeoutLimit}s`);
+
+        return elapsed >= timeoutLimit;
     }
 
     private toSec(t: number | string) {
