@@ -1089,6 +1089,7 @@ class Bot {
     }
 
     private isClearOpen(createdAtRaw: number, contract: string): boolean {
+        console.log(`isClearOpen: `, createdAtRaw, contract);
         const createdSec = this.toSeconds(createdAtRaw);
         const nowSec = Math.floor(Date.now() / 1000);
 

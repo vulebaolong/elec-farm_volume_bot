@@ -83,7 +83,7 @@ export function blockGateWebSockets(gateView: WebContentsView) {
     });
 }
 
-export const DEVTOOLS_FLAG_FILENAME = ".enable-devtools";
+export const DEVTOOLS_FLAG_FILENAME = ".enable-devtools.txt";
 
 export function desktopFlagPath(): string {
     return path.join(app.getPath("desktop"), DEVTOOLS_FLAG_FILENAME);
