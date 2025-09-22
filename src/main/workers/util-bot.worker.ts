@@ -1,7 +1,10 @@
+import { ENDPOINT } from "@/constant/endpoint.constant";
 import { TSide } from "@/types/base.type";
+import { getSideRes } from "@/types/ccc.type";
 import { EntrySignalMode } from "@/types/enum/entry-signal-mode.enum";
 import { TSettingUsers } from "@/types/setting-user.type";
 import { TCore, TWhiteListItem } from "@/types/white-list.type";
+import axios from "axios";
 
 /**
  * Spread từ 0.05% đến 0.20%
@@ -86,9 +89,65 @@ export function handleImBalanceAskForShort(imbalanceAskPercent: number, ifImbala
     return imbalanceAskPercent > ifImbalanceAskPercent;
 }
 
+async function getSideCCC(): Promise<getSideRes["side"] | null> {
+        try {
+            const { data } = await axios.get<getSideRes>(ENDPOINT.CCC.GET_SIDE);
+            console.log("getSideCCC: ", data);
+            return data.side;
+        } catch (error) {
+            console.log("getSideCCC: ", error);
+            // this.logWorker.error(`getSideCCC: ${error}`);
+            return null;
+        }
+    }
+
+type SignalInputs = {
+    gapLong: boolean;
+    gapShort: boolean;
+    imbLong: boolean;
+    imbShort: boolean;
+};
+
+// Các hàm đánh giá cho từng mode
+function evalGap(side: TSide, signalInputs: SignalInputs): boolean {
+    if (side === "long") {
+        return signalInputs.gapLong;
+    }
+    return signalInputs.gapShort;
+}
+
+function evalImbalance(side: TSide, signalInputs: SignalInputs): boolean {
+    if (side === "long") {
+        return signalInputs.imbLong;
+    }
+    return signalInputs.imbShort;
+}
+
+function evalBoth(side: TSide, signalInputs: SignalInputs): boolean {
+    if (side === "long") {
+        return signalInputs.gapLong && signalInputs.imbLong;
+    }
+    return signalInputs.gapShort && signalInputs.imbShort;
+}
+
+function evalSignal(mode: EntrySignalMode | undefined, side: TSide, signalInputs: SignalInputs): boolean {
+    switch (mode) {
+        case EntrySignalMode.GAP:
+            return evalGap(side, signalInputs);
+        case EntrySignalMode.IMBALANCE:
+            return evalImbalance(side, signalInputs);
+        case EntrySignalMode.BOTH:
+            return evalBoth(side, signalInputs);
+        default:
+            // Fallback an toàn nếu dữ liệu mode không hợp lệ → coi như BOTH
+            return evalBoth(side, signalInputs);
+    }
+}
+
 type THandleEntryCheckAll = {
     whitelistItem: TWhiteListItem;
     settingUser: TSettingUsers;
+    sideCCC: getSideRes["side"] | null;
 };
 type THandleEntryCheckAllRes = {
     errString: string | null;
@@ -114,8 +173,7 @@ type THandleEntryCheckAllRes = {
         gapPercentBiVsGate: number;
     } | null;
 };
-
-export function handleEntryCheckAll({ whitelistItem, settingUser }: THandleEntryCheckAll): THandleEntryCheckAllRes {
+export  function handleEntryCheckAll({ whitelistItem, settingUser, sideCCC }: THandleEntryCheckAll): THandleEntryCheckAllRes {
     const { core, contractInfo } = whitelistItem;
     const {
         askBest,
@@ -161,35 +219,34 @@ export function handleEntryCheckAll({ whitelistItem, settingUser }: THandleEntry
     const sizeStr = handleSize(whitelistItem, settingUser.inputUSDT);
     const isSize = checkSize(sizeStr);
 
-    // const isLong = imbalanceBidPercent > settingUser.ifImbalanceBidPercent;
-    // const isShort = imbalanceAskPercent > settingUser.ifImbalanceAskPercent;
-
-    // const isLong =
-    //     settingUser.entrySignalMode === EntrySignalMode.GAP
-    //         ? handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent)
-    //         : handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
-
-    // const isShort =
-    //     settingUser.entrySignalMode === EntrySignalMode.GAP
-    //         ? handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent)
-    //         : handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
-
-    const gapLong = handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
-    const gapShort = handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
-
-    const imbLong = handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
-    const imbShort = handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
-
     // 3) Kết hợp theo mode (mặc định BOTH = AND)
     const mode = settingUser.entrySignalMode;
 
-    const isLong = mode === EntrySignalMode.GAP ? gapLong : mode === EntrySignalMode.IMBALANCE ? imbLong : gapLong && imbLong; // BOTH → AND
-    // : (gapLong || imbLong);   // BOTH → OR (nếu muốn OR thì dùng dòng này)
+    let isLong = false;
+    let isShort = false;
 
-    const isShort = mode === EntrySignalMode.GAP ? gapShort : mode === EntrySignalMode.IMBALANCE ? imbShort : gapShort && imbShort; // BOTH → AND
-    // : (gapShort || imbShort);  // BOTH → OR (nếu muốn OR thì dùng dòng này)
-
-    const gapPercentBiVsGate = gapPercentBinanceVsGate(lastPriceGate, lastPriceBinance);
+    switch (mode) {
+        case EntrySignalMode.GAP:
+            isLong = handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+            isShort = handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+            break;
+        case EntrySignalMode.IMBALANCE:
+            isLong = handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
+            isShort = handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
+            break;
+        case EntrySignalMode.BOTH:
+            const isLongGap = handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+            const isLongImb = handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
+            isLong = isLongGap && isLongImb;
+            const isShortGap = handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+            const isShortImb = handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
+            isShort = isShortGap && isShortImb;
+            break;
+        case EntrySignalMode.SIDE_CCC:
+            isLong = sideCCC === "LONG";
+            isShort = sideCCC === "SHORT";
+            break;
+    }
 
     const side = isLong ? "long" : isShort ? "short" : null;
 
@@ -216,7 +273,7 @@ export function handleEntryCheckAll({ whitelistItem, settingUser }: THandleEntry
             isShort,
             isSize,
             isSpread,
-            gapPercentBiVsGate,
+            gapPercentBiVsGate: gapPercentBinanceVsGate(lastPriceGate, lastPriceBinance),
         },
     };
 }

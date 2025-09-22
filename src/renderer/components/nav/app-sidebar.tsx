@@ -13,14 +13,14 @@ import {
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({ className,...props }: React.ComponentProps<typeof Sidebar>) {
   const { open } = useSidebar();
 
   return (
     <Sidebar
       collapsible="icon"
       {...props}
-      className="!top-[var(--header-height)] !h-[calc(100svh-var(--header-height))]"
+      className={cn("absolute", className)}
     >
       <SidebarHeader className={'items-center'}>
         <div

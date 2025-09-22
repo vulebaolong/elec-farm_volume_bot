@@ -14,10 +14,10 @@ export default function MainLayout() {
     useAuthCheck();
     return (
         <div className="[--header-height:60px]">
-            <SidebarProvider defaultOpen={false} className="flex flex-col">
+            <SidebarProvider defaultOpen={false} className="flex flex-col h-[500px] min-h-0">
                 <Header />
-                <div className="flex flex-1 relative ">
-                    <AppSidebar />
+                <div className="flex flex-1 relative">
+                    <AppSidebar className="absolute min-h-0 h-full"/>
                     <SidebarInset className="absolute w-full h-full pl-[var(--sidebar-width-icon)] overflow-y-auto">
                         <Outlet />
                         <Separator className="mt-10"/>

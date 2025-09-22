@@ -66,4 +66,7 @@ export const ENDPOINT = {
         REMOVE_BLACK_LIST: "black-list",
         CLEAR_ALL_BLACK_LIST: "black-list/clear-all",
     },
+    CCC: {
+        GET_SIDE: "https://api-coincraze.feliciastation.com/api/v1/tool/pnl-safe-mode/strong-side",
+    },
 };

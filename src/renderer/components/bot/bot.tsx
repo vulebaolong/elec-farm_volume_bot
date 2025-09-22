@@ -2,6 +2,9 @@ import { BotIcon } from "lucide-react";
 import { PageTitle } from "../title-page/title-page";
 import Controll from "./controll";
 import Ripple from "./ripple";
+import Log from "../log/log";
+import PassiveSticky from "../log/terminal-log/passive-sticky";
+import RateCounter from "../rate-counter/rate-counter";
 
 export default function Bot() {
     // const saveAccount = useSaveAccount();
@@ -97,9 +100,13 @@ export default function Bot() {
                 size="md"
             />
 
-            <div className="flex flex-col gap-5 h-full pb-[500px]">
+            <div className="flex flex-col gap-5 h-full p-5">
                 {/* <GateDockPanel /> */}
                 <Controll />
+                <RateCounter />
+                <Log />
+                <PassiveSticky />
+                {/* <RateCountsPanel /> */}
             </div>
         </div>
     );

@@ -23,18 +23,19 @@ export function initGateView(mainWindow: BrowserWindow, isDebug: boolean) {
     // add vào contentView root của window
     mainWindow.contentView.addChildView(gateView);
 
+    const SIDEBAR_W = 200; // chiều rộng sidebar bên trái (px)
     // layout: để Gate chiếm bên phải, phần trái để app React hiển thị
     const L_PANEL = 600; // px: độ rộng panel trái cho UI của bạn
-    const x = 900;
-    const H_PANEL = 470;
+    const x = 1024;
+    const H_PANEL = 500;
 
     const layoutGateView = () => {
-        if (!mainWindow) return;
+        if (mainWindow.isDestroyed()) return;
         const { width, height } = mainWindow.getContentBounds();
         gateView.setBounds({
-            x: width - x,
+            x: 0, // chừa 48px bên trái
             y: H_PANEL,
-            width: x,
+            width: Math.max(0, width),
             height: Math.max(0, height - H_PANEL),
         });
     };

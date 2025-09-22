@@ -6,10 +6,8 @@ import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
 import { Play, Square } from "lucide-react";
 import { useEffect, useState } from "react";
-import Log from "../log/log";
-import PassiveSticky from "../log/terminal-log/passive-sticky";
 import { ButtonLoading } from "../ui/button-loading";
-import RateCounter from "../rate-counter/rate-counter";
+
 
 type TProps = {};
 
@@ -56,7 +54,7 @@ export default function Controll({}: TProps) {
     }, [isRunning, isStart, dispatch]);
 
     return (
-        <div className="px-5 sticky top-0 z-[1]">
+        <div className="sticky top-0 z-[1]">
             <Card>
                 <CardHeader className="flex items-center gap-2">
                     <CardTitle className="text-base">Controll</CardTitle>
@@ -127,13 +125,6 @@ export default function Controll({}: TProps) {
                                 </ButtonLoading>
                             )}
                         </div>
-                    </div>
-
-                    <div className="grid gap-5">
-                        <RateCounter />
-                        <Log />
-                        <PassiveSticky />
-                        {/* <RateCountsPanel /> */}
                     </div>
                 </CardContent>
             </Card>

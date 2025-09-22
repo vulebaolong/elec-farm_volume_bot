@@ -7,7 +7,7 @@ import { useAppSelector } from "@/redux/store";
 import { EntrySignalMode } from "@/types/enum/entry-signal-mode.enum";
 import { TSettingUsersUpdate } from "@/types/setting-user.type";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Checkbox, Group, NumberInput, Radio, Stack, Text } from "@mantine/core";
+import { Checkbox, Group, NumberInput, Paper, Radio, Stack, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -445,6 +445,7 @@ export default function SettingAdminUser({ type }: TProps) {
                         const mode = fieldEntrySignalMode.value as EntrySignalMode;
                         const enableImb = mode === EntrySignalMode.IMBALANCE || mode === EntrySignalMode.BOTH;
                         const enableGap = mode === EntrySignalMode.GAP || mode === EntrySignalMode.BOTH;
+                        const enableSideCCC = mode === EntrySignalMode.SIDE_CCC;
 
                         return (
                             <Radio.Group
@@ -455,125 +456,146 @@ export default function SettingAdminUser({ type }: TProps) {
                                 withAsterisk
                             >
                                 <Stack pt="md" gap="xs">
-                                    {/* IMBALANCE */}
-                                    <Radio.Card value={EntrySignalMode.IMBALANCE} radius="md" withBorder p="sm">
-                                        <Group wrap="nowrap" align="flex-start">
-                                            <Radio.Indicator />
-                                            <div className="flex-1">
-                                                <Text fz={14} fw={600}>
-                                                    Imbalance (Bid/Ask %)
-                                                </Text>
+                                    <Paper withBorder radius="md" p="md">
+                                        <Stack gap="xs">
+                                            {/* IMBALANCE */}
+                                            <Radio.Card value={EntrySignalMode.IMBALANCE} radius="md" withBorder p="sm">
+                                                <Group wrap="nowrap" align="flex-start">
+                                                    <Radio.Indicator />
+                                                    <div className="flex-1">
+                                                        <Text fz={14} fw={600}>
+                                                            Imbalance (Bid/Ask %)
+                                                        </Text>
 
-                                                {/* ifImbalanceBidPercent */}
-                                                <Controller
-                                                    name="ifImbalanceBidPercent"
-                                                    control={form.control}
-                                                    render={({ field }) => (
-                                                        <NumberInput
-                                                            disabled={!enableImb}
-                                                            size="xs"
-                                                            withAsterisk
-                                                            label="Imbalance Bid %"
-                                                            placeholder="Bid %"
-                                                            inputWrapperOrder={["label", "input", "error"]}
-                                                            value={field.value ?? ""}
-                                                            onChange={(val) => field.onChange(val ?? "")}
-                                                            onBlur={field.onBlur}
-                                                            error={form.formState.errors.ifImbalanceBidPercent?.message}
-                                                            decimalSeparator="."
-                                                            thousandSeparator=","
-                                                            suffix="%"
-                                                            min={0}
-                                                            step={0.1}
-                                                            clampBehavior="strict"
-                                                            hideControls
+                                                        {/* ifImbalanceBidPercent */}
+                                                        <Controller
+                                                            name="ifImbalanceBidPercent"
+                                                            control={form.control}
+                                                            render={({ field }) => (
+                                                                <NumberInput
+                                                                    disabled={!enableImb || enableSideCCC}
+                                                                    size="xs"
+                                                                    withAsterisk
+                                                                    label="Imbalance Bid %"
+                                                                    placeholder="Bid %"
+                                                                    inputWrapperOrder={["label", "input", "error"]}
+                                                                    value={field.value ?? ""}
+                                                                    onChange={(val) => field.onChange(val ?? "")}
+                                                                    onBlur={field.onBlur}
+                                                                    error={form.formState.errors.ifImbalanceBidPercent?.message}
+                                                                    decimalSeparator="."
+                                                                    thousandSeparator=","
+                                                                    suffix="%"
+                                                                    min={0}
+                                                                    step={0.1}
+                                                                    clampBehavior="strict"
+                                                                    hideControls
+                                                                />
+                                                            )}
                                                         />
-                                                    )}
-                                                />
 
-                                                {/* ifImbalanceAskPercent */}
-                                                <Controller
-                                                    name="ifImbalanceAskPercent"
-                                                    control={form.control}
-                                                    render={({ field }) => (
-                                                        <NumberInput
-                                                            disabled={!enableImb}
-                                                            size="xs"
-                                                            withAsterisk
-                                                            label="Imbalance Ask %"
-                                                            placeholder="Ask %"
-                                                            inputWrapperOrder={["label", "input", "error"]}
-                                                            value={field.value ?? ""}
-                                                            onChange={(val) => field.onChange(val ?? "")}
-                                                            onBlur={field.onBlur}
-                                                            error={form.formState.errors.ifImbalanceAskPercent?.message}
-                                                            decimalSeparator="."
-                                                            thousandSeparator=","
-                                                            suffix="%"
-                                                            min={0}
-                                                            step={0.1}
-                                                            clampBehavior="strict"
-                                                            hideControls
+                                                        {/* ifImbalanceAskPercent */}
+                                                        <Controller
+                                                            name="ifImbalanceAskPercent"
+                                                            control={form.control}
+                                                            render={({ field }) => (
+                                                                <NumberInput
+                                                                    disabled={!enableImb || enableSideCCC}
+                                                                    size="xs"
+                                                                    withAsterisk
+                                                                    label="Imbalance Ask %"
+                                                                    placeholder="Ask %"
+                                                                    inputWrapperOrder={["label", "input", "error"]}
+                                                                    value={field.value ?? ""}
+                                                                    onChange={(val) => field.onChange(val ?? "")}
+                                                                    onBlur={field.onBlur}
+                                                                    error={form.formState.errors.ifImbalanceAskPercent?.message}
+                                                                    decimalSeparator="."
+                                                                    thousandSeparator=","
+                                                                    suffix="%"
+                                                                    min={0}
+                                                                    step={0.1}
+                                                                    clampBehavior="strict"
+                                                                    hideControls
+                                                                />
+                                                            )}
                                                         />
-                                                    )}
-                                                />
-                                            </div>
-                                        </Group>
-                                    </Radio.Card>
+                                                    </div>
+                                                </Group>
+                                            </Radio.Card>
 
-                                    {/* GAP */}
-                                    <Radio.Card value={EntrySignalMode.GAP} radius="md" withBorder p="sm">
-                                        <Group wrap="nowrap" align="flex-start">
-                                            <Radio.Indicator />
-                                            <div className="flex-1">
-                                                <Text fz={14} fw={600}>
-                                                    Price Gap (Gate vs. Binance %)
-                                                </Text>
+                                            {/* GAP */}
+                                            <Radio.Card value={EntrySignalMode.GAP} radius="md" withBorder p="sm">
+                                                <Group wrap="nowrap" align="flex-start">
+                                                    <Radio.Indicator />
+                                                    <div className="flex-1">
+                                                        <Text fz={14} fw={600}>
+                                                            Price Gap (Gate vs. Binance %)
+                                                        </Text>
 
-                                                {/* lastPriceGapGateAndBinancePercent */}
-                                                <Controller
-                                                    name="lastPriceGapGateAndBinancePercent"
-                                                    control={form.control}
-                                                    render={({ field }) => (
-                                                        <NumberInput
-                                                            disabled={!enableGap}
-                                                            size="xs"
-                                                            withAsterisk
-                                                            label="Last Price Gap (Gate vs. Binance) %"
-                                                            placeholder="Gap %"
-                                                            inputWrapperOrder={["label", "input", "error"]}
-                                                            value={field.value ?? ""}
-                                                            onChange={(val) => field.onChange(val ?? "")}
-                                                            onBlur={field.onBlur}
-                                                            error={form.formState.errors.lastPriceGapGateAndBinancePercent?.message}
-                                                            decimalSeparator="."
-                                                            thousandSeparator=","
-                                                            suffix="%"
-                                                            min={0}
-                                                            step={0.1}
-                                                            clampBehavior="strict"
-                                                            hideControls
+                                                        {/* lastPriceGapGateAndBinancePercent */}
+                                                        <Controller
+                                                            name="lastPriceGapGateAndBinancePercent"
+                                                            control={form.control}
+                                                            render={({ field }) => (
+                                                                <NumberInput
+                                                                    disabled={!enableGap || enableSideCCC}
+                                                                    size="xs"
+                                                                    withAsterisk
+                                                                    label="Last Price Gap (Gate vs. Binance) %"
+                                                                    placeholder="Gap %"
+                                                                    inputWrapperOrder={["label", "input", "error"]}
+                                                                    value={field.value ?? ""}
+                                                                    onChange={(val) => field.onChange(val ?? "")}
+                                                                    onBlur={field.onBlur}
+                                                                    error={form.formState.errors.lastPriceGapGateAndBinancePercent?.message}
+                                                                    decimalSeparator="."
+                                                                    thousandSeparator=","
+                                                                    suffix="%"
+                                                                    min={0}
+                                                                    step={0.1}
+                                                                    clampBehavior="strict"
+                                                                    hideControls
+                                                                />
+                                                            )}
                                                         />
-                                                    )}
-                                                />
-                                            </div>
-                                        </Group>
-                                    </Radio.Card>
+                                                    </div>
+                                                </Group>
+                                            </Radio.Card>
 
-                                    {/* BOTH */}
-                                    <Radio.Card value={EntrySignalMode.BOTH} radius="md" withBorder p="sm">
-                                        <Group wrap="nowrap" align="flex-start">
-                                            <Radio.Indicator />
-                                            <div className="flex-1">
-                                                <Text fz={14} fw={600}>
-                                                    Both (Imbalance + Gap)
-                                                </Text>
-                                                <Text fz={12} c="dimmed">
-                                                    Requires BOTH conditions (AND)
-                                                </Text>
-                                            </div>
-                                        </Group>
-                                    </Radio.Card>
+                                            {/* BOTH */}
+                                            <Radio.Card value={EntrySignalMode.BOTH} radius="md" withBorder p="sm">
+                                                <Group wrap="nowrap" align="flex-start">
+                                                    <Radio.Indicator />
+                                                    <div className="flex-1">
+                                                        <Text fz={14} fw={600}>
+                                                            Both (Imbalance + Gap)
+                                                        </Text>
+                                                        <Text fz={12} c="dimmed">
+                                                            Requires BOTH conditions (AND)
+                                                        </Text>
+                                                    </div>
+                                                </Group>
+                                            </Radio.Card>
+                                        </Stack>
+                                    </Paper>
+
+                                    <Paper withBorder radius="md" p="md">
+                                        {/* SIDE_CCC */}
+                                        <Radio.Card value={EntrySignalMode.SIDE_CCC} radius="md" withBorder p="sm">
+                                            <Group wrap="nowrap" align="flex-start">
+                                                <Radio.Indicator />
+                                                <div className="flex-1">
+                                                    <Text fz={14} fw={600}>
+                                                        SIDE_CCC
+                                                    </Text>
+                                                    <Text fz={12} c="dimmed">
+                                                        Khi chọn SIDE_CCC, các điều kiện Imbalance/GAP/BOTH bị vô hiệu hóa.
+                                                    </Text>
+                                                </div>
+                                            </Group>
+                                        </Radio.Card>
+                                    </Paper>
                                 </Stack>
                             </Radio.Group>
                         );

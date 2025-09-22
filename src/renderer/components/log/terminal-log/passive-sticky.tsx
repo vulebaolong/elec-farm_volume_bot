@@ -1,5 +1,6 @@
 // PassiveSticky.tsx (phiên bản dùng key/text, không có nút)
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEffect, useMemo, useState } from "react";
 
@@ -28,26 +29,34 @@ export default function PassiveSticky() {
     // if (list.length === 0) return null;
 
     return (
-        <div className="flex flex-col gap-2 h-[300px]">
-            <div className="flex items-center gap-2">
-                <Badge variant="secondary">Sticky</Badge>
-                <span className="text-xs text-muted-foreground">
-                    {list.length} {list.length === 1 ? "item" : "items"}
-                </span>
-            </div>
+        <Card>
+            {/* <CardHeader className="flex items-center gap-2">
+                <CardTitle className="text-base">Log </CardTitle>
+            </CardHeader> */}
 
-            <div className="w-[320px] max-w-[80vw] flex-1 rounded-xl border bg-black/85 text-neutral-100 backdrop-blur">
-                <ScrollArea className="max-h-[50vh] p-2">
-                    <ul className="space-y-1">
-                        {list.map((it) => (
-                            <li key={it.key} className="rounded-md border border-white/5 bg-white/5 px-3 py-2">
-                                <div className="font-mono text-xs md:text-sm truncate">{it.text}</div>
-                                <div className="text-[10px] text-neutral-400">{new Date(it.ts).toLocaleTimeString()}</div>
-                            </li>
-                        ))}
-                    </ul>
-                </ScrollArea>
-            </div>
-        </div>
+            <CardContent className="grid gap-0">
+                <div className="flex flex-col gap-2 h-[300px]">
+                    <div className="flex items-center gap-2">
+                        <Badge variant="secondary">Sticky</Badge>
+                        <span className="text-xs text-muted-foreground">
+                            {list.length} {list.length === 1 ? "item" : "items"}
+                        </span>
+                    </div>
+
+                    <div className="w-[320px] max-w-[80vw] flex-1 rounded-xl border bg-black/85 text-neutral-100 backdrop-blur">
+                        <ScrollArea className="max-h-[50vh] p-2">
+                            <ul className="space-y-1">
+                                {list.map((it) => (
+                                    <li key={it.key} className="rounded-md border border-white/5 bg-white/5 px-3 py-2">
+                                        <div className="font-mono text-xs md:text-sm truncate">{it.text}</div>
+                                        <div className="text-[10px] text-neutral-400">{new Date(it.ts).toLocaleTimeString()}</div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </ScrollArea>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
     );
 }

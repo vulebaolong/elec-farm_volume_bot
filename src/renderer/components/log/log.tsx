@@ -1,6 +1,6 @@
 // components/MainLogViewer.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -67,7 +67,6 @@ export default function Log({ className }: { className?: string }) {
 
     const autoScrollRef = useRef(true);
 
-
     useEffect(() => {
         let off: undefined | (() => void);
         (async () => {
@@ -130,128 +129,138 @@ export default function Log({ className }: { className?: string }) {
     }
 
     return (
-        <TooltipProvider>
-            <Card className={cn("p-0 gap-0", className)}>
-                <CardHeader className="p-2 gap-0 border-b">
-                    <div className="flex items-center gap-3 flex-wrap">
-                        {/* Level filter */}
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">Level</span>
-                            <Select value={level} onValueChange={(v: Level) => setLevel(v)}>
-                                <SelectTrigger size="sm" className="w-[100px]">
-                                    <SelectValue placeholder="all" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {(["all", "error", "warn", "info", "verbose", "debug", "silly"] as Level[]).map((lv) => (
-                                        <SelectItem key={lv} value={lv}>
-                                            {lv}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+        <Card>
+            <CardHeader className="flex items-center gap-2">
+                <CardTitle className="text-base">Log</CardTitle>
+            </CardHeader>
 
-                        {/* Size */}
-                        <Badge variant="outline" className="text-xs">
-                            <p className="truncate max-w-[50px]">{humanBytes(size)}</p>
-                        </Badge>
+            <CardContent className="grid gap-0">
+                <TooltipProvider>
+                    <Card className={cn("p-0 gap-0", className)}>
+                        <CardHeader className="p-2 gap-0 border-b">
+                            <div className="flex items-center gap-3 flex-wrap">
+                                {/* Level filter */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Level</span>
+                                    <Select value={level} onValueChange={(v: Level) => setLevel(v)}>
+                                        <SelectTrigger size="sm" className="w-[100px]">
+                                            <SelectValue placeholder="all" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {(["all", "error", "warn", "info", "verbose", "debug", "silly"] as Level[]).map((lv) => (
+                                                <SelectItem key={lv} value={lv}>
+                                                    {lv}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                        {/* Path (truncated + tooltip + copy) */}
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <div className="flex items-center gap-0">
-                                    <div className="max-w-[100px] truncate text-xs text-muted-foreground cursor-default">
-                                        {path ? `${basename(path)}: ${path}` : "—"}
-                                    </div>
-                                    <Button className="h-6 w-6" variant="ghost" onClick={copyPath}>
-                                        <Copy className="!h-3 !w-3" />
+                                {/* Size */}
+                                <Badge variant="outline" className="text-xs">
+                                    <p className="truncate max-w-[50px]">{humanBytes(size)}</p>
+                                </Badge>
+
+                                {/* Path (truncated + tooltip + copy) */}
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-0">
+                                            <div className="max-w-[100px] truncate text-xs text-muted-foreground cursor-default">
+                                                {path ? `${basename(path)}: ${path}` : "—"}
+                                            </div>
+                                            <Button className="h-6 w-6" variant="ghost" onClick={copyPath}>
+                                                <Copy className="!h-3 !w-3" />
+                                            </Button>
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-[560px]">
+                                        <div className="text-xs leading-none">{path || "No path"}</div>
+                                    </TooltipContent>
+                                </Tooltip>
+
+                                <div className="ml-auto flex items-center gap-2">
+                                    <Button
+                                        disabled={autoScrollRef.current}
+                                        className="h-6 w-6"
+                                        variant="default"
+                                        onClick={() => {
+                                            autoScrollRef.current = true;
+                                            scrollToBottom();
+                                        }}
+                                    >
+                                        <ArrowDownToLine className="!h-3 !w-3" />
+                                    </Button>
+
+                                    <Button className="h-6 w-6" variant="default" onClick={onReveal}>
+                                        <FolderOpen className="!h-3 !w-3" />
+                                    </Button>
+
+                                    <Button className="h-6 w-6" variant="destructive" onClick={onClear}>
+                                        <Trash2 className="!h-3 !w-3" />
                                     </Button>
                                 </div>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[560px]">
-                                <div className="text-xs leading-none">{path || "No path"}</div>
-                            </TooltipContent>
-                        </Tooltip>
-
-                        <div className="ml-auto flex items-center gap-2">
-                            <Button
-                                disabled={autoScrollRef.current}
-                                className="h-6 w-6"
-                                variant="default"
-                                onClick={() => {
-                                    autoScrollRef.current = true;
-                                    scrollToBottom();
-                                }}
-                            >
-                                <ArrowDownToLine className="!h-3 !w-3" />
-                            </Button>
-
-                            <Button className="h-6 w-6" variant="default" onClick={onReveal}>
-                                <FolderOpen className="!h-3 !w-3" />
-                            </Button>
-
-                            <Button className="h-6 w-6" variant="destructive" onClick={onClear}>
-                                <Trash2 className="!h-3 !w-3" />
-                            </Button>
-                        </div>
-                    </div>
-                </CardHeader>
-
-                <CardContent className="p-2">
-                    <div className="rounded-xl border bg-background">
-                        <div className="px-3 py-1.5 flex items-center justify-between">
-                            <div className="text-[11px] text-muted-foreground">
-                                Showing <span className="font-medium text-foreground">{filtered.length}</span> line{filtered.length !== 1 ? "s" : ""}
                             </div>
-                            <div className="text-[11px] text-muted-foreground">
-                                Autoscroll: <span className={autoScrollRef.current ? "text-foreground" : ""}>{autoScrollRef.current ? "on" : "off"}</span>
-                            </div>
-                        </div>
+                        </CardHeader>
 
-                        <Separator />
-
-                        {/* 🔽 Scroll area bằng Radix primitives để có ref vào Viewport */}
-                        <ScrollArea.Root type="auto" className="relative overflow-hidden">
-                            <ScrollArea.Viewport ref={viewportRef} onScroll={onViewportScroll} className="h-[360px] w-full rounded-[inherit]">
-                                <div className="min-w-full px-3 py-2 font-mono text-xs leading-relaxed">
-                                    {filtered.length === 0 ? (
-                                        <div className="text-muted-foreground">No entries</div>
-                                    ) : (
-                                        filtered.map((e, i) => (
-                                            <div
-                                                key={i}
-                                                // whitespace-pre: không wrap, giữ khoảng trắng
-                                                // w-max: dòng có thể rộng hơn viewport để kéo ngang
-                                                className={cn("border-l pl-2 mb-1 w-max whitespace-pre", levelTint(e.level))}
-                                            >
-                                                {e.text}
-                                            </div>
-                                        ))
-                                    )}
+                        <CardContent className="p-2">
+                            <div className="rounded-xl border bg-background">
+                                <div className="px-3 py-1.5 flex items-center justify-between">
+                                    <div className="text-[11px] text-muted-foreground">
+                                        Showing <span className="font-medium text-foreground">{filtered.length}</span> line
+                                        {filtered.length !== 1 ? "s" : ""}
+                                    </div>
+                                    <div className="text-[11px] text-muted-foreground">
+                                        Autoscroll:{" "}
+                                        <span className={autoScrollRef.current ? "text-foreground" : ""}>{autoScrollRef.current ? "on" : "off"}</span>
+                                    </div>
                                 </div>
-                            </ScrollArea.Viewport>
 
-                            {/* 🔽 Horizontal scrollbar */}
-                            <ScrollArea.Scrollbar
-                                orientation="horizontal"
-                                className="flex h-2 select-none touch-none p-0.5 bg-transparent transition-colors"
-                            >
-                                <ScrollArea.Thumb className="relative flex-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
-                            </ScrollArea.Scrollbar>
+                                <Separator />
 
-                            {/* Vertical scrollbar (như cũ, có thể giữ style trước) */}
-                            <ScrollArea.Scrollbar
-                                orientation="vertical"
-                                className="flex w-2 select-none touch-none p-0.5 bg-transparent transition-colors"
-                            >
-                                <ScrollArea.Thumb className="relative flex-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
-                            </ScrollArea.Scrollbar>
+                                {/* 🔽 Scroll area bằng Radix primitives để có ref vào Viewport */}
+                                <ScrollArea.Root type="auto" className="relative overflow-hidden">
+                                    <ScrollArea.Viewport ref={viewportRef} onScroll={onViewportScroll} className="h-[360px] w-full rounded-[inherit]">
+                                        <div className="min-w-full px-3 py-2 font-mono text-xs leading-relaxed">
+                                            {filtered.length === 0 ? (
+                                                <div className="text-muted-foreground">No entries</div>
+                                            ) : (
+                                                filtered.map((e, i) => (
+                                                    <div
+                                                        key={i}
+                                                        // whitespace-pre: không wrap, giữ khoảng trắng
+                                                        // w-max: dòng có thể rộng hơn viewport để kéo ngang
+                                                        className={cn("border-l pl-2 mb-1 w-max whitespace-pre", levelTint(e.level))}
+                                                    >
+                                                        {e.text}
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </ScrollArea.Viewport>
 
-                            <ScrollArea.Corner />
-                        </ScrollArea.Root>
-                    </div>
-                </CardContent>
-            </Card>
-        </TooltipProvider>
+                                    {/* 🔽 Horizontal scrollbar */}
+                                    <ScrollArea.Scrollbar
+                                        orientation="horizontal"
+                                        className="flex h-2 select-none touch-none p-0.5 bg-transparent transition-colors"
+                                    >
+                                        <ScrollArea.Thumb className="relative flex-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+                                    </ScrollArea.Scrollbar>
+
+                                    {/* Vertical scrollbar (như cũ, có thể giữ style trước) */}
+                                    <ScrollArea.Scrollbar
+                                        orientation="vertical"
+                                        className="flex w-2 select-none touch-none p-0.5 bg-transparent transition-colors"
+                                    >
+                                        <ScrollArea.Thumb className="relative flex-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+                                    </ScrollArea.Scrollbar>
+
+                                    <ScrollArea.Corner />
+                                </ScrollArea.Root>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TooltipProvider>
+            </CardContent>
+        </Card>
     );
 }

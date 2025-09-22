@@ -38,6 +38,7 @@ import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { handleEntryCheckAll } from "./util-bot.worker";
+import { getSideRes } from "@/types/ccc.type";
 
 const FLOWS_API = {
     acounts: {
@@ -144,7 +145,7 @@ class Bot {
                 this.beforeEach();
 
                 if (this.isStart) {
-                    this.setWhitelistEntry();
+                    await this.setWhitelistEntry();
 
                     // ===== 1) CREATE CLOSE ==============================================
                     await this.createTPClose();
@@ -293,6 +294,7 @@ class Bot {
     private beforeEach() {
         this.heartbeat();
         this.rateCounterSendRenderer();
+        // this.getSideCCC();
         // this.logWorker.log(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
         // console.log(`positions`, Object(this.positions).keys());
         // console.log(`orderOpens`, this.orderOpens);
@@ -822,7 +824,7 @@ class Bot {
         this.parentPort?.postMessage({ type: "bot:sticky:remove", payload: { key } });
     }
 
-    private setWhitelistEntry() {
+    private async setWhitelistEntry() {
         const whiteListArr = Object.values(this.whiteList);
         if (whiteListArr.length === 0) {
             this.whitelistEntry = [];
@@ -831,10 +833,13 @@ class Bot {
 
         this.whitelistEntry = []; // cho bot
 
+        const sideCCC = await this.getSideCCC();
+
         for (const whitelistItem of whiteListArr) {
             const { errString, qualified, result } = handleEntryCheckAll({
                 whitelistItem,
                 settingUser: this.settingUser,
+                sideCCC,
             });
 
             if (errString) {
@@ -1565,6 +1570,17 @@ class Bot {
         });
 
         this.rateMax = updatedMaxByWindow;
+    }
+
+    private async getSideCCC(): Promise<getSideRes["side"] | null> {
+        try {
+            const { data } = await axios.get<getSideRes>(ENDPOINT.CCC.GET_SIDE);
+            console.log("getSideCCC: ", data);
+            return data.side;
+        } catch (error) {
+            this.logWorker.error(`getSideCCC: ${error}`);
+            return null;
+        }
     }
 }
 

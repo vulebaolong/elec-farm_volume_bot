@@ -8,11 +8,13 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { handleEntryCheckAll } from "src/main/workers/util-bot.worker";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
+import { useGetSideCCC } from "@/api/tanstack/ccc.tanstack";
 
 export default function Whitelist() {
     const socket = useSocket();
     const settingUser = useAppSelector((s) => s.user.info?.SettingUsers);
     const [whitelistUi, setWhitelistUi] = useState<TWhitelistUi[]>([]);
+    const { data: sideCCC } = useGetSideCCC(settingUser?.entrySignalMode);
 
     // --- nhận socket ---
     useEffect(() => {
@@ -24,7 +26,7 @@ export default function Whitelist() {
             const resultWhiteList: TWhitelistUi[] = [];
 
             for (const whitelistItem of whiteListArr) {
-                const { errString, qualified, result } = handleEntryCheckAll({ whitelistItem, settingUser });
+                const { errString, qualified, result } = handleEntryCheckAll({ whitelistItem, settingUser, sideCCC: sideCCC || null });
 
                 if (errString) {
                     toast.error(errString);
@@ -54,7 +56,7 @@ export default function Whitelist() {
         return () => {
             io.off("entry", handleEntry);
         };
-    }, [socket?.socket, settingUser]);
+    }, [socket?.socket, settingUser, sideCCC]);
 
     // === chia 2 ngăn ===
     const qualifiedList = useMemo(() => whitelistUi.filter((x) => x.qualified), [whitelistUi]);
