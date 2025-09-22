@@ -1089,15 +1089,13 @@ class Bot {
     }
 
     private isClearOpen(createdAtRaw: number, contract: string): boolean {
-        console.log(`isClearOpen: `, createdAtRaw, contract);
-        const createdSec = this.toSeconds(createdAtRaw);
+        const createdSec = this.toSec(createdAtRaw);
         const nowSec = Math.floor(Date.now() / 1000);
 
         const timeoutLimit = Math.max(0, Number(this.settingUser.timeoutClearOpenSecond) || 0);
         const elapsed = Math.max(0, nowSec - createdSec);
 
         // log rõ ràng + đơn vị giây
-        this.logWorker.info(`${createdAtRaw} ${createdSec} ${nowSec} ${timeoutLimit} ${elapsed}`);
         this.logWorker.info(`⏰ ${contract}: ${elapsed}s / ${timeoutLimit}s`);
         this.setSticky(`timeout:${contract}`, `${contract}: ${elapsed}s / ${timeoutLimit}s`);
 
