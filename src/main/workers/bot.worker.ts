@@ -1097,6 +1097,7 @@ class Bot {
         const elapsed = Math.max(0, nowSec - createdSec);
 
         // log rõ ràng + đơn vị giây
+        this.logWorker.info(`${createdAtRaw} ${createdSec} ${nowSec} ${timeoutLimit} ${elapsed}`);
         this.logWorker.info(`⏰ ${contract}: ${elapsed}s / ${timeoutLimit}s`);
         this.setSticky(`timeout:${contract}`, `${contract}: ${elapsed}s / ${timeoutLimit}s`);
 
