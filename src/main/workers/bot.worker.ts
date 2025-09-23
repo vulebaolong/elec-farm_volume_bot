@@ -1357,6 +1357,9 @@ class Bot {
     }
 
     private setSettingUser(settingUser: TSettingUsers) {
+        if(this.settingUser.leverage !== settingUser.leverage) {
+            this.changedLaveragelist.clear();
+        }
         this.settingUser = settingUser;
     }
 
