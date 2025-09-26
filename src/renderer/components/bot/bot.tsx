@@ -5,6 +5,7 @@ import Ripple from "./ripple";
 import Log from "../log/log";
 import PassiveSticky from "../log/terminal-log/passive-sticky";
 import RateCounter from "../rate-counter/rate-counter";
+import Martingale from "../martingale/martingale";
 
 export default function Bot() {
     // const saveAccount = useSaveAccount();
@@ -104,6 +105,7 @@ export default function Bot() {
                 {/* <GateDockPanel /> */}
                 <Controll />
                 <RateCounter />
+                <Martingale />
                 <Log />
                 <PassiveSticky />
                 {/* <RateCountsPanel /> */}

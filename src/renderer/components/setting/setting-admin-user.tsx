@@ -5,14 +5,17 @@ import { useGetSettingUserById, useUpdateSettingUser } from "@/api/tanstack/sett
 import { resError } from "@/helpers/function.helper";
 import { useAppSelector } from "@/redux/store";
 import { EntrySignalMode } from "@/types/enum/entry-signal-mode.enum";
+import { MartingaleConfig, MartingaleOption } from "@/types/martingale.type";
 import { TSettingUsersUpdate } from "@/types/setting-user.type";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Checkbox, Group, NumberInput, Paper, Radio, Stack, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
+import { Trash } from "lucide-react";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { Button } from "../ui/button";
 import { ButtonLoading } from "../ui/button-loading";
 import { Form } from "../ui/form";
 
@@ -34,6 +37,30 @@ const numberRange = (min: number, max: number, label = "Value") =>
 
 const positiveNumber = (label = "Value") => numberFromStringOrNumber.refine((v) => v > 0, `${label} must be > 0`);
 
+export const ZMartingaleOption = z.object({
+    inputUSDT: positiveNumber("Input (USDT)"),
+    leverage: positiveNumber("Leverage"),
+});
+
+export const ZMartingaleConfig = z
+    .object({
+        initialInputUSDT: positiveNumber("Initial input (USDT)"),
+        initialLeverage: positiveNumber("Initial leverage"),
+        options: z.array(ZMartingaleOption).max(200).default([]),
+    })
+    // Không bắt buộc gấp thếp, nhưng bạn có thể cảnh báo nhẹ nếu không *ít nhất* tăng dần:
+    .superRefine((val, ctx) => {
+        for (let i = 1; i < val.options.length; i++) {
+            if (val.options[i].inputUSDT <= 0) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Every step must have inputUSDT > 0",
+                    path: ["options", i, "inputUSDT"],
+                });
+            }
+        }
+    });
+
 export const FormSchema = z.object({
     maxTotalOpenPO: intField(1, "Maximum Position"),
     leverage: intField(1, "Leverage"),
@@ -53,7 +80,15 @@ export const FormSchema = z.object({
     delayForPairsMs: intField(0, "Delay For Pairs (ms)"),
     // max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
     // max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
+
+    martingale: ZMartingaleConfig,
 });
+
+const defaultMartingale: MartingaleConfig = {
+    initialInputUSDT: 10,
+    initialLeverage: 25,
+    options: [],
+};
 
 type FormInput = z.input<typeof FormSchema>; // kiểu dữ liệu TRƯỚC khi Zod parse ('' | string | number)
 type FormOutput = z.output<typeof FormSchema>; // kiểu dữ liệu SAU khi Zod parse (number)\
@@ -96,6 +131,7 @@ export default function SettingAdminUser({ type }: TProps) {
             delayForPairsMs: "",
             // max24hChangeGreen: "",
             // max24hChangeRed: "",
+            martingale: defaultMartingale,
         },
     });
 
@@ -121,12 +157,14 @@ export default function SettingAdminUser({ type }: TProps) {
                 delayForPairsMs: setting.delayForPairsMs ?? "",
                 // max24hChangeGreen: setting.max24hChangeGreen ?? "",
                 // max24hChangeRed: setting.max24hChangeRed ?? "",
+                martingale: (setting.martingale as MartingaleConfig) ?? defaultMartingale,
             });
         }
-    }, [settingUser, getSettingUserById.data, form]);
+    }, [settingUser, getSettingUserById.data, form, type]);
 
     function onSubmit(raw: FormInput) {
         if (settingUser?.id === undefined) return;
+
         const data: FormOutput = FormSchema.parse(raw); // đảm bảo đã là number
 
         const payload: TSettingUsersUpdate = {
@@ -149,6 +187,7 @@ export default function SettingAdminUser({ type }: TProps) {
             delayForPairsMs: data.delayForPairsMs,
             // max24hChangeGreen: data.max24hChangeGreen,
             // max24hChangeRed: data.max24hChangeRed,
+            martingale: data.martingale,
         };
 
         console.log({ updateSettingUser: payload });
@@ -159,7 +198,7 @@ export default function SettingAdminUser({ type }: TProps) {
                 if (type === "user") {
                     queryClient.invalidateQueries({ queryKey: [`get-setting-user-by-id`] });
                 } else {
-                    getInfoMutation.mutate();
+                    getInfoMutation.mutate(`update setting user`);
                 }
                 toast.success(`Update Setting successfully`);
             },
@@ -172,7 +211,7 @@ export default function SettingAdminUser({ type }: TProps) {
 
     return (
         <Form {...form}>
-            <form className="w-full grid gap-2 p-5 border border-border rounded-2xl" onSubmit={form.handleSubmit(onSubmit)}>
+            <form className="w-full grid gap-2 p-5 border border-border rounded-2xl h-fit" onSubmit={form.handleSubmit(onSubmit)}>
                 {/* title */}
                 <p className="text-xl font-bold text-muted-foreground">{type === "admin" ? "My Setting" : "Setting User"}</p>
 
@@ -626,6 +665,128 @@ export default function SettingAdminUser({ type }: TProps) {
                             description={"If 0 then no delay | 1000ms = 1second"}
                         />
                     )}
+                />
+
+                {/* martingale */}
+                <Controller
+                    name="martingale"
+                    control={form.control}
+                    render={({ field }) => {
+                        // Giá trị mặc định nếu chưa có
+                        const value: MartingaleConfig = (field.value as MartingaleConfig) ?? {
+                            initialInputUSDT: 10,
+                            initialLeverage: 25,
+                            options: [],
+                        };
+
+                        function updateMartin(next: MartingaleConfig) {
+                            field.onChange(next);
+                        }
+
+                        function updateRootField<K extends keyof MartingaleConfig>(key: K, newValue: MartingaleConfig[K]) {
+                            updateMartin({ ...value, [key]: newValue });
+                        }
+
+                        function updateOptionAtIndex(optionIndex: number, patch: Partial<MartingaleOption>) {
+                            const nextOptions = value.options.map((option, idx) => (idx === optionIndex ? { ...option, ...patch } : option));
+                            updateMartin({ ...value, options: nextOptions });
+                        }
+
+                        function removeOptionAtIndex(optionIndex: number) {
+                            const nextOptions = value.options.filter((_, idx) => idx !== optionIndex);
+                            updateMartin({ ...value, options: nextOptions });
+                        }
+
+                        // Bấm + để thêm một bước:
+                        // - Bước đầu: = initialInputUSDT
+                        // - Bước sau: gấp đôi bước gần nhất
+                        function addNextOption() {
+                            const baseQuantity = Number(value.initialInputUSDT) || 0;
+                            const hasAny = value.options.length > 0;
+                            const lastQuantity = hasAny ? Number(value.options[value.options.length - 1].inputUSDT) || 0 : baseQuantity;
+                            const nextQuantity = hasAny ? lastQuantity * 2 : baseQuantity;
+
+                            const nextOption: MartingaleOption = {
+                                inputUSDT: nextQuantity,
+                                leverage: Number(value.initialLeverage) || 1,
+                            };
+                            updateMartin({ ...value, options: [...value.options, nextOption] });
+                        }
+
+                        // Grid 4 cột cố định để mọi hàng thẳng nhau:
+                        // [nhãn 84px] [inputUSDT] [leverage] [actions]
+                        const rowClass = "grid grid-cols-[50px_1fr_1fr_auto] gap-4 items-end";
+
+                        return (
+                            <div className="flex flex-col gap-4">
+                                {/* Tiêu đề */}
+                                <div className="text-sm font-medium">Martingale</div>
+
+                                {/* Danh sách các bước */}
+                                <Paper withBorder radius="md" p="md">
+                                    {value.options.length === 0 ? (
+                                        <div className="text-xs text-muted-foreground px-1 py-2">
+                                            Chưa có bước nào. Nhấn “+ Thêm bước” để tạo bước đầu tiên (bằng Initial input). Các bước tiếp theo sẽ tự
+                                            gấp đôi.
+                                        </div>
+                                    ) : (
+                                        value.options.map((option, optionIndex) => (
+                                            <div key={optionIndex} className={rowClass}>
+                                                <div className="text-xs text-muted-foreground pt-5">Bước {optionIndex + 1}</div>
+
+                                                <NumberInput
+                                                    size="xs"
+                                                    label="Input (USDT)"
+                                                    value={option.inputUSDT}
+                                                    onChange={(n) =>
+                                                        updateOptionAtIndex(optionIndex, {
+                                                            inputUSDT: Math.max(0, Number(n ?? 0)),
+                                                        })
+                                                    }
+                                                    min={0}
+                                                    step={1}
+                                                    clampBehavior="strict"
+                                                    hideControls
+                                                />
+
+                                                <NumberInput
+                                                    size="xs"
+                                                    label="Leverage (x)"
+                                                    value={option.leverage}
+                                                    onChange={(n) =>
+                                                        updateOptionAtIndex(optionIndex, {
+                                                            leverage: Math.max(0, Number(n ?? 0)),
+                                                        })
+                                                    }
+                                                    min={0}
+                                                    step={1}
+                                                    clampBehavior="strict"
+                                                    hideControls
+                                                />
+                                                <Button
+                                                    color="red"
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="icon"
+                                                    className="size-8"
+                                                    onClick={() => removeOptionAtIndex(optionIndex)}
+                                                >
+                                                    <Trash />
+                                                </Button>
+                                            </div>
+                                        ))
+                                    )}
+
+                                    {/* Nút thêm bước đặt NGAY DƯỚI danh sách, căn phải cho gọn */}
+                                    <div className="mt-2 flex justify-end">
+                                        <Button size={"sm"} type="button" onClick={addNextOption} title="Thêm một bước martingale">
+                                            + Thêm
+                                        </Button>
+                                    </div>
+                                </Paper>
+                            </div>
+                        );
+                    }}
                 />
 
                 <ButtonLoading className="w-[80px]" loading={updateSettingUser.isPending} type="submit">

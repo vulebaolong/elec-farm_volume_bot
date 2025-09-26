@@ -60,7 +60,7 @@ api.interceptors.response.use(
 
         if (error.response?.status === 401) {
             console.log(`401 => logout`);
-            logOut();
+            logOut(`1::401 => logout`);
         }
 
         if (error.response?.status === 403 && !originalRequest._retry) {
@@ -101,7 +101,7 @@ api.interceptors.response.use(
                     })
                     .catch((err) => {
                         processQueue(err, null);
-                        logOut();
+                        logOut(`2::Refresh token error: ${err}`);
                         reject(err);
                     })
                     .finally(() => {

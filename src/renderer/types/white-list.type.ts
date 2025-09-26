@@ -42,6 +42,8 @@ export type TWhitelistEntry = {
     askBest: number;
     bidBest: number;
     order_price_round: number;
+    lastPriceGate: number;
+    quanto_multiplier: number;
 };
 
 export type TWhitelistUi = {

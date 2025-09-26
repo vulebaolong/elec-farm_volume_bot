@@ -5,16 +5,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../axios/app.axios";
 import { toast } from "sonner";
 import { resError } from "@/helpers/function.helper";
+import { useAppSelector } from "@/redux/store";
 
 export const useGetMyBlackList = () => {
+    const info = useAppSelector((state) => state.user.info);
+
     return useQuery({
-        queryKey: ["get-my-black-list"],
+        queryKey: ["get-my-black-list", info],
         queryFn: async () => {
             const { data } = await api.get<TRes<TBlackListRes[]>>(ENDPOINT.BLACK_LIST.GET_MY_BLACK_LIST);
-            window.electron?.ipcRenderer.sendMessage("bot:blackList", data.data.map((item) => item.symbol));
+            window.electron?.ipcRenderer.sendMessage(
+                "bot:blackList",
+                data.data.map((item) => item.symbol),
+            );
             console.log({ useGetMyBlackList: data });
             return data.data;
         },
+        enabled: !!info,
     });
 };
 

@@ -5,8 +5,10 @@ export type TBaseTimestamps = {
 };
 
 export type TSocketRes<T> = {
+    code: number;
     message: string;
     data: T;
+    error: any | null;
 };
 
 export type TRespnoseGate<T> = {
@@ -17,4 +19,4 @@ export type TRespnoseGate<T> = {
     data: T;
 };
 
-export type TSide = 'long' | 'short';
+export type TSide = "long" | "short";

@@ -1,17 +1,15 @@
-import React, { useEffect } from "react";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
-import { TextInput } from "@mantine/core";
+import { useUpsertUiSelector } from "@/api/tanstack/selector.tanstack";
 import { Button } from "@/components/ui/button"; // shadcn/ui
-import { useGetUiSelector, useUpsertUiSelector } from "@/api/tanstack/selector.tanstack";
-import { Form } from "../ui/form";
-import { TUiSelector } from "@/types/ui-selector.type";
-import { z } from "zod";
-import { ButtonLoading } from "../ui/button-loading";
-import { toast } from "sonner";
 import { resError } from "@/helpers/function.helper";
 import { useAppSelector } from "@/redux/store";
+import { TextInput } from "@mantine/core";
+import { useEffect } from "react";
+import { Controller, useFieldArray, useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 import NodataOverlay from "../no-data/NodataOverlay";
-import { useQueryClient } from "@tanstack/react-query";
+import { ButtonLoading } from "../ui/button-loading";
+import { Form } from "../ui/form";
 
 export const FormSchema = z.object({
     id: z.any(),

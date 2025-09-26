@@ -9,15 +9,24 @@ import { TWhiteList } from "@/types/white-list.type";
 import { useEffect, useRef } from "react";
 import { useSocket } from "./socket.hook";
 import { useGetMyBlackList } from "@/api/tanstack/black-list.tanstack";
+import { useSocketEmit } from "@/api/tanstack/socket.tanstack";
+import { SOCKET_ENVENT } from "@/constant/socket.constant";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
+    const info = useAppSelector((state) => state.user.info);
     const { socket } = useSocket();
     const dispatch = useAppDispatch();
     const getUiSelector = useGetUiSelector();
     const countRef = useRef(0);
     const getInfoMutation = useGetInfoMutation();
     const getMyBlackList = useGetMyBlackList();
+
+    const joinRoomEntry = useSocketEmit<boolean>({
+        socket,
+        event: SOCKET_ENVENT.JOIN_ROOM_ENTRY,
+        timeoutMs: 10000,
+    });
 
     useEffect(() => {
         if (!socket) return;
@@ -31,7 +40,7 @@ export const useInitData = () => {
 
         // cập nhật setting user thường
         const handleSettingUser = ({ data }: TSocketRes<TSettingUsersSocket>) => {
-            getInfoMutation.mutate();
+            getInfoMutation.mutate(`update setting user`);
         };
         socket.on("setting-user", handleSettingUser);
 
@@ -49,8 +58,8 @@ export const useInitData = () => {
         socket.on("entry", handleEntry);
 
         const handleCheckLogin = ({ data }: TSocketRes<TWhiteList>) => {
-            console.log({ handleEntry: data });
-            getInfoMutation.mutate();
+            console.log({ handleCheckLogin: data });
+            getInfoMutation.mutate(`check login`);
         };
         socket.on("check-login", handleCheckLogin);
 
@@ -76,6 +85,19 @@ export const useInitData = () => {
             countRef.current = 1;
         }
     }, [settingUser, getUiSelector.data, getMyBlackList.data]);
+
+    useEffect(() => {
+        if (info && socket) {
+            joinRoomEntry.mutate(
+                {},
+                {
+                    onSuccess: (data) => {
+                        console.log({ joinRoomEntry: data });
+                    },
+                },
+            );
+        }
+    }, [info, socket]);
 
     return {};
 };

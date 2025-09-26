@@ -60,7 +60,11 @@ export function NavUser() {
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={logOut}>
+                        <DropdownMenuItem
+                            onClick={() => {
+                                logOut(`5::User click logout`);
+                            }}
+                        >
                             <LogOut />
                             Log out
                         </DropdownMenuItem>

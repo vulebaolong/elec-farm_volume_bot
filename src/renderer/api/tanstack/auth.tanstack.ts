@@ -11,12 +11,13 @@ import { toast } from "sonner";
 import { logOut, setAccessToken, setRefreshToken } from "../auth/app.auth";
 import api from "../axios/app.axios";
 
+
 export const useGetInfoMutation = () => {
     const dispatch = useAppDispatch();
 
     return useMutation({
-        mutationFn: async () => {
-            const { data } = await api.get<TRes<TUser>>(ENDPOINT.AUTH.GET_INFO);
+        mutationFn: async (reasonLogout: string = "manual") => {
+            const { data } = await api.get<TRes<TUser>>(`${ENDPOINT.AUTH.GET_INFO}?reasonLogout=${reasonLogout}`);
 
             return data;
         },
@@ -34,7 +35,7 @@ export const useGetInfoMutation = () => {
             if (error?.response?.status === 403) return;
 
             // Các lỗi khác thì logout
-            logOut();
+            logOut(`3::useGetInfoMutation: ${error?.response?.data?.message}`);
         },
     });
 };
@@ -60,7 +61,7 @@ export const useGetInfoQuery = () => {
                 if (error?.response?.status === 403) return;
 
                 // Các lỗi khác thì logout
-                logOut();
+                logOut(`4::useGetInfoQuery: ${error?.response?.data?.message}`);
 
                 return null;
             }

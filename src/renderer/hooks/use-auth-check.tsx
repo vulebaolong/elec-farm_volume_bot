@@ -12,6 +12,6 @@ export const useAuthCheck = () => {
         const publicRoutes = [ROUTER.LOGIN, ROUTER.REGISTER];
         if (publicRoutes.includes(location.pathname)) return;
 
-        getInfoMutation.mutate();
+        getInfoMutation.mutate(`useAuthCheck`);
     }, [location.pathname]);
 };

@@ -1,6 +1,7 @@
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from "@/constant/app.constant";
 import { ROUTER } from "@/constant/router.constant";
 import { navigateTo } from "@/helpers/navigate.helper";
+import { logRenderer } from "@/index";
 import { RESET_USER } from "@/redux/slices/user.slice";
 import { store } from "@/redux/store";
 
@@ -25,7 +26,8 @@ export const getRefreshToken = () => {
     return refreshToken;
 };
 
-export const logOut = () => {
+export const logOut = (reason?: string) => {
+    if(reason) logRenderer.info(reason);
     window.electron?.ipcRenderer.sendMessage("bot:stop");
     const theme = localStorage.getItem("theme");
     localStorage.clear();

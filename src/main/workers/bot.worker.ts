@@ -1,7 +1,11 @@
 // bot.worker.ts
 import { BASE_URL, IS_PRODUCTION } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
-import { createCodeStringClickCancelAllOpen, createCodeStringClickTabOpenOrder } from "@/javascript-string/logic-farm";
+import {
+    createCodeStringClickCancelAllOpen,
+    createCodeStringClickMarketPosition,
+    createCodeStringClickTabOpenOrder,
+} from "@/javascript-string/logic-farm";
 import { TAccount } from "@/types/account.type";
 import { TRes } from "@/types/app.type";
 import { TGateApiRes } from "@/types/base-gate.type";
@@ -11,6 +15,7 @@ import {
     StickySetPayload,
     TChangeLeverage,
     TClickCancelAllOpenRes,
+    TClickMarketPositionRes,
     TClickTabOpenOrderRes,
     TDataInitBot,
     TDataOrder,
@@ -19,12 +24,15 @@ import {
     TGateClickTabOpenOrderRes,
     TGateFectMainRes,
     TGateOrderMainRes,
+    THistoryAggregate,
     TOrderWorkRes,
     TPayloadClickCancelAllOpen,
     TPayloadClickTabOpenOrder,
     TPayloadFollowApi,
     TPayloadOrder,
     TUiSelectorOrder,
+    TValueChangeLeverage,
+    TValuelistSLROIFailed,
 } from "@/types/bot.type";
 import { TGetInfoContractRes } from "@/types/contract.type";
 import { TOrderOpen } from "@/types/order.type";
@@ -37,8 +45,9 @@ import axios from "axios";
 import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
-import { handleEntryCheckAll } from "./util-bot.worker";
+import { calcSize, handleEntryCheckAll } from "./util-bot.worker";
 import { getSideRes } from "@/types/ccc.type";
+import { MartingaleSummary, TDataFixLiquidation } from "@/types/martingale.type";
 
 const FLOWS_API = {
     acounts: {
@@ -104,7 +113,7 @@ class Bot {
     private isStart = false;
     private orderOpens: TOrderOpen[] = [];
     private positions = new Map<string, TPosition>(); // "BTC_USDT"
-    private changedLaveragelist: Set<string> = new Set();
+    private changedLaveragelist = new Map<string, TValueChangeLeverage>();
     private settingUser: TSettingUsers;
     private uiSelector: TUiSelector[];
     private whitelistEntry: TWhitelistEntry[] = [];
@@ -122,6 +131,14 @@ class Bot {
         "30m": 0,
         "1h": 0,
     };
+
+    private dataFixLiquidation: TDataFixLiquidation | null = null;
+    private startTimeSec: number | null = null;
+    private stepFixLiquidation = 0;
+
+    private listSLROIFailed = new Map<string, TValuelistSLROIFailed>();
+
+    private rpcSequenceByKey = new Map<string, number>();
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
@@ -168,10 +185,12 @@ class Bot {
                     }
                     console.log("\n\n");
 
+                    await this.createLiquidationShouldFix();
+
                     // ===== 3) CREATE OPEN ===============================================
                     if (this.isHandleCreateOpen()) {
                         for (const whitelistItem of Object.values(this.whitelistEntry)) {
-                            const { symbol, sizeStr, side, bidBest, askBest, order_price_round } = whitelistItem;
+                            const { symbol, sizeStr, side, lastPriceGate, quanto_multiplier } = whitelistItem;
 
                             if (this.isCheckLimit()) {
                                 this.logWorker.info(`🔵 Create Open: skip rate limit hit`);
@@ -183,16 +202,29 @@ class Bot {
                                 break;
                             }
 
-                            // nếu đã max thì không vào thoát vòng lặp
-                            if (this.isCheckMaxOpenPO()) {
-                                this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${this.getLengthOrderInOrderOpensAndPosition()}`);
-                                break;
-                            }
-
                             // nếu symbol đó đã tồn tại trong orderOpens -> bỏ qua
                             if (this.isOrderExitsByContract(symbol)) {
                                 this.logWorker.info(`🔵 Create Open: skip ${symbol} (already exists)`);
                                 continue;
+                            }
+
+                            const bidsAsks = await this.getBidsAsks(symbol);
+                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(0, 3);
+
+                            const isCreateOrderOpenFixLiquidation = await this.createOrderOpenFixLiquidation(
+                                symbol,
+                                prices[1].p,
+                                lastPriceGate,
+                                quanto_multiplier,
+                            );
+                            if (isCreateOrderOpenFixLiquidation) {
+                                continue;
+                            }
+
+                            // nếu đã max thì không vào thoát vòng lặp
+                            if (this.isCheckMaxOpenPO()) {
+                                this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${this.getLengthOrderInOrderOpensAndPosition()}`);
+                                break;
                             }
 
                             // nếu symbol tồn tại trong blackList -> bỏ qua
@@ -200,14 +232,11 @@ class Bot {
                                 continue;
                             }
 
+                            const size = IS_PRODUCTION ? sizeStr : `1`;
+                            // const size = sizeStr;
+
                             const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
                             if (!ok) continue;
-
-                            const bidsAsks = await this.getBidsAsks(symbol);
-                            const end = IS_PRODUCTION ? 3 : 5;
-                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(1, end + 1);
-
-                            const size = IS_PRODUCTION ? sizeStr : `1`;
 
                             for (const price of prices) {
                                 const payloadOpenOrder: TPayloadOrder = {
@@ -239,12 +268,14 @@ class Bot {
                     }
                     console.log("\n\n");
 
+                    await this.checkDataFixLiquidationIsDone();
+
                     // ===== 4) SL / ROI ===================================================
                     if (this.isHandleSL()) {
                         for (const [, pos] of this.positions) {
                             await this.handleRoi(pos);
-                            await this.createTPClose();
                         }
+                        await this.createTPClose();
                     }
                     console.log("\n\n");
                 } else {
@@ -271,9 +302,33 @@ class Bot {
 
             for (const p of payloads) {
                 try {
-                    const ok = await this.changeLeverage(p.contract.replace("/", "_"), this.settingUser.leverage);
+                    let isPositionFix = false;
+
+                    if (this.dataFixLiquidation && this.dataFixLiquidation.dataOrderOpenFixLiquidation) {
+                        const contractPosition = p.contract.replace("/", "_");
+                        const contractOrderOpenFixLiquidation = this.dataFixLiquidation.dataOrderOpenFixLiquidation.contract.replace("/", "_");
+                        if (contractPosition === contractOrderOpenFixLiquidation) {
+                            isPositionFix = true;
+                        }
+                    }
+
+                    let leverage = this.settingUser.leverage;
+                    if (isPositionFix) {
+                        const leverageFixLiquidation = this.settingUser.martingale?.options[this.stepFixLiquidation].leverage;
+                        if (leverageFixLiquidation) {
+                            leverage = leverageFixLiquidation;
+                        }
+                    }
+
+                    const ok = await this.changeLeverage(p.contract.replace("/", "_"), leverage);
                     if (!ok) continue;
-                    await this.openEntry(p, `TP: Close`);
+
+                    const res = await this.openEntry(p, `TP: Close`);
+
+                    if (isPositionFix && this.dataFixLiquidation) {
+                        this.dataFixLiquidation.dataCloseTP = res;
+                        this.martingaleSendRenderer();
+                    }
                 } catch (error: any) {
                     if (error?.message === INSUFFICIENT_AVAILABLE) {
                         throw new Error(error);
@@ -299,6 +354,9 @@ class Bot {
         // console.log(`positions`, Object(this.positions).keys());
         // console.log(`orderOpens`, this.orderOpens);
         // console.log(`settingUser`, this.settingUser);
+        // console.log("startTimeSec", this.startTimeSec);
+        // console.log("stepFixLiquidation", this.stepFixLiquidation);
+        // console.log("dataFixLiquidation", this.dataFixLiquidation);
     }
 
     private heartbeat() {
@@ -317,6 +375,61 @@ class Bot {
         const payload: TWorkerData<Record<WindowKey, number>> = {
             type: "bot:rateCounter",
             payload: this.rateCounter.counts(),
+        };
+        this.parentPort?.postMessage(payload);
+    }
+
+    private toSummary(payload: TDataFixLiquidation | null, updatedAt?: number): MartingaleSummary {
+        if (!payload) {
+            return {
+                status: "idle",
+                targetContract: null,
+                step: this.stepFixLiquidation,
+                liquidationFinishTime: null,
+
+                openFixContract: null,
+                openFixPrice: null,
+                openFixSize: null,
+                openFixCreateTime: null,
+
+                tpContract: null,
+                tpPrice: null,
+                tpCreateTime: null,
+
+                updatedAt: updatedAt ?? Date.now(),
+            };
+        }
+
+        const liq = payload.dataLiquidationShouldFix;
+        const openFix = payload.dataOrderOpenFixLiquidation;
+        const tpOrder = payload.dataCloseTP;
+
+        console.log(tpOrder);
+
+        return {
+            status: "fixing",
+            targetContract: liq?.contract ?? null,
+            step: this.stepFixLiquidation,
+            liquidationFinishTime: liq?.finish_time ?? null,
+
+            openFixContract: openFix?.contract ?? null,
+            openFixPrice: openFix?.price ?? null,
+            openFixSize: openFix?.size ?? null,
+            openFixCreateTime: openFix?.create_time ?? null,
+
+            tpContract: tpOrder?.contract ?? null,
+            tpPrice: tpOrder?.price ?? null,
+            tpSize: tpOrder?.size ?? null,
+            tpCreateTime: tpOrder?.create_time ?? null,
+
+            updatedAt: updatedAt ?? Date.now(),
+        };
+    }
+
+    private martingaleSendRenderer() {
+        const payload: TWorkerData<MartingaleSummary> = {
+            type: "bot:martingale",
+            payload: this.toSummary(this.dataFixLiquidation),
         };
         this.parentPort?.postMessage(payload);
     }
@@ -385,27 +498,10 @@ class Bot {
     }
 
     private isHandleCreateOpen(): boolean {
-        const isLimit = this.isCheckLimit();
-        if (isLimit) {
-            this.logWorker.info(`🔵 Create Open: skip hit limit 800/15m`);
-            return false;
-        }
-
+        // return false;
         const isWhiteListEntryEmpty = this.isCheckWhitelistEntryEmty();
         if (isWhiteListEntryEmpty) {
             this.logWorker.info(`🔵 Create Open: skip White list entry empty`, this.whitelistEntry.length);
-            return false;
-        }
-
-        const isMaxOpenPO = this.isCheckMaxOpenPO();
-        if (isMaxOpenPO) {
-            this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${this.getLengthOrderInOrderOpensAndPosition()}`);
-            return false;
-        }
-
-        const isDelayForPairsMs = this.isCheckDelayForPairsMs();
-        if (isDelayForPairsMs) {
-            this.logWorker.info(`🔵 Create Open: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
             return false;
         }
 
@@ -493,7 +589,8 @@ class Bot {
     }
 
     private async changeLeverage(symbol: string, leverageNumber: number): Promise<boolean> {
-        if (this.changedLaveragelist.has(symbol)) {
+        const changedLeverage = this.changedLaveragelist.get(symbol);
+        if (changedLeverage && changedLeverage.leverage === leverageNumber) {
             // this.log(`✅ Change Leverage [EXISTS] ${symbol} skip => `, this.changedLaveragelist);
             return true;
         }
@@ -531,7 +628,8 @@ class Bot {
             return false;
         }
 
-        this.changedLaveragelist.add(symbol);
+        this.changedLaveragelist.delete(symbol);
+        this.changedLaveragelist.set(symbol, { symbol, leverage: leverageNumber });
         const msg = `✅ Change Leverage: ${symbol} | ${leverageString}`;
         this.logWorker.info(msg);
 
@@ -668,88 +766,88 @@ class Bot {
         });
     }
 
+    private async sendClickTabOpenOrder<TBody>(stringClickTabOpenOrder: string, timeoutMs = 10_000) {
+        return this.sendIpcRpc<TBody>({
+            sequenceKey: "clickTabOpenOrder",
+            requestType: "bot:clickTabOpenOrder",
+            responseType: "bot:clickTabOpenOrder:res",
+            idFieldName: "reqClickTabOpenOrderId",
+            buildPayload: (requestId) => ({
+                reqClickTabOpenOrderId: requestId,
+                stringClickTabOpenOrder,
+            }),
+            matchResponse: (message, requestId) =>
+                message?.type === "bot:clickTabOpenOrder:res" && message?.payload?.reqClickTabOpenOrderId === requestId,
+            timeoutMs,
+        });
+    }
+
+    private async sendClickCanelAllOpen<TBody>(stringClickCanelAllOpen: string, timeoutMs = 10_000) {
+        return this.sendIpcRpc<TBody>({
+            sequenceKey: "clickCanelAllOpen",
+            requestType: "bot:clickCanelAllOpen",
+            responseType: "bot:clickCanelAllOpen:res",
+            idFieldName: "reqClickCanelAllOpenOrderId",
+            buildPayload: (requestId) => ({
+                reqClickCanelAllOpenOrderId: requestId,
+                stringClickCanelAllOpen,
+            }),
+            matchResponse: (message, requestId) =>
+                message?.type === "bot:clickCanelAllOpen:res" && message?.payload?.reqClickCanelAllOpenOrderId === requestId,
+            timeoutMs,
+        });
+    }
+
+    private async sendClickMarketPosition<TBody>(stringClickMarketPosition: string, timeoutMs = 10_000) {
+        return this.sendIpcRpc<TBody>({
+            sequenceKey: "clickMarketPosition",
+            requestType: "bot:clickMarketPosition",
+            responseType: "bot:clickMarketPosition:res",
+            idFieldName: "reqClickMarketPositionId",
+            buildPayload: (requestId) => ({
+                reqClickMarketPositionId: requestId,
+                stringClickMarketPosition,
+            }),
+            matchResponse: (message, requestId) =>
+                message?.type === "bot:clickMarketPosition:res" && message?.payload?.reqClickMarketPositionId === requestId,
+            timeoutMs,
+        });
+    }
+
     private async clickTabOpenOrder() {
         const selectorButtonTabOpenOrder = this.uiSelector?.find((item) => item.code === "buttonTabOpenOrder")?.selectorValue;
+
         if (!selectorButtonTabOpenOrder) {
             console.log(`Not found selector`, { selectorButtonTabOpenOrder });
             throw new Error(`Not found selector`);
         }
-        const stringClickTabOpenOrder = createCodeStringClickTabOpenOrder({ buttonTabOpenOrder: selectorButtonTabOpenOrder });
+
+        const stringClickTabOpenOrder = createCodeStringClickTabOpenOrder({
+            buttonTabOpenOrder: selectorButtonTabOpenOrder,
+        });
 
         const { body, error, ok } = await this.sendClickTabOpenOrder<boolean | null>(stringClickTabOpenOrder);
 
-        if (ok === false || error || body === null) {
-            const msg = `❌ Click Tab Open Order error: ${error}`;
-            throw new Error(msg);
+        if (!ok || error || body == null) {
+            throw new Error(`❌ Click Tab Open Order error: ${error ?? "unknown"}`);
         }
         if (body === false) {
-            const msg = `❌ Click Tab Open Order body: ${body}`;
-            throw new Error(msg);
+            throw new Error(`❌ Click Tab Open Order body: false`);
         }
 
         return body;
-    }
-
-    private seqClickTabOpenOrder = 0;
-
-    private async sendClickTabOpenOrder<T>(stringClickTabOpenOrder: string, timeoutMs = 10_000): Promise<TClickTabOpenOrderRes<T>> {
-        const reqClickTabOpenOrderId = ++this.seqClickTabOpenOrder;
-        const port = this.parentPort!;
-
-        return new Promise<TClickTabOpenOrderRes<T>>((resolve) => {
-            let settled = false;
-            let timer: NodeJS.Timeout;
-
-            const done = (r: TClickTabOpenOrderRes<T>) => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timer);
-                try {
-                    port.off("message", onMsg);
-                } catch {}
-                resolve(r);
-            };
-
-            const onMsg = (m: any) => {
-                try {
-                    if (m?.type !== "bot:clickTabOpenOrder:res") return;
-                    if (m.payload?.reqClickTabOpenOrderId !== reqClickTabOpenOrderId) return;
-                    // console.log(`ClickTabOpenOrder res`, m.payload);
-                    const p: TGateClickTabOpenOrderRes = m.payload;
-                    if (!p.ok) return done({ ok: false, body: null, error: p.error || "ClickTabOpenOrder failed" });
-
-                    return done({ ok: true, body: p.body as T, error: null });
-                } catch (e) {
-                    return done({ ok: false, body: null, error: `ClickTabOpenOrder handler error: ${String(e)}` });
-                }
-            };
-
-            // 1) nghe trước
-            port.on("message", onMsg);
-
-            // 2) timeout RPC (phòng main không hồi)
-            timer = setTimeout(() => {
-                done({ ok: false, body: null, error: "sendClickTabOpenOrder rpc timeout" });
-            }, timeoutMs);
-
-            const payload: TPayloadClickTabOpenOrder = {
-                reqClickTabOpenOrderId,
-                stringClickTabOpenOrder,
-            };
-
-            // 3) gửi sau
-            port.postMessage({ type: "bot:clickTabOpenOrder", payload: payload });
-        });
     }
 
     private async clickCanelAllOpen(contract: string) {
         await this.clickTabOpenOrder();
 
         const selectorTableOrderPanel = this.uiSelector?.find((item) => item.code === "tableOrderPanel")?.selectorValue;
+
         if (!selectorTableOrderPanel) {
             this.log(`🟢 Not found selector`, { selectorTableOrderPanel });
             throw new Error(`Not found selector`);
         }
+
         const stringClickCanelAllOpen = createCodeStringClickCancelAllOpen({
             contract: contract.replace("/", "").replace("_", ""),
             tableOrderPanel: selectorTableOrderPanel,
@@ -757,67 +855,49 @@ class Bot {
 
         const { body, error, ok } = await this.sendClickCanelAllOpen<TGateClickCancelAllOpenRes["body"]>(stringClickCanelAllOpen);
 
-        if (ok === false || error || body === null) {
-            const msg = `🟢 ❌ Click Cancel All Order error: ${error} ${body} ${ok}`;
-            throw new Error(msg);
+        if (!ok || error || body == null) {
+            throw new Error(`🟢 ❌ Click Cancel All Order error: ${error ?? "unknown"} ${body} ${ok}`);
         }
 
         this.logWorker.info(`✅ ${contract} Cancel All Open: ${body.clicked}`);
         this.removeSticky(`timeout:${contract}`);
 
+        if (this.dataFixLiquidation?.dataOrderOpenFixLiquidation) {
+            const contractOrderOpenFixLiquidation = this.dataFixLiquidation.dataOrderOpenFixLiquidation.contract.replace("/", "_");
+            if (contractOrderOpenFixLiquidation === contract) {
+                this.dataFixLiquidation.dataOrderOpenFixLiquidation = null;
+            }
+        }
+
         return body;
     }
 
-    private seqClickCanelAllOpenOrder = 0;
+    private async clickMarketPostion(symbol: string, side: TSide) {
+        const selectorWrapperPositionBlocks = this.uiSelector?.find((item) => item.code === "wrapperPositionBlocks")?.selectorValue;
+        const selectorButtonTabPosition = this.uiSelector?.find((item) => item.code === "buttonTabPosition")?.selectorValue;
 
-    private async sendClickCanelAllOpen<T>(stringClickCanelAllOpen: string, timeoutMs = 10_000): Promise<TClickCancelAllOpenRes<T>> {
-        const reqClickCanelAllOpenOrderId = ++this.seqClickCanelAllOpenOrder;
-        const port = this.parentPort!;
+        if (!selectorWrapperPositionBlocks || !selectorButtonTabPosition) {
+            this.log(`🟢 Not found selector`, { selectorWrapperPositionBlocks, selectorButtonTabPosition });
+            throw new Error(`Not found selector`);
+        }
 
-        return new Promise<TClickCancelAllOpenRes<T>>((resolve) => {
-            let settled = false;
-            let timer: NodeJS.Timeout;
-
-            const done = (r: TClickCancelAllOpenRes<T>) => {
-                if (settled) return;
-                settled = true;
-                clearTimeout(timer);
-                try {
-                    port.off("message", onMsg);
-                } catch {}
-                resolve(r);
-            };
-
-            const onMsg = (m: any) => {
-                try {
-                    if (m?.type !== "bot:clickCanelAllOpen:res") return;
-                    if (m.payload?.reqClickCanelAllOpenOrderId !== reqClickCanelAllOpenOrderId) return;
-                    const p: TGateClickCancelAllOpenRes = m.payload;
-                    // console.log(`clickCanelAllOpen res`, m.payload);
-                    if (!p.ok) return done({ ok: false, body: null, error: p.error || "clickCanelAllOpen failed" });
-
-                    return done({ ok: true, body: p.body as T, error: null });
-                } catch (e) {
-                    return done({ ok: false, body: null, error: `clickCanelAllOpen handler error: ${String(e)}` });
-                }
-            };
-
-            // 1) nghe trước
-            port.on("message", onMsg);
-
-            // 2) timeout RPC (phòng main không hồi)
-            timer = setTimeout(() => {
-                done({ ok: false, body: null, error: "sendClickTabOpenOrder rpc timeout" });
-            }, timeoutMs);
-
-            const payload: TPayloadClickCancelAllOpen = {
-                reqClickCanelAllOpenOrderId,
-                stringClickCanelAllOpen,
-            };
-
-            // 3) gửi sau
-            port.postMessage({ type: "bot:clickCanelAllOpen", payload: payload });
+        const stringClickMarketPosition = createCodeStringClickMarketPosition({
+            symbol: symbol.replace("/", "").replace("_", ""),
+            side: side,
+            selector: {
+                wrapperPositionBlocks: selectorWrapperPositionBlocks,
+                buttonTabPosition: selectorButtonTabPosition,
+            },
         });
+
+        const { body, error, ok } = await this.sendClickMarketPosition<TGateClickCancelAllOpenRes["body"]>(stringClickMarketPosition);
+
+        if (!ok || error || body == null) {
+            throw new Error(`🟢 ❌ Click Market Position error: ${error ?? "unknown"} ${body} ${ok}`);
+        }
+
+        this.logWorker.info(`✅ ${symbol} Click market position`);
+        return body;
     }
 
     private removeSticky(key: string) {
@@ -853,6 +933,8 @@ class Bot {
                     askBest: result.askBest,
                     bidBest: result.bidBest,
                     order_price_round: result.order_price_round,
+                    lastPriceGate: result.lastPriceGate,
+                    quanto_multiplier: result.quanto_multiplier,
                 });
             }
         }
@@ -1096,7 +1178,7 @@ class Bot {
         const elapsed = Math.max(0, nowSec - createdSec);
 
         // log rõ ràng + đơn vị giây
-        this.logWorker.info(`⏰ ${contract}: ${elapsed}s / ${timeoutLimit}s`);
+        // this.logWorker.info(`⏰ ${contract}: ${elapsed}s / ${timeoutLimit}s`);
         this.setSticky(`timeout:${contract}`, `${contract}: ${elapsed}s / ${timeoutLimit}s`);
 
         return elapsed >= timeoutLimit;
@@ -1264,6 +1346,7 @@ class Bot {
 
     private async handleRoi(pos: TPosition): Promise<void> {
         const symbol = pos.contract.replace("/", "_");
+
         const info = await this.getInfoContract(symbol);
         if (!info) {
             this.logWorker.error(`🟣 ❌ SL ${symbol}: Get info contract fail`);
@@ -1300,6 +1383,11 @@ class Bot {
             return;
         }
 
+        let countSLROI = this.listSLROIFailed.get(symbol);
+        if (!countSLROI) {
+            this.listSLROIFailed.set(symbol, { symbol: symbol, count: 0, side: size > 0 ? "long" : "short" });
+        }
+
         const initialMargin = (entryPrice * Math.abs(size) * quanto) / leverage;
         const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
         const returnPercent = (unrealizedPnL / initialMargin) * 100;
@@ -1329,7 +1417,10 @@ class Bot {
         for (const payload of payloads) {
             // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
             try {
+                const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
+                if (!ok) continue;
                 await this.openEntry(payload, "SL: Close");
+                this.listSLROIFailed.delete(symbol);
             } catch (error: any) {
                 if (error?.message === INSUFFICIENT_AVAILABLE) {
                     throw new Error(error);
@@ -1337,7 +1428,15 @@ class Bot {
                 if (this.isTimeoutError(error)) {
                     throw new Error(error);
                 }
+                this.listSLROIFailed.get(symbol)!.count += 1;
                 this.logWorker.error(`🟣 ${error.message}`);
+            }
+        }
+
+        for (const [key, value] of this.listSLROIFailed) {
+            if (value.count >= 3) {
+                this.logWorker.info(`🟣 SL Close Failed: ${key} | ${value.count} | ${value.side}`);
+                await this.clickMarketPostion(value.symbol, value.side);
             }
         }
 
@@ -1357,9 +1456,6 @@ class Bot {
     }
 
     private setSettingUser(settingUser: TSettingUsers) {
-        if(this.settingUser.leverage !== settingUser.leverage) {
-            this.changedLaveragelist.clear();
-        }
         this.settingUser = settingUser;
     }
 
@@ -1594,6 +1690,313 @@ class Bot {
         } catch (error) {
             this.logWorker.error(`getSideCCC: ${error}`);
             return null;
+        }
+    }
+
+    private async getOrderLiquidation() {
+        const url = `https://www.gate.com/apiw/v2/futures/usdt/orders/aggregate?status=finished&hide_cancel=0&contract=&limit=10&order_type=limit&offset=0&start_time=1758128400&end_time=1758733199&sort=finish_time&position_side=&position_type=close`;
+
+        const { body, error, ok } = await this.gateFetch<TGateApiRes<THistoryAggregate[] | null>>(url, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+        });
+        if (ok === false || error || body === null) {
+            const msg = `❌ Change Leverage: ${error}`;
+            throw new Error(msg);
+        }
+
+        const { code, data, message } = body;
+
+        console.log("getLiquidation: ", data);
+    }
+
+    // Đầu ngày UTC (00:00:00) → giây
+    private startOfTodayUtcSec(): number {
+        const now = new Date();
+        const startMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()); // 00:00:00 UTC
+        return Math.floor(startMs / 1000);
+    }
+
+    // Thời điểm hiện tại → giây
+    private nowSec(): number {
+        return Math.floor(Date.now() / 1000);
+    }
+
+    /** Lấy số thứ tự request cho 1 kênh nhất định */
+    private nextRequestId(sequenceKey: string): number {
+        const current = this.rpcSequenceByKey.get(sequenceKey) ?? 0;
+        const next = current + 1;
+        this.rpcSequenceByKey.set(sequenceKey, next);
+        return next;
+    }
+
+    /**
+     * Helper RPC tái sử dụng:
+     * - Lắng nghe kênh phản hồi `responseType`
+     * - Khớp `requestId` qua field id do bạn quy định (vd: "reqClickTabOpenOrderId")
+     * - Áp timeout
+     * - Trả { ok, body, error, requestId }
+     */
+    private async sendIpcRpc<TBody>({
+        sequenceKey,
+        requestType,
+        responseType,
+        idFieldName,
+        buildPayload, // (requestId) => payload
+        matchResponse, // (message, requestId) => boolean
+        timeoutMs = 10_000,
+    }: {
+        sequenceKey: string;
+        requestType: string;
+        responseType: string;
+        idFieldName: string;
+        buildPayload: (requestId: number) => any;
+        matchResponse: (message: any, requestId: number) => boolean;
+        timeoutMs?: number;
+    }): Promise<{ ok: boolean; body: TBody | null; error: string | null; requestId: number }> {
+        const requestId = this.nextRequestId(sequenceKey);
+        const port = this.parentPort!;
+
+        return new Promise((resolve) => {
+            let isSettled = false;
+            let timeoutHandle: NodeJS.Timeout;
+
+            const finish = (result: { ok: boolean; body: TBody | null; error: string | null; requestId: number }) => {
+                if (isSettled) return;
+                isSettled = true;
+                clearTimeout(timeoutHandle);
+                try {
+                    port.off("message", onMessage);
+                } catch {}
+                resolve(result);
+            };
+
+            const onMessage = (message: any) => {
+                try {
+                    if (!matchResponse(message, requestId)) return;
+                    const payload = message.payload as { ok: boolean; body: TBody | null; error?: string | null };
+                    if (!payload.ok) {
+                        return finish({ ok: false, body: null, error: payload.error || "RPC failed", requestId });
+                    }
+                    return finish({ ok: true, body: (payload.body ?? null) as TBody | null, error: null, requestId });
+                } catch (error) {
+                    return finish({ ok: false, body: null, error: `RPC handler error: ${String(error)}`, requestId });
+                }
+            };
+
+            // 1) nghe trước
+            port.on("message", onMessage);
+
+            // 2) timeout
+            timeoutHandle = setTimeout(() => {
+                finish({ ok: false, body: null, error: `${requestType} rpc timeout`, requestId });
+            }, timeoutMs);
+
+            // 3) gửi sau
+            const payload = buildPayload(requestId);
+            port.postMessage({ type: requestType, payload });
+        });
+    }
+
+    private async getHistoryOrderClose(start_time: number, end_time: number, contract: string = "") {
+        // const url = `https://www.gate.com/apiw/v2/futures/usdt/orders/aggregate?status=finished&hide_cancel=0&contract=&limit=10&order_type=limit&offset=0&start_time=${start_time}&end_time=${end_time}&sort=finish_time&position_side=&position_type=close`;
+        const qs = new URLSearchParams({
+            status: "finished",
+            hide_cancel: "0",
+            contract: contract,
+            limit: "1000",
+            order_type: "limit",
+            offset: "0",
+            start_time: String(start_time), // dùng đầu ngày UTC hôm nay
+            end_time: String(end_time),
+            sort: "",
+            position_side: "",
+            position_type: "close",
+        });
+
+        const url = `https://www.gate.com/apiw/v2/futures/usdt/orders/aggregate?${qs}`;
+
+        const { body, error, ok } = await this.gateFetch<TGateApiRes<THistoryAggregate[] | null>>(url, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+        });
+        if (ok === false || error || body === null) {
+            const msg = `❌ Change Leverage: ${error}`;
+            throw new Error(msg);
+        }
+
+        const { code, data, message } = body;
+
+        // console.log("getHistoryOrderClose: ", data);
+
+        return data;
+    }
+
+    private async createLiquidationShouldFix() {
+        if (this.dataFixLiquidation) {
+            // this.logWorker.info(`Skip by listLiquidationShouldFix exists`);
+            console.log("Skip by listLiquidationShouldFix exists");
+            return;
+        }
+
+        const historysOrderClose = await this.getHistoryOrderClose(this.startTimeSec || this.startOfTodayUtcSec(), this.nowSec());
+
+        if (!historysOrderClose) {
+            this.logWorker.info(`historyOrderClose is null`);
+            return;
+        }
+
+        // lọc các lệnh liq từ history
+        const listLiq = historysOrderClose.filter((item: THistoryAggregate) => {
+            return item.is_liq;
+        });
+
+        const liq = listLiq.at(this.startTimeSec === null ? 0 : -1);
+
+        if (!liq) return;
+
+        console.log("liq: ", liq);
+
+        this.dataFixLiquidation = {
+            dataLiquidationShouldFix: liq,
+            dataOrderOpenFixLiquidation: null,
+            dataCloseTP: null,
+        };
+
+        this.startTimeSec = liq.finish_time;
+
+        this.martingaleSendRenderer();
+    }
+
+    private async createOrderOpenFixLiquidation(symbol: string, price: string, lastPriceGate: number, quanto_multiplier: number): Promise<boolean> {
+        if (this.dataFixLiquidation === null) {
+            // this.logWorker.info(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
+            console.log(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
+            return false;
+        }
+
+        if (this.dataFixLiquidation.dataOrderOpenFixLiquidation) {
+            // this.logWorker.info(`🧨 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
+            console.log(`🧨 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
+            return false;
+        }
+
+        const contract = symbol.replace("/", "_");
+
+        const inputUSDT = this.settingUser.martingale?.options?.[this.stepFixLiquidation]?.inputUSDT || this.settingUser.inputUSDT;
+        const leverage = this.settingUser.martingale?.options?.[this.stepFixLiquidation]?.leverage || this.settingUser.leverage;
+
+        const sizeStr = calcSize(inputUSDT, lastPriceGate, quanto_multiplier).toString();
+
+        const payload = {
+            contract: contract,
+            size: sizeStr,
+            price: price,
+            reduce_only: false,
+        };
+
+        try {
+            const ok = await this.changeLeverage(contract, leverage);
+            if (!ok) return false;
+            const res = await this.openEntry(payload, `Martingale step ${this.stepFixLiquidation}`);
+
+            this.dataFixLiquidation.dataOrderOpenFixLiquidation = res;
+
+            this.martingaleSendRenderer();
+
+            return true;
+        } catch (error: any) {
+            if (error?.message === INSUFFICIENT_AVAILABLE) {
+                throw new Error(error);
+            }
+            if (this.isTimeoutError(error)) {
+                throw new Error(error);
+            }
+            this.logWorker.error(error?.message);
+            return false;
+        }
+    }
+
+    private async checkDataFixLiquidationIsDone() {
+        if (this.dataFixLiquidation === null) {
+            // this.logWorker.info(`Skip by listLiquidationShouldFix is null`);
+            return;
+        }
+
+        if (this.startTimeSec === null) {
+            // this.logWorker.info(`Skip by startTimeSec is null`);
+            return;
+        }
+
+        if (this.dataFixLiquidation.dataOrderOpenFixLiquidation === null) {
+            // this.logWorker.info(`Skip by chưa có lệnh chờ để fix liquidation`);
+            console.log(`Skip by chưa có lệnh chờ sé fix liquidation`);
+            return;
+        }
+
+        if (this.dataFixLiquidation.dataCloseTP === null) {
+            // this.logWorker.info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
+            console.log(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
+            return;
+        }
+
+        const contractCloseTP = this.dataFixLiquidation.dataCloseTP.contract.replace("/", "_");
+        const contractShouldFix = this.dataFixLiquidation.dataLiquidationShouldFix.contract;
+        // idString lệnh chờ TP nếu như tìm thấy => thành công
+        const idStringCloseTP = this.dataFixLiquidation.dataCloseTP.id_string;
+        console.log(`🔵 ${contractShouldFix} idString lệnh chờ TP: ${idStringCloseTP}`);
+
+        const historysOrderClose = await this.getHistoryOrderClose(this.startTimeSec, this.nowSec(), contractCloseTP);
+
+        if (!historysOrderClose) {
+            this.logWorker.info(`historyOrderClose is null`);
+            return;
+        }
+
+        const hisCloseTPSuccess = historysOrderClose.find((historyOrderClose) => {
+            const isFind =
+                historyOrderClose.id_string === idStringCloseTP && historyOrderClose.finish_as === "filled" && historyOrderClose.is_liq === false;
+            if (isFind) {
+                this.logWorker.info(`🔵 ${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
+            }
+            return isFind;
+        });
+
+        const hisPositionFixLiquidation = historysOrderClose.find((historyOrderClose) => {
+            const isFind = historyOrderClose.finish_as === "filled" && historyOrderClose.is_liq === true;
+            if (isFind) {
+                this.logWorker.info(`❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
+            }
+            return isFind;
+        });
+
+        if (hisCloseTPSuccess === undefined && hisPositionFixLiquidation === undefined) {
+            // this.logWorker.info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
+            console.log(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix sé lệnh fix bị thanh lý hoặc lệnh tp khóp`);
+            return;
+        }
+        if (hisPositionFixLiquidation) {
+            let stepNext = this.stepFixLiquidation + 1;
+            const maxStep = this.settingUser.martingale?.options?.length || 0;
+            if (stepNext > maxStep) {
+                stepNext = 0;
+                this.logWorker.info(`❌ Fix thất bại reset step: ${this.stepFixLiquidation} -> ${stepNext} / ${maxStep}`);
+            } else {
+                this.logWorker.info(`❌ Fix thất bại tăng step: ${this.stepFixLiquidation} -> ${stepNext} / ${maxStep}`);
+            }
+            this.dataFixLiquidation = null;
+            this.stepFixLiquidation = stepNext;
+            this.startTimeSec = this.startTimeSec + 1;
+            this.martingaleSendRenderer();
+            return;
+        }
+        if (hisCloseTPSuccess) {
+            this.logWorker.info(`✅ ${contractShouldFix} Fix thành công`);
+            this.dataFixLiquidation = null;
+            this.stepFixLiquidation = 0;
+            this.startTimeSec = this.startTimeSec + 1;
+            this.martingaleSendRenderer();
+            return;
         }
     }
 }

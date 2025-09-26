@@ -1,10 +1,8 @@
-import { getAccessToken, getRefreshToken, logOut } from "@/api/auth/app.auth";
-import { useRefreshToken } from "@/api/tanstack/auth.tanstack";
+import { getAccessToken } from "@/api/auth/app.auth";
 import { BASE_DOMAIN } from "@/constant/app.constant";
 import { logRenderer } from "@/index";
 import { useAppSelector } from "@/redux/store";
-import { TRefreshTokenReq } from "@/types/login.type";
-import { createContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 
 export interface SocketContextType {
@@ -22,7 +20,6 @@ export default function SocketProvider({ children }: TProps) {
     const socketRef = useRef<Socket | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const info = useAppSelector((state) => state.user.info);
-    const handleRefreshToken = useRefreshToken();
 
     const initSocket = async () => {
         if (!info) return;
@@ -54,51 +51,8 @@ export default function SocketProvider({ children }: TProps) {
 
         socket.on("connect_error", async (err: any) => {
             // err.message: 'NO_TOKEN' | 'TOKEN_EXPIRED' | 'INVALID_TOKEN' | 'USER_NOT_FOUND'
-            console.warn("connect_error:", err.message);
-            logRenderer.info("connect_error", String(err.message));
-
-            switch (err.message) {
-                case "TOKEN_EXPIRED":
-                    const refreshToken = getRefreshToken();
-                    const accessToken = getAccessToken();
-
-                    if (!refreshToken || !accessToken) {
-                        logRenderer.info("!refreshToken || !accessToken", JSON.stringify({ refreshToken, accessToken }));
-                        logOut();
-                        return;
-                    }
-                    const payload: TRefreshTokenReq = {
-                        refreshToken,
-                        accessToken,
-                    };
-
-                    handleRefreshToken.mutate(payload, {
-                        onSuccess: () => {
-                            console.log("🔄 Token refreshed. Reinitializing socket...");
-                            initSocket(); // 🔁 Đệ quy khởi động lại
-                        },
-                        onError: (error) => {
-                            logRenderer.info("handleRefreshToken", String(error));
-                            logOut();
-                        },
-                    });
-                    break;
-
-                case "INVALID_TOKEN":
-                    logRenderer.info("INVALID_TOKEN", String(err));
-                    logOut();
-                    break;
-
-                case "USER_NOT_FOUND":
-                    logRenderer.info("USER_NOT_FOUND", String(err));
-                    logOut();
-                    break;
-
-                default:
-                    logRenderer.info("default", String(err));
-                    logOut();
-                    break;
-            }
+            console.warn("connect_error:", JSON.stringify(err));
+            logRenderer.info("connect_error", JSON.stringify(err));
         });
     };
 

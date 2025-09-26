@@ -3,12 +3,14 @@ import { codeStringKillMantineToasts, createCodeStringClickOrder, setLocalStorag
 import {
     TFectMainRes,
     TGateClickCancelAllOpenRes,
+    TGateClickMarketPositionRes,
     TGateClickTabOpenOrderRes,
     TGateFectMainRes,
     TGateOrderMainRes,
     TPayloadFollowApi,
     TPayloadOrder,
     TResultClickCancelOpen,
+    TResultClickMarketPosition,
     TResultClickOpenOrder,
     TResultClickTabOpenOrder,
 } from "@/types/bot.type";
@@ -289,6 +291,39 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
             }
             if (msg?.type === "bot:rateCounter") {
                 mainWindow?.webContents.send("bot:rateCounter", msg);
+            }
+            if (msg?.type === "bot:martingale") {
+                mainWindow?.webContents.send("bot:martingale", msg);
+            }
+            if (msg?.type === "bot:clickMarketPosition") {
+                if (!gateView) return;
+
+                const { reqClickMarketPositionId, stringClickCanelAllOpen } = msg?.payload;
+
+                try {
+                    const result: TResultClickMarketPosition = await gateView.webContents.executeJavaScript(stringClickCanelAllOpen, true);
+
+                    if (result.ok === false && result.error) {
+                        throw new Error(result.error);
+                    }
+
+                    const payload: TGateClickMarketPositionRes = {
+                        ok: result.ok,
+                        body: result.data,
+                        reqClickMarketPositionId: reqClickMarketPositionId,
+                        error: null,
+                    };
+
+                    botWorker?.postMessage({ type: "bot:clickMarketPosition:res", payload: payload });
+                } catch (e: any) {
+                    const payload: TGateClickMarketPositionRes = {
+                        ok: false,
+                        body: null,
+                        reqClickMarketPositionId: reqClickMarketPositionId,
+                        error: String(e?.message || e),
+                    };
+                    botWorker?.postMessage({ type: "bot:clickMarketPosition:res", payload: payload });
+                }
             }
         });
         botWorker.on("error", (err) => {
@@ -687,3 +722,23 @@ async function applyNoThrottle(dbg: Electron.Debugger): Promise<void> {
         console.error("[applyNoThrottle]", e);
     }
 }
+
+// postonly
+// {
+//     "contract": "SOMI_USDT",
+//     "price": "0.8452",
+//     "size": "1",
+//     "reduce_only": false,
+//     "tif": "poc",
+//     "text": "web"
+// }
+
+// ioc
+// {
+//     "contract": "SOMI_USDT",
+//     "price": "0.8443",
+//     "size": "1",
+//     "reduce_only": false,
+//     "tif": "ioc",
+//     "text": "web"
+// }

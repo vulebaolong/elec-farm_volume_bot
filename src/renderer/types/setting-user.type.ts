@@ -1,5 +1,6 @@
 import { TBaseTimestamps } from "./base.type";
 import { EntrySignalMode } from "./enum/entry-signal-mode.enum";
+import { MartingaleConfig } from "./martingale.type";
 
 export type TSettingUsers = {
     id: number;
@@ -23,6 +24,7 @@ export type TSettingUsers = {
     ifImbalanceAskPercent: number;
     entrySignalMode: EntrySignalMode;
     delayForPairsMs: number;
+    martingale: MartingaleConfig | null
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

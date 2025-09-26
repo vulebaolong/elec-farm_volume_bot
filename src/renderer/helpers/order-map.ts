@@ -1,6 +1,3 @@
-import { TPosition } from "@/types/position.type";
-import { SymbolState } from "@/types/symbol.type";
-import { toUnderscore, tpPrice } from "./function.helper";
 
 // ===== Types =====
 type RawOrder = {
@@ -103,33 +100,4 @@ function pendingCloseCoverage(contract: string, side: "long" | "short"): number 
         if (side === "short" && o.size > 0) sum += Math.abs(o.left ?? o.size);
     }
     return sum;
-}
-
-export function ensureCloseForPosition(pos: TPosition, symbolsState: SymbolState[], takeProfit: number) {
-    console.log({ pos });
-    const contractSlash = pos.contract; // "PI/USDT"
-    const contract = toUnderscore(contractSlash); // "PI_USDT"
-    const side: "long" | "short" = pos.mode === "dual_long" ? "long" : "short";
-    const sizeAbs = Math.abs(Number(pos.size) || 0);
-    if (sizeAbs <= 0) return;
-
-    // coverage hiện tại
-    const covered = pendingCloseCoverage(contractSlash, side);
-    const uncovered = Math.max(0, sizeAbs - covered);
-    if (uncovered <= 0) return; // đã có close đủ rồi
-
-    // size ký hiệu: close long -> âm ; close short -> dương
-    const closeSizeSigned = side === "long" ? -uncovered : +uncovered;
-
-    const tickSize = symbolsState.find((s) => s.symbol === contract)?.orderPriceRound;
-    if (!tickSize) return;
-
-    const price = tpPrice(Number(pos.entry_price), takeProfit / 100, side, tickSize);
-
-    return {
-        contract,
-        side,
-        size: String(closeSizeSigned),
-        price,
-    };
 }

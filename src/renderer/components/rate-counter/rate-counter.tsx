@@ -55,7 +55,7 @@ export default function RateCounter({ className }: { className?: string }) {
     }, []);
 
     useEffect(() => {
-        const unsubscribe = window.electron.ipcRenderer.on("bot:rateCounter", (data: TWorkerData<Record<WindowKey, number>>) => {
+        const offRateCounter = window.electron.ipcRenderer.on("bot:rateCounter", (data: TWorkerData<Record<WindowKey, number>>) => {
             const incomingCounts = data?.payload ?? counts;
             if (!shallowEqualCounts(counts, incomingCounts)) {
                 setCounts(incomingCounts);
@@ -63,7 +63,7 @@ export default function RateCounter({ className }: { className?: string }) {
             }
         });
         return () => {
-            unsubscribe?.();
+            offRateCounter?.();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [counts]);

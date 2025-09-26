@@ -24,6 +24,7 @@ export const useGetUiSelector = () => {
 
             return data.data;
         },
+        enabled: !!info,
     });
 };
 

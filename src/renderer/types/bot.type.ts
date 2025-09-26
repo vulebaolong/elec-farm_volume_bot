@@ -1,3 +1,4 @@
+import { TSide } from "./base.type";
 import { TSettingUsers } from "./setting-user.type";
 import { TUiSelector } from "./ui-selector.type";
 
@@ -162,4 +163,74 @@ export type TPayloadFollowApi = {
     url: string;
     status?: number;
     bodyText: string;
+};
+
+export type THistoryAggregate = {
+    status: string;
+    size: number;
+    left: number;
+    id: number;
+    id_string: string;
+    is_liq: boolean;
+    is_close: boolean;
+    contract: string;
+    text: string;
+    text_output: string;
+    fill_price: string;
+    finish_as: string;
+    iceberg: number;
+    tif: string;
+    is_reduce_only: boolean;
+    create_time: number;
+    finish_time: number;
+    price: string;
+    biz_info: string;
+    amend_text: string;
+    stp_act: string;
+    stp_id: number;
+    stop_profit_price: string;
+    stop_loss_price: string;
+    pnl: string;
+    pnl_margin: string;
+    bbo: string;
+    futures_order_type: string;
+    dual_type: number;
+    position_side: string;
+    position_side_output: string;
+    position_type: string;
+    stop_profit_price_type: number;
+    stop_profit_rule: number;
+    stop_profit_delegate_price: string;
+    stop_loss_price_type: number;
+    stop_loss_rule: number;
+    stop_loss_delegate_price: string;
+    is_voucher: boolean;
+};
+
+export type TValueChangeLeverage = {
+    symbol: string;
+    leverage: number;
+};
+
+export type TValuelistSLROIFailed = {
+    symbol: string;
+    count: number;
+    side: TSide;
+};
+
+export type TClickMarketPositionRes<T> = {
+    ok: boolean;
+    body: T | null;
+    error: string | null;
+};
+export type TGateClickMarketPositionRes = {
+    ok: boolean;
+    body: TResultClickMarketPosition["data"] | null;
+    error: string | null;
+    reqClickMarketPositionId: number;
+};
+export type TResultClickMarketPosition = {
+    ok: boolean;
+    data: boolean;
+    error: string | null;
 };

@@ -1,0 +1,3 @@
+export const SOCKET_ENVENT = {
+    JOIN_ROOM_ENTRY: "JOIN_ROOM_ENTRY",
+};

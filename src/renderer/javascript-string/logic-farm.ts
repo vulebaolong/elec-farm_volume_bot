@@ -209,7 +209,7 @@ window.state = Object.assign(window.state || {}, {
 `;
 };
 
-export type TCloseOrder = {
+export type TClickMarketPosition = {
     symbol: string;
     side: TSide;
     selector: {
@@ -217,7 +217,7 @@ export type TCloseOrder = {
         buttonTabPosition: string;
     };
 };
-export const closeOrder = (payload: TCloseOrder) => {
+export const createCodeStringClickMarketPosition = (payload: TClickMarketPosition) => {
     return `
 (async () => {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -247,7 +247,7 @@ export const closeOrder = (payload: TCloseOrder) => {
           const marketBtn = block.querySelectorAll('button')[1];
           if (marketBtn) {
             marketBtn.click();
-            return '✅ Market button clicked';
+            return { ok: true, data: true, error: null };
           } else {
             throw new Error('Market button not found');
           }
@@ -256,8 +256,7 @@ export const closeOrder = (payload: TCloseOrder) => {
 
       throw new Error('Position not found for ${payload.symbol} and ${payload.side}');
   } catch (err) {
-      console.info('⚠️ closeOrder script error:', err.message || err);
-      throw err;
+      return { ok: false, data: null, error: err };
   }
 })();
 `;

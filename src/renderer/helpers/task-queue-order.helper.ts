@@ -1,8 +1,6 @@
 import { TSide } from "@/types/base.type";
 import { TPosition } from "@/types/position.type";
 import { toSymbolKey } from "./function.helper";
-import { ensureCloseForPosition } from "./order-map";
-import { SymbolState } from "@/types/symbol.type";
 
 export type Task_QueueOrder = {
     symbol: string;

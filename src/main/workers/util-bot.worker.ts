@@ -46,7 +46,7 @@ export function handleSize(whitelistItem: TWhiteListItem, inputUSDT: number): st
     return size.toString();
 }
 
-function calcSize(inputUSDT: number, price: number, multiplier: number, minSize = 1, maxSize?: number, step = 1) {
+export function calcSize(inputUSDT: number, price: number, multiplier: number, minSize = 1, maxSize?: number, step = 1) {
     if (!(price > 0) || !(multiplier > 0)) return 0;
     let size = Math.floor(inputUSDT / price / multiplier / step) * step;
     // size = Math.max(size, minSize);
@@ -90,16 +90,16 @@ export function handleImBalanceAskForShort(imbalanceAskPercent: number, ifImbala
 }
 
 async function getSideCCC(): Promise<getSideRes["side"] | null> {
-        try {
-            const { data } = await axios.get<getSideRes>(ENDPOINT.CCC.GET_SIDE);
-            console.log("getSideCCC: ", data);
-            return data.side;
-        } catch (error) {
-            console.log("getSideCCC: ", error);
-            // this.logWorker.error(`getSideCCC: ${error}`);
-            return null;
-        }
+    try {
+        const { data } = await axios.get<getSideRes>(ENDPOINT.CCC.GET_SIDE);
+        console.log("getSideCCC: ", data);
+        return data.side;
+    } catch (error) {
+        console.log("getSideCCC: ", error);
+        // this.logWorker.error(`getSideCCC: ${error}`);
+        return null;
     }
+}
 
 type SignalInputs = {
     gapLong: boolean;
@@ -162,6 +162,8 @@ type THandleEntryCheckAllRes = {
         askBest: number;
         bidBest: number;
         order_price_round: number;
+        lastPriceGate: number;
+        quanto_multiplier: number
 
         // cho component whitelist
         core: TCore;
@@ -173,7 +175,7 @@ type THandleEntryCheckAllRes = {
         gapPercentBiVsGate: number;
     } | null;
 };
-export  function handleEntryCheckAll({ whitelistItem, settingUser, sideCCC }: THandleEntryCheckAll): THandleEntryCheckAllRes {
+export function handleEntryCheckAll({ whitelistItem, settingUser, sideCCC }: THandleEntryCheckAll): THandleEntryCheckAllRes {
     const { core, contractInfo } = whitelistItem;
     const {
         askBest,
@@ -265,6 +267,8 @@ export  function handleEntryCheckAll({ whitelistItem, settingUser, sideCCC }: TH
             askBest,
             bidBest,
             order_price_round,
+            lastPriceGate,
+            quanto_multiplier: contractInfo.quanto_multiplier,
 
             // cho component whitelist
             core,

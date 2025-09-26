@@ -1,13 +1,11 @@
 import { combineReducers } from "redux";
-import user from "./user.slice";
-import ga from "./ga.slice";
-import position from "./position.slice";
 import bot from "./bot.slice";
+import ga from "./ga.slice";
+import user from "./user.slice";
 
 const combinedReducer = combineReducers({
     user,
     ga,
-    position,
     bot,
 });
 

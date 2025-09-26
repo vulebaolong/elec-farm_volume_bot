@@ -136,7 +136,7 @@ export default function Log({ className }: { className?: string }) {
 
             <CardContent className="grid gap-0">
                 <TooltipProvider>
-                    <Card className={cn("p-0 gap-0", className)}>
+                    <Card className={cn("p-0 gap-0 min-w-0", className)}>
                         <CardHeader className="p-2 gap-0 border-b">
                             <div className="flex items-center gap-3 flex-wrap">
                                 {/* Level filter */}
