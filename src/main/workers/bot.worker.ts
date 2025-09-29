@@ -14,27 +14,22 @@ import { TBidsAsks } from "@/types/bids-asks.type";
 import {
     StickySetPayload,
     TChangeLeverage,
-    TClickCancelAllOpenRes,
-    TClickMarketPositionRes,
-    TClickTabOpenOrderRes,
     TDataInitBot,
     TDataOrder,
     TFectWorkRes,
     TGateClickCancelAllOpenRes,
-    TGateClickTabOpenOrderRes,
     TGateFectMainRes,
     TGateOrderMainRes,
     THistoryAggregate,
     TOrderWorkRes,
-    TPayloadClickCancelAllOpen,
-    TPayloadClickTabOpenOrder,
     TPayloadFollowApi,
     TPayloadOrder,
     TUiSelectorOrder,
     TValueChangeLeverage,
-    TValuelistSLROIFailed,
 } from "@/types/bot.type";
+import { getSideRes } from "@/types/ccc.type";
 import { TGetInfoContractRes } from "@/types/contract.type";
+import { MartingaleSummary, TDataFixLiquidation } from "@/types/martingale.type";
 import { TOrderOpen } from "@/types/order.type";
 import { TPosition } from "@/types/position.type";
 import { TSettingUsers } from "@/types/setting-user.type";
@@ -46,8 +41,6 @@ import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { calcSize, handleEntryCheckAll } from "./util-bot.worker";
-import { getSideRes } from "@/types/ccc.type";
-import { MartingaleSummary, TDataFixLiquidation } from "@/types/martingale.type";
 
 const FLOWS_API = {
     acounts: {
@@ -136,8 +129,6 @@ class Bot {
     private startTimeSec: number | null = null;
     private stepFixLiquidation = 0;
 
-    private listSLROIFailed = new Map<string, TValuelistSLROIFailed>();
-
     private rpcSequenceByKey = new Map<string, number>();
 
     constructor(dataInitBot: TDataInitBot) {
@@ -208,6 +199,11 @@ class Bot {
                                 continue;
                             }
 
+                            // nếu symbol tồn tại trong blackList -> bỏ qua
+                            if (this.isExitsBlackList(symbol)) {
+                                continue;
+                            }
+
                             const bidsAsks = await this.getBidsAsks(symbol);
                             const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(0, 3);
 
@@ -225,11 +221,6 @@ class Bot {
                             if (this.isCheckMaxOpenPO()) {
                                 this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${this.getLengthOrderInOrderOpensAndPosition()}`);
                                 break;
-                            }
-
-                            // nếu symbol tồn tại trong blackList -> bỏ qua
-                            if (this.isExitsBlackList(symbol)) {
-                                continue;
                             }
 
                             const size = IS_PRODUCTION ? sizeStr : `1`;
@@ -389,7 +380,7 @@ class Bot {
 
                 openFixContract: null,
                 openFixPrice: null,
-                openFixSize: null,
+                inputUSDTFix: null,
                 openFixCreateTime: null,
 
                 tpContract: null,
@@ -404,8 +395,6 @@ class Bot {
         const openFix = payload.dataOrderOpenFixLiquidation;
         const tpOrder = payload.dataCloseTP;
 
-        console.log(tpOrder);
-
         return {
             status: "fixing",
             targetContract: liq?.contract ?? null,
@@ -414,7 +403,7 @@ class Bot {
 
             openFixContract: openFix?.contract ?? null,
             openFixPrice: openFix?.price ?? null,
-            openFixSize: openFix?.size ?? null,
+            inputUSDTFix: this.settingUser.martingale?.options?.[this.stepFixLiquidation]?.inputUSDT ?? null,
             openFixCreateTime: openFix?.create_time ?? null,
 
             tpContract: tpOrder?.contract ?? null,
@@ -766,54 +755,6 @@ class Bot {
         });
     }
 
-    private async sendClickTabOpenOrder<TBody>(stringClickTabOpenOrder: string, timeoutMs = 10_000) {
-        return this.sendIpcRpc<TBody>({
-            sequenceKey: "clickTabOpenOrder",
-            requestType: "bot:clickTabOpenOrder",
-            responseType: "bot:clickTabOpenOrder:res",
-            idFieldName: "reqClickTabOpenOrderId",
-            buildPayload: (requestId) => ({
-                reqClickTabOpenOrderId: requestId,
-                stringClickTabOpenOrder,
-            }),
-            matchResponse: (message, requestId) =>
-                message?.type === "bot:clickTabOpenOrder:res" && message?.payload?.reqClickTabOpenOrderId === requestId,
-            timeoutMs,
-        });
-    }
-
-    private async sendClickCanelAllOpen<TBody>(stringClickCanelAllOpen: string, timeoutMs = 10_000) {
-        return this.sendIpcRpc<TBody>({
-            sequenceKey: "clickCanelAllOpen",
-            requestType: "bot:clickCanelAllOpen",
-            responseType: "bot:clickCanelAllOpen:res",
-            idFieldName: "reqClickCanelAllOpenOrderId",
-            buildPayload: (requestId) => ({
-                reqClickCanelAllOpenOrderId: requestId,
-                stringClickCanelAllOpen,
-            }),
-            matchResponse: (message, requestId) =>
-                message?.type === "bot:clickCanelAllOpen:res" && message?.payload?.reqClickCanelAllOpenOrderId === requestId,
-            timeoutMs,
-        });
-    }
-
-    private async sendClickMarketPosition<TBody>(stringClickMarketPosition: string, timeoutMs = 10_000) {
-        return this.sendIpcRpc<TBody>({
-            sequenceKey: "clickMarketPosition",
-            requestType: "bot:clickMarketPosition",
-            responseType: "bot:clickMarketPosition:res",
-            idFieldName: "reqClickMarketPositionId",
-            buildPayload: (requestId) => ({
-                reqClickMarketPositionId: requestId,
-                stringClickMarketPosition,
-            }),
-            matchResponse: (message, requestId) =>
-                message?.type === "bot:clickMarketPosition:res" && message?.payload?.reqClickMarketPositionId === requestId,
-            timeoutMs,
-        });
-    }
-
     private async clickTabOpenOrder() {
         const selectorButtonTabOpenOrder = this.uiSelector?.find((item) => item.code === "buttonTabOpenOrder")?.selectorValue;
 
@@ -826,7 +767,17 @@ class Bot {
             buttonTabOpenOrder: selectorButtonTabOpenOrder,
         });
 
-        const { body, error, ok } = await this.sendClickTabOpenOrder<boolean | null>(stringClickTabOpenOrder);
+        const { body, error, ok } = await this.sendIpcRpc<boolean | null>({
+            sequenceKey: "clickTabOpenOrder",
+            requestType: "bot:clickTabOpenOrder",
+            responseType: "bot:clickTabOpenOrder:res",
+            idFieldName: "reqClickTabOpenOrderId",
+            buildPayload: (requestId) => ({
+                reqClickTabOpenOrderId: requestId,
+                stringClickTabOpenOrder,
+            }),
+            timeoutMs: 10_000,
+        });
 
         if (!ok || error || body == null) {
             throw new Error(`❌ Click Tab Open Order error: ${error ?? "unknown"}`);
@@ -853,7 +804,17 @@ class Bot {
             tableOrderPanel: selectorTableOrderPanel,
         });
 
-        const { body, error, ok } = await this.sendClickCanelAllOpen<TGateClickCancelAllOpenRes["body"]>(stringClickCanelAllOpen);
+        const { body, error, ok } = await this.sendIpcRpc<TGateClickCancelAllOpenRes["body"]>({
+            sequenceKey: "clickCanelAllOpen",
+            requestType: "bot:clickCanelAllOpen",
+            responseType: "bot:clickCanelAllOpen:res",
+            idFieldName: "reqClickCanelAllOpenOrderId",
+            buildPayload: (requestId) => ({
+                reqClickCanelAllOpenOrderId: requestId,
+                stringClickCanelAllOpen,
+            }),
+            timeoutMs: 10_000,
+        });
 
         if (!ok || error || body == null) {
             throw new Error(`🟢 ❌ Click Cancel All Order error: ${error ?? "unknown"} ${body} ${ok}`);
@@ -890,7 +851,17 @@ class Bot {
             },
         });
 
-        const { body, error, ok } = await this.sendClickMarketPosition<TGateClickCancelAllOpenRes["body"]>(stringClickMarketPosition);
+        const { body, error, ok } = await this.sendIpcRpc<TGateClickCancelAllOpenRes["body"]>({
+            sequenceKey: "clickMarketPosition",
+            requestType: "bot:clickMarketPosition",
+            responseType: "bot:clickMarketPosition:res",
+            idFieldName: "reqClickMarketPositionId",
+            buildPayload: (requestId) => ({
+                reqClickMarketPositionId: requestId,
+                stringClickMarketPosition,
+            }),
+            timeoutMs: 10_000,
+        });
 
         if (!ok || error || body == null) {
             throw new Error(`🟢 ❌ Click Market Position error: ${error ?? "unknown"} ${body} ${ok}`);
@@ -1242,6 +1213,7 @@ class Bot {
     }
 
     private isExitsBlackList(contract: string): boolean {
+        console.log({ blacklist: this.blackList });
         const isExits = this.blackList.includes(contract.replace("/", "_"));
         if (isExits) this.logWorker.info(`🔵 ${contract} Exits In BlackList => continue`);
         return isExits;
@@ -1383,10 +1355,10 @@ class Bot {
             return;
         }
 
-        let countSLROI = this.listSLROIFailed.get(symbol);
-        if (!countSLROI) {
-            this.listSLROIFailed.set(symbol, { symbol: symbol, count: 0, side: size > 0 ? "long" : "short" });
-        }
+        // let countSLROI = this.listSLROIFailed.get(symbol);
+        // if (!countSLROI) {
+        //     this.listSLROIFailed.set(symbol, { symbol: symbol, count: 0, side: size > 0 ? "long" : "short" });
+        // }
 
         const initialMargin = (entryPrice * Math.abs(size) * quanto) / leverage;
         const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
@@ -1397,48 +1369,52 @@ class Bot {
         const isSL = returnPercent <= -stopLoss;
         const isTimedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
 
+        this.logWorker.info(`🟣 SL ${symbol}: ${returnPercent.toFixed(2)}%/-${stopLoss}% | isSL=${isSL} && isTimedOut=${isTimedOut}`);
+
         if (!isSL && !isTimedOut) {
             return;
         }
 
-        this.logWorker.info(
-            [
-                `🟣 ${symbol}`,
-                `sl: ${returnPercent.toFixed(2)}%/-${stopLoss}%  → ${isSL}`,
-                `timeout: ${timeoutEnabled ? "ON" : "OFF"} (${((nowMs - createdAtMs) / 1000).toFixed(1)}s / ${(timeoutMs / 1000).toFixed(1)}s) → ${isTimedOut}`,
-                `${size > 0 ? "long" : "short"}  ${size}`,
-                // `entry: ${entryPrice}  last: ${lastPrice}  lev: ${leverage}x  quanto: ${quanto}`,
-            ].join(" | "),
-        );
+        // this.logWorker.info(
+        //     [
+        //         `🟣 ${symbol}`,
+        //         `sl: ${returnPercent.toFixed(2)}%/-${stopLoss}%  → ${isSL}`,
+        //         `timeout: ${timeoutEnabled ? "ON" : "OFF"} (${((nowMs - createdAtMs) / 1000).toFixed(1)}s / ${(timeoutMs / 1000).toFixed(1)}s) → ${isTimedOut}`,
+        //         `${size > 0 ? "long" : "short"}  ${size}`,
+        //         // `entry: ${entryPrice}  last: ${lastPrice}  lev: ${leverage}x  quanto: ${quanto}`,
+        //     ].join(" | "),
+        // );
 
-        const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
-        // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
+        await this.clickMarketPostion(pos.contract, Number(pos.size) > 0 ? "long" : "short");
 
-        for (const payload of payloads) {
-            // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
-            try {
-                const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
-                if (!ok) continue;
-                await this.openEntry(payload, "SL: Close");
-                this.listSLROIFailed.delete(symbol);
-            } catch (error: any) {
-                if (error?.message === INSUFFICIENT_AVAILABLE) {
-                    throw new Error(error);
-                }
-                if (this.isTimeoutError(error)) {
-                    throw new Error(error);
-                }
-                this.listSLROIFailed.get(symbol)!.count += 1;
-                this.logWorker.error(`🟣 ${error.message}`);
-            }
-        }
+        // const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
+        // // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
 
-        for (const [key, value] of this.listSLROIFailed) {
-            if (value.count >= 3) {
-                this.logWorker.info(`🟣 SL Close Failed: ${key} | ${value.count} | ${value.side}`);
-                await this.clickMarketPostion(value.symbol, value.side);
-            }
-        }
+        // for (const payload of payloads) {
+        //     // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
+        //     try {
+        //         const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
+        //         if (!ok) continue;
+        //         await this.openEntry(payload, "SL: Close");
+        //         this.listSLROIFailed.delete(symbol);
+        //     } catch (error: any) {
+        //         if (error?.message === INSUFFICIENT_AVAILABLE) {
+        //             throw new Error(error);
+        //         }
+        //         if (this.isTimeoutError(error)) {
+        //             throw new Error(error);
+        //         }
+
+        //         this.logWorker.error(`🟣 ${error.message}`);
+
+        //     }
+        // }
+
+        // for (const [key, value] of this.listSLROIFailed) {
+        //     if (value.count >= 3) {
+        //         this.logWorker.info(`🟣 SL Close Failed: ${key} | ${value.count} | ${value.side}`);
+        //     }
+        // }
 
         return;
     }
@@ -1650,6 +1626,7 @@ class Bot {
 
     private handleAccountWebGate(accounts: TAccount[]) {
         this.accounts = accounts;
+        this.parentPort?.postMessage({ type: "bot:saveAccount", payload: this.accounts });
     }
 
     private isCheckLimit(): boolean {
@@ -1742,8 +1719,7 @@ class Bot {
         requestType,
         responseType,
         idFieldName,
-        buildPayload, // (requestId) => payload
-        matchResponse, // (message, requestId) => boolean
+        buildPayload,
         timeoutMs = 10_000,
     }: {
         sequenceKey: string;
@@ -1751,7 +1727,6 @@ class Bot {
         responseType: string;
         idFieldName: string;
         buildPayload: (requestId: number) => any;
-        matchResponse: (message: any, requestId: number) => boolean;
         timeoutMs?: number;
     }): Promise<{ ok: boolean; body: TBody | null; error: string | null; requestId: number }> {
         const requestId = this.nextRequestId(sequenceKey);
@@ -1773,8 +1748,11 @@ class Bot {
 
             const onMessage = (message: any) => {
                 try {
-                    if (!matchResponse(message, requestId)) return;
+                    if (message?.type !== responseType) return;
+                    if (message?.payload?.[idFieldName] !== requestId) return;
+
                     const payload = message.payload as { ok: boolean; body: TBody | null; error?: string | null };
+                    console.log(responseType, payload);
                     if (!payload.ok) {
                         return finish({ ok: false, body: null, error: payload.error || "RPC failed", requestId });
                     }

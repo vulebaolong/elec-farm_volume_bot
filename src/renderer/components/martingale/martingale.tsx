@@ -28,7 +28,7 @@ export default function Martingale() {
 
         openFixContract: null,
         openFixPrice: null,
-        openFixSize: null,
+        inputUSDTFix: null,
         openFixCreateTime: null,
 
         tpContract: null,
@@ -120,9 +120,9 @@ export default function Martingale() {
                 </Group>
                 <Group gap={6}>
                     <Text size="xs" c="dimmed">
-                        Size
+                        inputUSDT
                     </Text>
-                    <Code fz="xs">{formatNumber(summary.openFixSize)}</Code>
+                    <Code fz="xs">{formatNumber(summary.inputUSDTFix)}</Code>
                 </Group>
                 <Group gap={6}>
                     <Text size="xs" c="dimmed">

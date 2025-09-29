@@ -1,5 +1,8 @@
 import { useGetInfoMutation } from "@/api/tanstack/auth.tanstack";
+import { useGetMyBlackList } from "@/api/tanstack/black-list.tanstack";
 import { useGetUiSelector } from "@/api/tanstack/selector.tanstack";
+import { useSocketEmit } from "@/api/tanstack/socket.tanstack";
+import { SOCKET_ENVENT } from "@/constant/socket.constant";
 import { SET_SETTING_SYSTEM, SET_WHITELIST_RESET_IN_PROGRESS } from "@/redux/slices/bot.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
@@ -8,9 +11,6 @@ import { TSettingUsersSocket } from "@/types/setting-user.type";
 import { TWhiteList } from "@/types/white-list.type";
 import { useEffect, useRef } from "react";
 import { useSocket } from "./socket.hook";
-import { useGetMyBlackList } from "@/api/tanstack/black-list.tanstack";
-import { useSocketEmit } from "@/api/tanstack/socket.tanstack";
-import { SOCKET_ENVENT } from "@/constant/socket.constant";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);

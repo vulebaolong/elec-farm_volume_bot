@@ -5,9 +5,12 @@ import { ADD_RIPPLE, SET_IS_RUNNING, SET_IS_START } from "@/redux/slices/bot.sli
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
 import { Play, Square } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ButtonLoading } from "../ui/button-loading";
-
+import { TAccount } from "@/types/account.type";
+import { toast } from "sonner";
+import { useCreateTakeProfitAccount, useUpdateTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
+import { TCreateTakeprofitAccountReq, TTakeprofitAccount } from "@/types/takeprofit-account.type";
 
 type TProps = {};
 
@@ -18,8 +21,32 @@ export default function Controll({}: TProps) {
     const dispatch = useAppDispatch();
     const [loadingReloadWebContent, setLoadingReloadWebContent] = useState(false);
     const toggleDevTool = useToggleDevTool();
+    const accountRef = useRef<TAccount | null>(null);
+    const takeprofitAccountNewRef = useRef<TTakeprofitAccount | null>(null);
+    const createTakeProfitAccount = useCreateTakeProfitAccount();
+    const updateTakeProfitAccount = useUpdateTakeProfitAccount();
 
-    const start = () => window.electron?.ipcRenderer.sendMessage("bot:start");
+    const start = () => {
+        if (!accountRef.current) {
+            toast.error("Please save account first");
+            return;
+        }
+        const payload: TCreateTakeprofitAccountReq = {
+            newTotal: accountRef.current.total,
+            oldTotal: accountRef.current.total,
+            source: "gate",
+            uid: accountRef.current.user,
+        };
+
+        console.log({ payload });
+
+        createTakeProfitAccount.mutate(payload, {
+            onSuccess: (data) => {
+                takeprofitAccountNewRef.current = data.data;
+                window.electron?.ipcRenderer.sendMessage("bot:start");
+            },
+        });
+    };
     const stop = () => window.electron?.ipcRenderer.sendMessage("bot:stop");
     const reloadWebContentsView = () => {
         window.electron?.ipcRenderer.sendMessage("bot:reloadWebContentsView");
@@ -31,6 +58,18 @@ export default function Controll({}: TProps) {
             dispatch(SET_IS_START(data.payload.isStart));
             dispatch(SET_IS_RUNNING(data.payload.isRunning));
             dispatch(ADD_RIPPLE(undefined));
+        });
+
+        const offBotSaveAccount = window.electron.ipcRenderer.on("bot:saveAccount", (data: TWorkerData<TAccount[]>) => {
+            accountRef.current = data.payload[0];
+            if (takeprofitAccountNewRef.current) {
+                updateTakeProfitAccount.mutate({
+                    id: takeprofitAccountNewRef.current.id,
+                    data: {
+                        newTotal: data.payload[0].total,
+                    },
+                });
+            }
         });
 
         const offBotStart = window.electron.ipcRenderer.on("bot:start", (data: TWorkerData<{ isStart: boolean }>) => {
@@ -50,6 +89,7 @@ export default function Controll({}: TProps) {
             offBotStart();
             offBotStop();
             offReloadWebContentsView();
+            offBotSaveAccount();
         };
     }, [isRunning, isStart, dispatch]);
 

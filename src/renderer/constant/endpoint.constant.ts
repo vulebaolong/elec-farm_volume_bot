@@ -69,4 +69,8 @@ export const ENDPOINT = {
     CCC: {
         GET_SIDE: "https://api-coincraze.feliciastation.com/api/v1/tool/pnl-safe-mode/strong-side",
     },
+    TAKEPROFIT_ACCOUNT: {
+        CREATE: "takeprofit-account",
+        GET: "takeprofit-account",
+    },
 };

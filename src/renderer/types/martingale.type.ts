@@ -26,7 +26,7 @@ export type MartingaleSummary = {
 
     openFixContract: string | null;
     openFixPrice: string | null;
-    openFixSize?: string | number | null;
+    inputUSDTFix:  number | null;
     openFixCreateTime: number | null;
 
     tpContract: string | null;

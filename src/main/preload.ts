@@ -33,6 +33,7 @@ export type Channels =
     | "bot:rateCounter"
     | "bot:martingale"
     | "bot:rateMax:set"
+    | "bot:saveAccount"
     | "logs:path"
     | "logs:size"
     | "logs:read"

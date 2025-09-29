@@ -298,10 +298,10 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
             if (msg?.type === "bot:clickMarketPosition") {
                 if (!gateView) return;
 
-                const { reqClickMarketPositionId, stringClickCanelAllOpen } = msg?.payload;
+                const { reqClickMarketPositionId, stringClickMarketPosition } = msg?.payload;
 
                 try {
-                    const result: TResultClickMarketPosition = await gateView.webContents.executeJavaScript(stringClickCanelAllOpen, true);
+                    const result: TResultClickMarketPosition = await gateView.webContents.executeJavaScript(stringClickMarketPosition, true);
 
                     if (result.ok === false && result.error) {
                         throw new Error(result.error);
@@ -324,6 +324,9 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
                     };
                     botWorker?.postMessage({ type: "bot:clickMarketPosition:res", payload: payload });
                 }
+            }
+            if (msg?.type === "bot:saveAccount") {
+                mainWindow?.webContents.send("bot:saveAccount", msg);
             }
         });
         botWorker.on("error", (err) => {

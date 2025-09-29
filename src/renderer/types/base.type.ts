@@ -20,3 +20,17 @@ export type TRespnoseGate<T> = {
 };
 
 export type TSide = "long" | "short";
+
+export type TFindAll = {
+    pagination: {
+        pageIndex: number;
+        pageSize: number;
+    };
+    filters: {
+        [key: string]: any;
+    };
+    sort: {
+        sortBy: string;
+        isDesc: boolean;
+    };
+};

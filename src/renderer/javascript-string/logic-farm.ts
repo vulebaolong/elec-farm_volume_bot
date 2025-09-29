@@ -384,13 +384,7 @@ type TCreateCodeStringClickCancelAllOpen = {
     contract: string;
     tableOrderPanel: string;
 };
-export type TClickCancelAllOpenRes = {
-    ok: boolean;
-    scanned: number;
-    clicked: number;
-    skipped: number;
-    contract: string;
-};
+
 
 /**
  * contract: FLOCKUSDT (không có dấu ở giữa)

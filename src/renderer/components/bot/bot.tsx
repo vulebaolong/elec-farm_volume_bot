@@ -6,6 +6,7 @@ import Log from "../log/log";
 import PassiveSticky from "../log/terminal-log/passive-sticky";
 import RateCounter from "../rate-counter/rate-counter";
 import Martingale from "../martingale/martingale";
+import TakeprofitAccount from "../takeprofit-account/takeprofit-account";
 
 export default function Bot() {
     // const saveAccount = useSaveAccount();
@@ -108,6 +109,7 @@ export default function Bot() {
                 <Martingale />
                 <Log />
                 <PassiveSticky />
+                <TakeprofitAccount />
                 {/* <RateCountsPanel /> */}
             </div>
         </div>

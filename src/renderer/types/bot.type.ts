@@ -116,15 +116,6 @@ export type TResultClickOpenOrder = {
     error: string | null;
 };
 
-export type TClickTabOpenOrderRes<T> = {
-    ok: boolean;
-    body: T | null;
-    error: string | null;
-};
-export type TPayloadClickTabOpenOrder = {
-    stringClickTabOpenOrder: string;
-    reqClickTabOpenOrderId: number;
-};
 export type TResultClickTabOpenOrder = {
     ok: boolean;
     data: boolean | null;
@@ -141,15 +132,6 @@ export type TResultClickCancelOpen = {
     ok: boolean;
     data: { scanned: number; clicked: number; skipped: number; contract: string } | null;
     error: string | null;
-};
-export type TClickCancelAllOpenRes<T> = {
-    ok: boolean;
-    body: T | null;
-    error: string | null;
-};
-export type TPayloadClickCancelAllOpen = {
-    stringClickCanelAllOpen: string;
-    reqClickCanelAllOpenOrderId: number;
 };
 export type TGateClickCancelAllOpenRes = {
     ok: boolean;
@@ -218,11 +200,6 @@ export type TValuelistSLROIFailed = {
     side: TSide;
 };
 
-export type TClickMarketPositionRes<T> = {
-    ok: boolean;
-    body: T | null;
-    error: string | null;
-};
 export type TGateClickMarketPositionRes = {
     ok: boolean;
     body: TResultClickMarketPosition["data"] | null;
