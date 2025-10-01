@@ -1,30 +1,12 @@
 import { useGetTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Paper, Table, Group, Text, Badge, ActionIcon, Loader } from "@mantine/core";
+import { TTakeprofitAccount } from "@/types/takeprofit-account.type";
+import { ActionIcon, Badge, Group, Loader, Paper, Table, Text } from "@mantine/core";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-
-type TTakeprofitAccount = {
-    id: number;
-    userId: number;
-    uid: number;
-    source: string;
-    phase: number;
-    oldTotal: string;
-    newTotal: string;
-    createdAt: string;
-    updatedAt: string;
-    // ... các field khác nếu cần
-};
+import { useEffect, useMemo, useRef, useState } from "react";
 
 function toNumber(value: string | number | null | undefined): number {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
-}
-
-function calcPnlRoi(oldTotal: number, newTotal: number) {
-    const pnl = newTotal - oldTotal;
-    const roi = oldTotal > 0 ? (pnl / oldTotal) * 100 : 0;
-    return { pnl, roi };
 }
 
 function fmtAmount(n: number, digits = 6) {
@@ -38,17 +20,15 @@ function fmtPct(n: number) {
 }
 
 export default function TakeprofitAccount() {
-    const [pageIndex, setPageIndex] = useState(1);
+    const [page, setPageIndex] = useState(1);
     const pageSize = 10;
     const totalPageRef = useRef(0);
 
     const getTakeProfitAccount = useGetTakeProfitAccount({
-        pagination: { pageIndex, pageSize },
+        pagination: { page, pageSize },
         filters: {},
         sort: { sortBy: "createdAt", isDesc: true },
     });
-
-    console.log({ getTakeProfitAccount: getTakeProfitAccount.data });
 
     useEffect(() => {
         if (getTakeProfitAccount.data?.totalPage != null) {
@@ -61,9 +41,8 @@ export default function TakeprofitAccount() {
         return items.map((item) => {
             const oldN = toNumber(item.oldTotal);
             const newN = toNumber(item.newTotal);
-            const { pnl, roi } = calcPnlRoi(oldN, newN);
-            const isProfit = pnl > 0;
-            const isLoss = pnl < 0;
+            const isProfit = item.pnl > 0;
+            const isLoss = item.pnl < 0;
 
             return (
                 <Table.Tr key={item.id}>
@@ -90,29 +69,17 @@ export default function TakeprofitAccount() {
                     </Table.Td>
                     <Table.Td>
                         <Text size="sm" c={isProfit ? "green.6" : isLoss ? "red.6" : "gray.7"}>
-                            {fmtAmount(pnl, 6)}
+                            {fmtAmount(item.pnl, 6)}
                         </Text>
                     </Table.Td>
                     <Table.Td>
                         <Text size="sm" c={isProfit ? "green.6" : isLoss ? "red.6" : "gray.7"}>
-                            {fmtPct(roi)}
+                            {fmtPct(item.roi)}
                         </Text>
                     </Table.Td>
                 </Table.Tr>
             );
         });
-    }, [getTakeProfitAccount.data?.items]);
-
-    // Tổng quát (optional): tính PnL & ROI trên toàn bảng đang hiển thị
-    const summary = useMemo(() => {
-        const items: TTakeprofitAccount[] = getTakeProfitAccount.data?.items ?? [];
-        console.log({ items, getTakeProfitAccount: getTakeProfitAccount.data });
-        if (items.length === 0) return null;
-
-        const firstOld = toNumber(items[items.length - 1]?.oldTotal); // vì sort desc theo createdAt
-        const lastNew = toNumber(items[0]?.newTotal);
-        const { pnl, roi } = calcPnlRoi(firstOld, lastNew);
-        return { pnl, roi };
     }, [getTakeProfitAccount.data?.items]);
 
     return (
@@ -124,48 +91,27 @@ export default function TakeprofitAccount() {
                     <ActionIcon
                         variant="subtle"
                         onClick={() => setPageIndex((p) => Math.max(1, p - 1))}
-                        disabled={pageIndex <= 1 || getTakeProfitAccount.isFetching}
+                        disabled={page <= 1 || getTakeProfitAccount.isFetching}
                         aria-label="Previous page"
                     >
                         <ChevronLeft size={16} />
                     </ActionIcon>
                     <Text size="xs" c="dimmed">
-                        Page {pageIndex} / {Math.max(1, totalPageRef.current)}
+                        {page} / {Math.max(1, totalPageRef.current)}
                     </Text>
                     <ActionIcon
                         variant="subtle"
                         onClick={() => setPageIndex((p) => (totalPageRef.current > 0 ? Math.min(totalPageRef.current, p + 1) : p + 1))}
-                        disabled={getTakeProfitAccount.isFetching || (totalPageRef.current > 0 && pageIndex >= totalPageRef.current)}
+                        disabled={getTakeProfitAccount.isFetching || (totalPageRef.current > 0 && page >= totalPageRef.current)}
                         aria-label="Next page"
                     >
                         <ChevronRight size={16} />
                     </ActionIcon>
-                    {getTakeProfitAccount.isFetching ? <Loader size="xs" /> : null}
+                    {getTakeProfitAccount.isLoading ? <Loader size="xs" /> : null}
                 </Group>
             </Group>
 
-            {summary && (
-                <Group mb="sm" gap="lg">
-                    <Group gap={6}>
-                        <Text size="xs" c="dimmed">
-                            Total PnL:
-                        </Text>
-                        <Text size="sm" c={summary.pnl > 0 ? "green.6" : summary.pnl < 0 ? "red.6" : "gray.7"}>
-                            {fmtAmount(summary.pnl)}
-                        </Text>
-                    </Group>
-                    <Group gap={6}>
-                        <Text size="xs" c="dimmed">
-                            Total ROI:
-                        </Text>
-                        <Text size="sm" c={summary.roi > 0 ? "green.6" : summary.roi < 0 ? "red.6" : "gray.7"}>
-                            {fmtPct(summary.roi)}
-                        </Text>
-                    </Group>
-                </Group>
-            )}
-
-            <Table highlightOnHover stickyHeader withTableBorder withColumnBorders verticalSpacing="xs" horizontalSpacing="md">
+            <Table highlightOnHover stickyHeader withColumnBorders verticalSpacing="xs" horizontalSpacing="md">
                 <Table.Thead>
                     <Table.Tr>
                         <Table.Th>Phase</Table.Th>

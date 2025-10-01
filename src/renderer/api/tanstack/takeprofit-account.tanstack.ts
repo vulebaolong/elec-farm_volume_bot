@@ -1,23 +1,24 @@
 import { ENDPOINT } from "@/constant/endpoint.constant";
 import { resError } from "@/helpers/function.helper";
-import { TPaginationRes, TRes } from "@/types/app.type";
-import { TFindAll } from "@/types/base.type";
+import { TPaginationRes, TQuery, TRes } from "@/types/app.type";
 import { TCreateTakeprofitAccountReq, TTakeprofitAccount, TUpdateTakeprofitAccountReq } from "@/types/takeprofit-account.type";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import api from "../axios/app.axios";
 
-export const useGetTakeProfitAccount = (payload: TFindAll) => {
+export const useGetTakeProfitAccount = (payload: TQuery) => {
     return useQuery({
         queryKey: [`get-takeprofit-account`, payload],
         queryFn: async () => {
             const { pagination, filters, sort } = payload;
-            const { pageIndex, pageSize } = pagination;
-            const query = `page=${pageIndex}&pageSize=${pageSize}&filters=${JSON.stringify(filters)}&sortBy=${sort?.sortBy}&isDesc=${sort?.isDesc}`;
+            const { page, pageSize } = pagination;
+            const query = `page=${page}&pageSize=${pageSize}&filters=${JSON.stringify(filters)}&sortBy=${sort?.sortBy}&isDesc=${sort?.isDesc}`;
 
             const { data } = await api.get<TRes<TPaginationRes<TTakeprofitAccount>>>(`${ENDPOINT.TAKEPROFIT_ACCOUNT.GET}?${query}`);
 
-            console.log({ useGetTakeProfitAccount: data });
+            window.electron?.ipcRenderer.sendMessage("bot:takeProfitAccount", data.data.items[0]);
+
+            // console.log({ useGetTakeProfitAccount: data });
             
             return data.data;
         },

@@ -13,9 +13,13 @@ export type MartingaleConfig = {
 };
 
 export type TDataFixLiquidation = {
-    dataLiquidationShouldFix: THistoryAggregate;
+    dataLiquidationShouldFix: THistoryAggregate | null;
     dataOrderOpenFixLiquidation: TOrderOpen | null;
     dataCloseTP: TOrderOpen | null;
+    startTimeSec: number | null;
+    stepFixLiquidation: number;
+    inputUSDTFix: number | null;
+    leverageFix: number | null;
 };
 
 export type MartingaleSummary = {
@@ -26,7 +30,7 @@ export type MartingaleSummary = {
 
     openFixContract: string | null;
     openFixPrice: string | null;
-    inputUSDTFix:  number | null;
+    inputUSDTFix: number | null;
     openFixCreateTime: number | null;
 
     tpContract: string | null;

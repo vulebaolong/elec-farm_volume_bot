@@ -3,6 +3,7 @@ import { BASE_URL, IS_PRODUCTION } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
 import {
     createCodeStringClickCancelAllOpen,
+    createCodeStringClickClearAll,
     createCodeStringClickMarketPosition,
     createCodeStringClickTabOpenOrder,
 } from "@/javascript-string/logic-farm";
@@ -29,10 +30,13 @@ import {
 } from "@/types/bot.type";
 import { getSideRes } from "@/types/ccc.type";
 import { TGetInfoContractRes } from "@/types/contract.type";
+import { EStatusFixLiquidation } from "@/types/enum/fix-liquidation.enum";
+import { TUpsertFixLiquidationReq } from "@/types/fix-liquidation.type";
 import { MartingaleSummary, TDataFixLiquidation } from "@/types/martingale.type";
 import { TOrderOpen } from "@/types/order.type";
 import { TPosition } from "@/types/position.type";
 import { TSettingUsers } from "@/types/setting-user.type";
+import { TTakeprofitAccount } from "@/types/takeprofit-account.type";
 import { TUiSelector } from "@/types/ui-selector.type";
 import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
 import { TWorkerData, TWorkerHeartbeat, TWorkLog } from "@/types/worker.type";
@@ -86,6 +90,7 @@ parentPort!.on("message", (msg: any) => {
                     settingUser: msg.payload.settingUser,
                     uiSelector: msg.payload.uiSelector,
                     blackList: msg.payload.blackList,
+                    fixLiquidationInDB: msg.payload.fixLiquidationInDB,
                 };
                 bot = new Bot(dataInitBot);
             }
@@ -125,17 +130,28 @@ class Bot {
         "1h": 0,
     };
 
-    private dataFixLiquidation: TDataFixLiquidation | null = null;
-    private startTimeSec: number | null = null;
-    private stepFixLiquidation = 0;
+    private dataFixLiquidation: TDataFixLiquidation;
 
     private rpcSequenceByKey = new Map<string, number>();
+
+    private takeProfitAccount: TTakeprofitAccount | null = null;
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
         this.settingUser = dataInitBot.settingUser;
         this.uiSelector = dataInitBot.uiSelector;
         this.blackList = dataInitBot.blackList;
+        this.dataFixLiquidation = {
+            dataLiquidationShouldFix: dataInitBot.fixLiquidationInDB?.data.dataLiquidationShouldFix || null,
+            dataOrderOpenFixLiquidation: dataInitBot.fixLiquidationInDB?.data.dataOrderOpenFixLiquidation || null,
+            dataCloseTP: dataInitBot.fixLiquidationInDB?.data.dataCloseTP || null,
+            startTimeSec: dataInitBot.fixLiquidationInDB?.data.startTimeSec || null,
+            stepFixLiquidation: dataInitBot.fixLiquidationInDB?.data.stepFixLiquidation || 0,
+            inputUSDTFix: dataInitBot.fixLiquidationInDB?.data.inputUSDTFix || null,
+            leverageFix: dataInitBot.fixLiquidationInDB?.data.leverageFix || null,
+        };
+
+        this.upsertFixLiquidation();
 
         this.run();
     }
@@ -153,6 +169,11 @@ class Bot {
                 this.beforeEach();
 
                 if (this.isStart) {
+                    if (this.isNextPhase()) {
+                        await this.handleNextPhase();
+                        continue;
+                    }
+
                     await this.setWhitelistEntry();
 
                     // ===== 1) CREATE CLOSE ==============================================
@@ -305,7 +326,7 @@ class Bot {
 
                     let leverage = this.settingUser.leverage;
                     if (isPositionFix) {
-                        const leverageFixLiquidation = this.settingUser.martingale?.options[this.stepFixLiquidation].leverage;
+                        const leverageFixLiquidation = this.settingUser.martingale?.options[this.dataFixLiquidation.stepFixLiquidation].leverage;
                         if (leverageFixLiquidation) {
                             leverage = leverageFixLiquidation;
                         }
@@ -318,7 +339,7 @@ class Bot {
 
                     if (isPositionFix && this.dataFixLiquidation) {
                         this.dataFixLiquidation.dataCloseTP = res;
-                        this.martingaleSendRenderer();
+                        this.upsertFixLiquidation();
                     }
                 } catch (error: any) {
                     if (error?.message === INSUFFICIENT_AVAILABLE) {
@@ -375,7 +396,7 @@ class Bot {
             return {
                 status: "idle",
                 targetContract: null,
-                step: this.stepFixLiquidation,
+                step: this.dataFixLiquidation?.stepFixLiquidation,
                 liquidationFinishTime: null,
 
                 openFixContract: null,
@@ -398,12 +419,12 @@ class Bot {
         return {
             status: "fixing",
             targetContract: liq?.contract ?? null,
-            step: this.stepFixLiquidation,
+            step: this.dataFixLiquidation?.stepFixLiquidation,
             liquidationFinishTime: liq?.finish_time ?? null,
 
             openFixContract: openFix?.contract ?? null,
             openFixPrice: openFix?.price ?? null,
-            inputUSDTFix: this.settingUser.martingale?.options?.[this.stepFixLiquidation]?.inputUSDT ?? null,
+            inputUSDTFix: this.settingUser.martingale?.options?.[this.dataFixLiquidation.stepFixLiquidation]?.inputUSDT ?? null,
             openFixCreateTime: openFix?.create_time ?? null,
 
             tpContract: tpOrder?.contract ?? null,
@@ -413,14 +434,6 @@ class Bot {
 
             updatedAt: updatedAt ?? Date.now(),
         };
-    }
-
-    private martingaleSendRenderer() {
-        const payload: TWorkerData<MartingaleSummary> = {
-            type: "bot:martingale",
-            payload: this.toSummary(this.dataFixLiquidation),
-        };
-        this.parentPort?.postMessage(payload);
     }
 
     handleEvent(msg: any) {
@@ -465,6 +478,10 @@ class Bot {
                 this.handleMaxRate(msg);
                 break;
 
+            case "bot:takeProfitAccount":
+                this.setTakeProfitAccount(msg);
+                break;
+
             default:
                 break;
         }
@@ -490,7 +507,7 @@ class Bot {
         // return false;
         const isWhiteListEntryEmpty = this.isCheckWhitelistEntryEmty();
         if (isWhiteListEntryEmpty) {
-            this.logWorker.info(`🔵 Create Open: skip White list entry empty`, this.whitelistEntry.length);
+            this.logWorker.info(`🔵 Create Open: skip White list entry empty: ${this.whitelistEntry.length}`);
             return false;
         }
 
@@ -827,6 +844,7 @@ class Bot {
             const contractOrderOpenFixLiquidation = this.dataFixLiquidation.dataOrderOpenFixLiquidation.contract.replace("/", "_");
             if (contractOrderOpenFixLiquidation === contract) {
                 this.dataFixLiquidation.dataOrderOpenFixLiquidation = null;
+                this.upsertFixLiquidation();
             }
         }
 
@@ -868,6 +886,48 @@ class Bot {
         }
 
         this.logWorker.info(`✅ ${symbol} Click market position`);
+        return body;
+    }
+
+    private async clickClearAll(isClearAllPosition: boolean, isClearAllOrderOpen: boolean) {
+        const selectorButtonTabPosition = this.uiSelector?.find((item) => item.code === "buttonTabPosition")?.selectorValue;
+        const selectorButtonCloseAllPosition = this.uiSelector?.find((item) => item.code === "buttonCloseAllPosition")?.selectorValue;
+
+        const selectorButtonTabOpenOrder = this.uiSelector?.find((item) => item.code === "buttonTabOpenOrder")?.selectorValue;
+        const selectorButtonCloseAllOpenOrder = this.uiSelector?.find((item) => item.code === "buttonCloseAllOpenOrder")?.selectorValue;
+
+        if (!selectorButtonTabPosition || !selectorButtonCloseAllPosition || !selectorButtonTabOpenOrder || !selectorButtonCloseAllOpenOrder) {
+            this.logWorker.info(`❌ Not found selector clickClearAll`);
+            throw new Error(`Not found selector`);
+        }
+
+        const stringClickClearAll = createCodeStringClickClearAll({
+            buttonTabPosition: selectorButtonTabPosition,
+            buttonCloseAllPosition: selectorButtonCloseAllPosition,
+            buttonTabOpenOrder: selectorButtonTabOpenOrder,
+            buttonCloseAllOpenOrder: selectorButtonCloseAllOpenOrder,
+            isClearAllPosition,
+            isClearAllOrderOpen,
+        });
+
+        const { body, error, ok } = await this.sendIpcRpc<boolean>({
+            sequenceKey: "clickClearAll",
+            requestType: "bot:clickClearAll",
+            responseType: "bot:clickClearAll:res",
+            idFieldName: "reqClickClearAllId",
+            buildPayload: (requestId) => ({
+                reqClickClearAllId: requestId,
+                stringClickClearAll,
+            }),
+            timeoutMs: 10_000,
+        });
+
+        if (!ok || error || body == null) {
+            throw new Error(`❌ Click Clear All error: ${error ?? "unknown"} ${body} ${ok}`);
+        }
+
+        this.logWorker.info(`✅ Click Clear All`);
+
         return body;
     }
 
@@ -1611,13 +1671,15 @@ class Bot {
 
         // 1) Không có position -> không cần check SL
         if (this.positions.size === 0) {
-            this.logWorker.info("🟣 SL: skip — no positions");
+            // this.logWorker.info("🟣 SL: skip — no positions");
+            console.log("🟣 SL: skip — no positions");
             return false;
         }
 
         // 2) 100 hoặc hơn = tắt SL
         if (sl >= 100) {
-            this.logWorker.info(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
+            // this.logWorker.info(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
+            console.log(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
             return false;
         }
 
@@ -1798,6 +1860,7 @@ class Bot {
             method: "GET",
             headers: { "Content-Type": "application/json" },
         });
+
         if (ok === false || error || body === null) {
             const msg = `❌ Change Leverage: ${error}`;
             throw new Error(msg);
@@ -1811,16 +1874,20 @@ class Bot {
     }
 
     private async createLiquidationShouldFix() {
-        if (this.dataFixLiquidation) {
-            // this.logWorker.info(`Skip by listLiquidationShouldFix exists`);
-            console.log("Skip by listLiquidationShouldFix exists");
+        if (this.settingUser.stopLoss < 100) {
+            console.log(`🧨 Create Order Fix Liquidation: Skip by stoploss < 100`);
             return;
         }
 
-        const historysOrderClose = await this.getHistoryOrderClose(this.startTimeSec || this.startOfTodayUtcSec(), this.nowSec());
+        if (this.dataFixLiquidation.dataLiquidationShouldFix) {
+            console.log("🧨 Create Liquidation Should Fix: Skip by dataLiquidationShouldFix exists");
+            return;
+        }
+
+        const historysOrderClose = await this.getHistoryOrderClose(this.dataFixLiquidation.startTimeSec || this.startOfTodayUtcSec(), this.nowSec());
 
         if (!historysOrderClose) {
-            this.logWorker.info(`historyOrderClose is null`);
+            this.logWorker.error(`❌ historyOrderClose is null`);
             return;
         }
 
@@ -1829,25 +1896,26 @@ class Bot {
             return item.is_liq;
         });
 
-        const liq = listLiq.at(this.startTimeSec === null ? 0 : -1);
+        const liq = listLiq.at(this.dataFixLiquidation.startTimeSec === null ? 0 : -1);
 
         if (!liq) return;
 
         console.log("liq: ", liq);
 
-        this.dataFixLiquidation = {
-            dataLiquidationShouldFix: liq,
-            dataOrderOpenFixLiquidation: null,
-            dataCloseTP: null,
-        };
+        this.dataFixLiquidation.dataLiquidationShouldFix = liq;
 
-        this.startTimeSec = liq.finish_time;
+        this.dataFixLiquidation.startTimeSec = liq.finish_time;
 
-        this.martingaleSendRenderer();
+        this.upsertFixLiquidation();
     }
 
     private async createOrderOpenFixLiquidation(symbol: string, price: string, lastPriceGate: number, quanto_multiplier: number): Promise<boolean> {
-        if (this.dataFixLiquidation === null) {
+        if (this.settingUser.stopLoss < 100) {
+            console.log(`🧨 Create Order Fix Liquidation: Skip by stoploss < 100`);
+            return false;
+        }
+
+        if (this.dataFixLiquidation.dataLiquidationShouldFix === null) {
             // this.logWorker.info(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
             console.log(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
             return false;
@@ -1861,8 +1929,12 @@ class Bot {
 
         const contract = symbol.replace("/", "_");
 
-        const inputUSDT = this.settingUser.martingale?.options?.[this.stepFixLiquidation]?.inputUSDT || this.settingUser.inputUSDT;
-        const leverage = this.settingUser.martingale?.options?.[this.stepFixLiquidation]?.leverage || this.settingUser.leverage;
+        const inputUSDT = this.settingUser.martingale?.options?.[this.dataFixLiquidation.stepFixLiquidation]?.inputUSDT || this.settingUser.inputUSDT;
+        const leverage = this.settingUser.martingale?.options?.[this.dataFixLiquidation.stepFixLiquidation]?.leverage || this.settingUser.leverage;
+
+        this.dataFixLiquidation.inputUSDTFix = inputUSDT;
+        this.dataFixLiquidation.leverageFix = leverage;
+        this.upsertFixLiquidation();
 
         const sizeStr = calcSize(inputUSDT, lastPriceGate, quanto_multiplier).toString();
 
@@ -1876,11 +1948,11 @@ class Bot {
         try {
             const ok = await this.changeLeverage(contract, leverage);
             if (!ok) return false;
-            const res = await this.openEntry(payload, `Martingale step ${this.stepFixLiquidation}`);
+            const res = await this.openEntry(payload, `Martingale step ${this.dataFixLiquidation.stepFixLiquidation}`);
 
             this.dataFixLiquidation.dataOrderOpenFixLiquidation = res;
 
-            this.martingaleSendRenderer();
+            this.upsertFixLiquidation();
 
             return true;
         } catch (error: any) {
@@ -1896,25 +1968,30 @@ class Bot {
     }
 
     private async checkDataFixLiquidationIsDone() {
-        if (this.dataFixLiquidation === null) {
+        if (this.settingUser.stopLoss < 100) {
+            // console.log(`🧨 Check Liquidation Is Done: Skip by stoploss < 100`);
+            return;
+        }
+
+        if (this.dataFixLiquidation.dataLiquidationShouldFix === null) {
             // this.logWorker.info(`Skip by listLiquidationShouldFix is null`);
             return;
         }
 
-        if (this.startTimeSec === null) {
+        if (this.dataFixLiquidation.startTimeSec === null) {
             // this.logWorker.info(`Skip by startTimeSec is null`);
             return;
         }
 
         if (this.dataFixLiquidation.dataOrderOpenFixLiquidation === null) {
             // this.logWorker.info(`Skip by chưa có lệnh chờ để fix liquidation`);
-            console.log(`Skip by chưa có lệnh chờ sé fix liquidation`);
+            console.log(`🧨 Check Liquidation Is Done: Skip by chưa có lệnh chờ sé fix liquidation`);
             return;
         }
 
         if (this.dataFixLiquidation.dataCloseTP === null) {
             // this.logWorker.info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
-            console.log(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
+            console.log(`🧨 Check Liquidation Is Done: Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
             return;
         }
 
@@ -1924,7 +2001,7 @@ class Bot {
         const idStringCloseTP = this.dataFixLiquidation.dataCloseTP.id_string;
         console.log(`🔵 ${contractShouldFix} idString lệnh chờ TP: ${idStringCloseTP}`);
 
-        const historysOrderClose = await this.getHistoryOrderClose(this.startTimeSec, this.nowSec(), contractCloseTP);
+        const historysOrderClose = await this.getHistoryOrderClose(this.dataFixLiquidation.startTimeSec, this.nowSec(), contractCloseTP);
 
         if (!historysOrderClose) {
             this.logWorker.info(`historyOrderClose is null`);
@@ -1932,8 +2009,8 @@ class Bot {
         }
 
         const hisCloseTPSuccess = historysOrderClose.find((historyOrderClose) => {
-            const isFind =
-                historyOrderClose.id_string === idStringCloseTP && historyOrderClose.finish_as === "filled" && historyOrderClose.is_liq === false;
+            // const isFind =  historyOrderClose.id_string === idStringCloseTP && historyOrderClose.finish_as === "filled" && historyOrderClose.is_liq === false;
+            const isFind = historyOrderClose.is_liq === false;
             if (isFind) {
                 this.logWorker.info(`🔵 ${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
             }
@@ -1941,7 +2018,7 @@ class Bot {
         });
 
         const hisPositionFixLiquidation = historysOrderClose.find((historyOrderClose) => {
-            const isFind = historyOrderClose.finish_as === "filled" && historyOrderClose.is_liq === true;
+            const isFind = historyOrderClose.is_liq === true;
             if (isFind) {
                 this.logWorker.info(`❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
             }
@@ -1950,32 +2027,100 @@ class Bot {
 
         if (hisCloseTPSuccess === undefined && hisPositionFixLiquidation === undefined) {
             // this.logWorker.info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
-            console.log(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix sé lệnh fix bị thanh lý hoặc lệnh tp khóp`);
+            console.log(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
             return;
         }
         if (hisPositionFixLiquidation) {
-            let stepNext = this.stepFixLiquidation + 1;
+            let stepNext = this.dataFixLiquidation.stepFixLiquidation + 1;
             const maxStep = this.settingUser.martingale?.options?.length || 0;
             if (stepNext > maxStep) {
                 stepNext = 0;
-                this.logWorker.info(`❌ Fix thất bại reset step: ${this.stepFixLiquidation} -> ${stepNext} / ${maxStep}`);
+                this.logWorker.info(`❌ Fix thất bại reset step: ${this.dataFixLiquidation.stepFixLiquidation} -> ${stepNext} / ${maxStep}`);
             } else {
-                this.logWorker.info(`❌ Fix thất bại tăng step: ${this.stepFixLiquidation} -> ${stepNext} / ${maxStep}`);
+                this.logWorker.info(`❌ Fix thất bại tăng step: ${this.dataFixLiquidation.stepFixLiquidation} -> ${stepNext} / ${maxStep}`);
             }
-            this.dataFixLiquidation = null;
-            this.stepFixLiquidation = stepNext;
-            this.startTimeSec = this.startTimeSec + 1;
-            this.martingaleSendRenderer();
+            this.upsertFixLiquidation(true, EStatusFixLiquidation.FAILED);
+
+            this.dataFixLiquidation.dataLiquidationShouldFix = null;
+            this.dataFixLiquidation.dataOrderOpenFixLiquidation = null;
+            this.dataFixLiquidation.dataCloseTP = null;
+
+            this.dataFixLiquidation.stepFixLiquidation = stepNext;
+            this.dataFixLiquidation.startTimeSec = this.dataFixLiquidation.startTimeSec + 1;
+            this.upsertFixLiquidation();
             return;
         }
         if (hisCloseTPSuccess) {
             this.logWorker.info(`✅ ${contractShouldFix} Fix thành công`);
-            this.dataFixLiquidation = null;
-            this.stepFixLiquidation = 0;
-            this.startTimeSec = this.startTimeSec + 1;
-            this.martingaleSendRenderer();
+            this.upsertFixLiquidation(true, EStatusFixLiquidation.SUCCESS);
+
+            this.dataFixLiquidation.dataLiquidationShouldFix = null;
+            this.dataFixLiquidation.dataOrderOpenFixLiquidation = null;
+
+            this.dataFixLiquidation.dataLiquidationShouldFix = null;
+            this.dataFixLiquidation.dataOrderOpenFixLiquidation = null;
+            this.dataFixLiquidation.dataCloseTP = null;
+
+            this.dataFixLiquidation.stepFixLiquidation = 0;
+            this.dataFixLiquidation.startTimeSec = this.dataFixLiquidation.startTimeSec + 1;
+            this.upsertFixLiquidation();
             return;
         }
+    }
+
+    private setTakeProfitAccount(msg: TWorkerData<TTakeprofitAccount | null>) {
+        this.takeProfitAccount = msg.payload;
+    }
+
+    private isNextPhase(): boolean {
+        // this.logWorker.info(`roi ${this.takeProfitAccount?.roi}%/${this.settingUser.maxRoiNextPhase}%`);
+        if (!this.takeProfitAccount) return false;
+        if (this.settingUser.maxRoiNextPhase === 0) return false;
+        if (this.takeProfitAccount.roi >= this.settingUser.maxRoiNextPhase) {
+            this.logWorker.info(`➡️ Next phase: ${this.takeProfitAccount.roi} >= ${this.settingUser.maxRoiNextPhase}`);
+            return true;
+        }
+        return false;
+    }
+
+    private async handleNextPhase() {
+        this.stop();
+
+        const isClearAllPosition = this.positions.size > 0;
+        const isClearAllOrderOpen = this.orderOpens.length > 0;
+
+        if (isClearAllPosition === true || isClearAllOrderOpen === true) {
+            await this.clickClearAll(isClearAllPosition, isClearAllOrderOpen);
+        }
+
+        this.dataFixLiquidation.dataCloseTP = null;
+        this.dataFixLiquidation.dataOrderOpenFixLiquidation = null;
+
+        this.upsertFixLiquidation();
+
+        if (this.takeProfitAccount) {
+            this.takeProfitAccount.roi = 0;
+        }
+
+        this.start();
+    }
+
+    private upsertFixLiquidation(isDone: boolean = false, status: EStatusFixLiquidation = EStatusFixLiquidation.PROCESSING) {
+        if (!this.dataFixLiquidation.startTimeSec) return;
+
+        const payload: TUpsertFixLiquidationReq = {
+            scopeExchangeId: 1,
+            data: this.dataFixLiquidation,
+            startTimeSec: this.dataFixLiquidation.startTimeSec,
+            isDone: isDone,
+            status: status,
+        };
+
+        if (isDone) {
+            console.dir(payload, { depth: null, colors: true });
+        }
+
+        this.parentPort?.postMessage({ type: "bot:upsertFixLiquidation", payload: payload });
     }
 }
 

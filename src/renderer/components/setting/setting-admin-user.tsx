@@ -82,6 +82,7 @@ export const FormSchema = z.object({
     // max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
 
     martingale: ZMartingaleConfig,
+    maxRoiNextPhase: positiveNumber("Max ROI Next Phase"),
 });
 
 const defaultMartingale: MartingaleConfig = {
@@ -132,6 +133,7 @@ export default function SettingAdminUser({ type }: TProps) {
             // max24hChangeGreen: "",
             // max24hChangeRed: "",
             martingale: defaultMartingale,
+            maxRoiNextPhase: "",
         },
     });
 
@@ -158,6 +160,7 @@ export default function SettingAdminUser({ type }: TProps) {
                 // max24hChangeGreen: setting.max24hChangeGreen ?? "",
                 // max24hChangeRed: setting.max24hChangeRed ?? "",
                 martingale: (setting.martingale as MartingaleConfig) ?? defaultMartingale,
+                maxRoiNextPhase: setting.maxRoiNextPhase ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form, type]);
@@ -188,6 +191,7 @@ export default function SettingAdminUser({ type }: TProps) {
             // max24hChangeGreen: data.max24hChangeGreen,
             // max24hChangeRed: data.max24hChangeRed,
             martingale: data.martingale,
+            maxRoiNextPhase: data.maxRoiNextPhase,
         };
 
         console.log({ updateSettingUser: payload });
@@ -232,6 +236,7 @@ export default function SettingAdminUser({ type }: TProps) {
                             error={form.formState.errors.takeProfit?.message}
                             decimalSeparator="."
                             thousandSeparator=","
+                            suffix="%"
                             min={0}
                             step={0.1}
                             clampBehavior="strict"
@@ -256,6 +261,7 @@ export default function SettingAdminUser({ type }: TProps) {
                             error={form.formState.errors.stopLoss?.message}
                             decimalSeparator="."
                             thousandSeparator=","
+                            suffix="%"
                             min={0}
                             step={0.1}
                             clampBehavior="strict"
@@ -787,6 +793,32 @@ export default function SettingAdminUser({ type }: TProps) {
                             </div>
                         );
                     }}
+                />
+
+                {/* maxRoiNextPhase */}
+                <Controller
+                    name="maxRoiNextPhase"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Max Roi% Next Phase"
+                            placeholder="Max Roi% Next Phase"
+                            inputWrapperOrder={["label", "input", "description", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.maxRoiNextPhase?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            min={0}
+                            step={0.1}
+                            suffix="%"
+                            clampBehavior="strict"
+                            description={"If 0 OFF"}
+                        />
+                    )}
                 />
 
                 <ButtonLoading className="w-[80px]" loading={updateSettingUser.isPending} type="submit">

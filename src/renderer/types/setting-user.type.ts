@@ -25,6 +25,7 @@ export type TSettingUsers = {
     entrySignalMode: EntrySignalMode;
     delayForPairsMs: number;
     martingale: MartingaleConfig | null
+    maxRoiNextPhase: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

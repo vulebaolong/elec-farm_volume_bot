@@ -1,5 +1,6 @@
 import { TSide } from "@/types/base.type";
 import { TPosition } from "@/types/position.type";
+import dayjs from "dayjs";
 
 export const resError = (error: any, defaultMes: string) => {
     const mes = error?.response?.data?.message;
@@ -69,3 +70,16 @@ export function computePostOnlyPrice(
 
 export const toUnderscore = (s: string) => s.replace("/", "_");
 export const toSymbolKey = (pos: TPosition) => toUnderscore(pos.contract);
+
+export const formatLocalTime = (time?: dayjs.ConfigType, format = "HH:mm:ss DD/MM/YYYY") => {
+    if (typeof time === "string") {
+        if (format === `ago`) return dayjs(time).fromNow();
+        return dayjs.utc(time).local().format(format);
+    } else if (typeof time === "number") {
+        if (format === `ago`) return dayjs.unix(time).local().fromNow();
+        return dayjs.unix(time).local().format(format);
+    } else {
+        if (format === `ago`) return dayjs().local().fromNow();
+        return dayjs().local().format(format);
+    }
+};

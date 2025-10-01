@@ -8,6 +8,8 @@ export type TTakeprofitAccount = {
     phase: number;
     oldTotal: string;
     newTotal: string;
+    pnl: number;
+    roi: number;
 } & TBaseTimestamps;
 
 export type TCreateTakeprofitAccountReq = {

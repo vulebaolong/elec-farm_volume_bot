@@ -1,4 +1,5 @@
 import { TSide } from "./base.type";
+import { TFixLiquidationInDB } from "./fix-liquidation.type";
 import { TSettingUsers } from "./setting-user.type";
 import { TUiSelector } from "./ui-selector.type";
 
@@ -7,6 +8,7 @@ export type TDataInitBot = {
     settingUser: TSettingUsers;
     uiSelector: TUiSelector[];
     blackList: string[];
+    fixLiquidationInDB?: TFixLiquidationInDB;
 };
 
 export type TChangeLeverage = {
@@ -209,5 +211,16 @@ export type TGateClickMarketPositionRes = {
 export type TResultClickMarketPosition = {
     ok: boolean;
     data: boolean;
+    error: string | null;
+};
+
+export type TGateClick<T> = {
+    ok: boolean;
+    body: T | null;
+    error: string | null;
+};
+export type TResultClick<T> = {
+    ok: boolean;
+    data: T;
     error: string | null;
 };

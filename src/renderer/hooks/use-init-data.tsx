@@ -11,6 +11,7 @@ import { TSettingUsersSocket } from "@/types/setting-user.type";
 import { TWhiteList } from "@/types/white-list.type";
 import { useEffect, useRef } from "react";
 import { useSocket } from "./socket.hook";
+import { useGetFixLiquidation } from "@/api/tanstack/fix-liquidation.tanstack";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
@@ -21,6 +22,12 @@ export const useInitData = () => {
     const countRef = useRef(0);
     const getInfoMutation = useGetInfoMutation();
     const getMyBlackList = useGetMyBlackList();
+
+    const getFixLiquidation = useGetFixLiquidation({
+        pagination: { page: 1, pageSize: 10 },
+        filters: {},
+        sort: { sortBy: `createdAt`, isDesc: true },
+    });
 
     const joinRoomEntry = useSocketEmit<boolean>({
         socket,
@@ -73,13 +80,14 @@ export const useInitData = () => {
     }, [socket]);
 
     useEffect(() => {
-        if (!settingUser || !getUiSelector.data || !getMyBlackList.data) return;
+        if (!settingUser || !getUiSelector.data || !getMyBlackList.data || !getFixLiquidation.data) return;
 
         if (countRef.current === 0) {
             const dataWorkerInit = {
                 settingUser: settingUser,
                 uiSelector: getUiSelector.data,
                 blackList: getMyBlackList.data.map((item) => item.symbol),
+                fixLiquidationInDB: getFixLiquidation.data.items[0],
             };
             window.electron?.ipcRenderer.sendMessage("bot:init", dataWorkerInit);
             countRef.current = 1;

@@ -11,6 +11,7 @@ import { TAccount } from "@/types/account.type";
 import { toast } from "sonner";
 import { useCreateTakeProfitAccount, useUpdateTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
 import { TCreateTakeprofitAccountReq, TTakeprofitAccount } from "@/types/takeprofit-account.type";
+import Ripple from "./ripple";
 
 type TProps = {};
 
@@ -27,25 +28,7 @@ export default function Controll({}: TProps) {
     const updateTakeProfitAccount = useUpdateTakeProfitAccount();
 
     const start = () => {
-        if (!accountRef.current) {
-            toast.error("Please save account first");
-            return;
-        }
-        const payload: TCreateTakeprofitAccountReq = {
-            newTotal: accountRef.current.total,
-            oldTotal: accountRef.current.total,
-            source: "gate",
-            uid: accountRef.current.user,
-        };
-
-        console.log({ payload });
-
-        createTakeProfitAccount.mutate(payload, {
-            onSuccess: (data) => {
-                takeprofitAccountNewRef.current = data.data;
-                window.electron?.ipcRenderer.sendMessage("bot:start");
-            },
-        });
+        window.electron?.ipcRenderer.sendMessage("bot:start");
     };
     const stop = () => window.electron?.ipcRenderer.sendMessage("bot:stop");
     const reloadWebContentsView = () => {
@@ -72,8 +55,26 @@ export default function Controll({}: TProps) {
             }
         });
 
-        const offBotStart = window.electron.ipcRenderer.on("bot:start", (data: TWorkerData<{ isStart: boolean }>) => {
-            dispatch(SET_IS_START(data.payload.isStart));
+        const offBotStart = window.electron.ipcRenderer.on("bot:start", (dataWorker: TWorkerData<{ isStart: boolean }>) => {
+            if (!accountRef.current) {
+                toast.error("Please save account first");
+                return;
+            }
+            const payload: TCreateTakeprofitAccountReq = {
+                newTotal: accountRef.current.total,
+                oldTotal: accountRef.current.total,
+                source: "gate",
+                uid: accountRef.current.user,
+            };
+
+            console.log({ payload });
+
+            createTakeProfitAccount.mutate(payload, {
+                onSuccess: (data) => {
+                    takeprofitAccountNewRef.current = data.data;
+                    dispatch(SET_IS_START(dataWorker.payload.isStart));
+                },
+            });
         });
 
         const offBotStop = window.electron.ipcRenderer.on("bot:stop", (data: TWorkerData<{ isStart: boolean }>) => {
@@ -97,7 +98,10 @@ export default function Controll({}: TProps) {
         <div className="sticky top-0 z-[1]">
             <Card>
                 <CardHeader className="flex items-center gap-2">
-                    <CardTitle className="text-base">Controll</CardTitle>
+                    <div className="flex gap-2 items-center">
+                        <CardTitle className="text-base">Controll</CardTitle>
+                        <Ripple />
+                    </div>
                 </CardHeader>
 
                 <CardContent className="grid gap-2">

@@ -2,6 +2,7 @@
 import { codeStringKillMantineToasts, createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
 import {
     TFectMainRes,
+    TGateClick,
     TGateClickCancelAllOpenRes,
     TGateClickMarketPositionRes,
     TGateClickTabOpenOrderRes,
@@ -9,6 +10,7 @@ import {
     TGateOrderMainRes,
     TPayloadFollowApi,
     TPayloadOrder,
+    TResultClick,
     TResultClickCancelOpen,
     TResultClickMarketPosition,
     TResultClickOpenOrder,
@@ -292,9 +294,6 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
             if (msg?.type === "bot:rateCounter") {
                 mainWindow?.webContents.send("bot:rateCounter", msg);
             }
-            if (msg?.type === "bot:martingale") {
-                mainWindow?.webContents.send("bot:martingale", msg);
-            }
             if (msg?.type === "bot:clickMarketPosition") {
                 if (!gateView) return;
 
@@ -327,6 +326,39 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
             }
             if (msg?.type === "bot:saveAccount") {
                 mainWindow?.webContents.send("bot:saveAccount", msg);
+            }
+            if (msg?.type === "bot:upsertFixLiquidation") {
+                mainWindow?.webContents.send("bot:upsertFixLiquidation", msg);
+            }
+            if (msg?.type === "bot:clickClearAll") {
+                if (!gateView) return;
+
+                const { reqClickClearAllId, stringClickClearAll } = msg?.payload;
+
+                try {
+                    const result: TResultClick<boolean> = await gateView.webContents.executeJavaScript(stringClickClearAll, true);
+
+                    if (result.ok === false && result.error) {
+                        throw new Error(result.error);
+                    }
+
+                    const payload: TGateClick<boolean> & { reqClickClearAllId: number } = {
+                        ok: result.ok,
+                        body: result.data,
+                        reqClickClearAllId: reqClickClearAllId,
+                        error: null,
+                    };
+
+                    botWorker?.postMessage({ type: "bot:clickClearAll:res", payload: payload });
+                } catch (e: any) {
+                    const payload: TGateClick<boolean> & { reqClickClearAllId: number } = {
+                        ok: false,
+                        body: null,
+                        reqClickClearAllId: reqClickClearAllId,
+                        error: String(e?.message || e),
+                    };
+                    botWorker?.postMessage({ type: "bot:clickClearAll:res", payload: payload });
+                }
             }
         });
         botWorker.on("error", (err) => {
@@ -374,6 +406,9 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
                 gateView.webContents.openDevTools({ mode: "detach" });
                 return { ok: true, opened: true };
             }
+        });
+        ipcMain.on("bot:takeProfitAccount", (event, data) => {
+            botWorker?.postMessage({ type: "bot:takeProfitAccount", payload: data });
         });
     }
 
