@@ -31,8 +31,9 @@ import {
 import { getSideRes } from "@/types/ccc.type";
 import { TGetInfoContractRes } from "@/types/contract.type";
 import { EStatusFixLiquidation } from "@/types/enum/fix-liquidation.enum";
-import { TUpsertFixLiquidationReq } from "@/types/fix-liquidation.type";
-import { MartingaleSummary, TDataFixLiquidation, TDataFixStopLoss } from "@/types/martingale.type";
+import { EStatusFixStopLoss } from "@/types/enum/fix-stoploss.enum";
+import { TDataFixLiquidation, TUpsertFixLiquidationReq } from "@/types/fix-liquidation.type";
+import { TDataFixStopLoss, TUpsertFixStopLossReq } from "@/types/fix-stoploss.type";
 import { TOrderOpen } from "@/types/order.type";
 import { TPosition } from "@/types/position.type";
 import { TSettingUsers } from "@/types/setting-user.type";
@@ -45,8 +46,6 @@ import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { calcSize, handleEntryCheckAll } from "./util-bot.worker";
-import { EStatusFixStopLoss } from "@/types/enum/fix-stoploss.enum";
-import { TUpsertFixStopLossReq } from "@/types/fix-stoploss.type";
 
 const FLOWS_API = {
     acounts: {
@@ -167,6 +166,7 @@ class Bot {
             listDataFixStopLoss: dataInitBot.fixStopLossInDB?.data.listDataFixStopLoss || [],
         };
         this.upsertFixStopLoss();
+        this.sendListDataFixStopLoss();
 
         this.run();
     }
@@ -243,9 +243,8 @@ class Bot {
                             }
 
                             const bidsAsks = await this.getBidsAsks(symbol);
-                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(0, 3);
-                            const price = prices[1].p;
-                            // const price = prices[0].p;
+                            const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(0, IS_PRODUCTION ? 3 : 1);
+                            const price = prices[IS_PRODUCTION ? 1 : 0].p;
 
                             let isCreateOrderOpenFix: boolean;
 
@@ -353,10 +352,22 @@ class Bot {
 
                     if (leverageForFix) {
                         if (isFixStopLoss) {
-                            this.dataFixStopLoss.dataCloseTP = res;
+                            this.dataFixStopLoss.dataCloseTP = {
+                                contract: p.contract,
+                                id_string: res.id_string,
+                                price: res.price,
+                                fill_price: res.fill_price,
+                                create_time: res.create_time,
+                            };
                             this.upsertFixStopLoss();
                         } else {
-                            this.dataFixLiquidation.dataCloseTP = res;
+                            this.dataFixLiquidation.dataCloseTP = {
+                                contract: p.contract,
+                                id_string: res.id_string,
+                                price: res.price,
+                                fill_price: res.fill_price,
+                                create_time: res.create_time,
+                            };
                             this.upsertFixLiquidation();
                         }
                     }
@@ -410,51 +421,6 @@ class Bot {
             payload: this.rateCounter.counts(),
         };
         this.parentPort?.postMessage(payload);
-    }
-
-    private toSummary(payload: TDataFixLiquidation | null, updatedAt?: number): MartingaleSummary {
-        if (!payload) {
-            return {
-                status: "idle",
-                targetContract: null,
-                step: this.dataFixLiquidation?.stepFixLiquidation,
-                liquidationFinishTime: null,
-
-                openFixContract: null,
-                openFixPrice: null,
-                inputUSDTFix: null,
-                openFixCreateTime: null,
-
-                tpContract: null,
-                tpPrice: null,
-                tpCreateTime: null,
-
-                updatedAt: updatedAt ?? Date.now(),
-            };
-        }
-
-        const liq = payload.dataLiquidationShouldFix;
-        const openFix = payload.dataOrderOpenFixLiquidation;
-        const tpOrder = payload.dataCloseTP;
-
-        return {
-            status: "fixing",
-            targetContract: liq?.contract ?? null,
-            step: this.dataFixLiquidation?.stepFixLiquidation,
-            liquidationFinishTime: liq?.finish_time ?? null,
-
-            openFixContract: openFix?.contract ?? null,
-            openFixPrice: openFix?.price ?? null,
-            inputUSDTFix: this.settingUser.martingale?.options?.[this.dataFixLiquidation.stepFixLiquidation]?.inputUSDT ?? null,
-            openFixCreateTime: openFix?.create_time ?? null,
-
-            tpContract: tpOrder?.contract ?? null,
-            tpPrice: tpOrder?.price ?? null,
-            tpSize: tpOrder?.size ?? null,
-            tpCreateTime: tpOrder?.create_time ?? null,
-
-            updatedAt: updatedAt ?? Date.now(),
-        };
     }
 
     handleEvent(msg: any) {
@@ -1459,7 +1425,10 @@ class Bot {
 
         await this.clickMarketPostion(pos.contract, Number(pos.size) > 0 ? "long" : "short");
 
-        this.dataFixStopLoss.listDataFixStopLoss.push(pos);
+        this.dataFixStopLoss.listDataFixStopLoss.push({
+            contract: pos.contract,
+            open_time: pos.open_time,
+        });
         this.sendListDataFixStopLoss();
 
         // const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
@@ -1919,9 +1888,12 @@ class Bot {
 
         if (!liq) return;
 
-        console.log("liq: ", liq);
+        // console.log("liq: ", liq);
 
-        this.dataFixLiquidation.dataLiquidationShouldFix = liq;
+        this.dataFixLiquidation.dataLiquidationShouldFix = {
+            contract: liq.contract,
+            create_time: liq.create_time,
+        };
 
         this.dataFixLiquidation.startTimeSec = this.toUnixSeconds(liq.finish_time);
 
@@ -1969,7 +1941,12 @@ class Bot {
             if (!ok) return false;
             const res = await this.openEntry(payload, `🧨 Martingale Liquidation step ${this.dataFixLiquidation.stepFixLiquidation}`);
 
-            this.dataFixLiquidation.dataOrderOpenFixLiquidation = res;
+            this.dataFixLiquidation.dataOrderOpenFixLiquidation = {
+                contract: res.contract,
+                price: res.price,
+                fill_price: res.fill_price,
+                create_time: res.create_time,
+            };
 
             this.upsertFixLiquidation();
 
@@ -2140,14 +2117,29 @@ class Bot {
 
         await this.clickClearAll();
 
-        this.dataFixLiquidation.dataCloseTP = null;
+        // chốt trước khi chuyển phase
+        this.upsertFixLiquidation(false, EStatusFixLiquidation.FAILED);
+        this.logWorker.info("➡️ Next phase 🧨 Reset All Fix Liquidation");
+        this.dataFixLiquidation.dataLiquidationShouldFix = null;
         this.dataFixLiquidation.dataOrderOpenFixLiquidation = null;
+        this.dataFixLiquidation.dataCloseTP = null;
+        this.dataFixLiquidation.startTimeSec = null;
+        this.dataFixLiquidation.stepFixLiquidation = 0;
+        this.dataFixLiquidation.inputUSDTFix = null;
+        this.dataFixLiquidation.leverageFix = null;
 
-        this.dataFixStopLoss.dataCloseTP = null;
+        // chốt trước khi chuyển phase
+        this.upsertFixStopLoss(false, EStatusFixStopLoss.FAILED);
+        this.logWorker.info("➡️ Next phase 🤷 Reset All Fix StopLoss");
+        this.dataFixStopLoss.dataStopLossShouldFix = null;
         this.dataFixStopLoss.dataOrderOpenFixStopLoss = null;
-
-        this.upsertFixLiquidation();
-        this.upsertFixStopLoss();
+        this.dataFixStopLoss.dataCloseTP = null;
+        this.dataFixStopLoss.startTimeSec = null;
+        this.dataFixStopLoss.stepFixStopLoss = 0;
+        this.dataFixStopLoss.listDataFixStopLoss = [];
+        this.sendListDataFixStopLoss();
+        this.dataFixStopLoss.inputUSDTFix = null;
+        this.dataFixStopLoss.leverageFix = null;
 
         if (this.takeProfitAccount) {
             this.takeProfitAccount.roi = 0;
@@ -2204,6 +2196,7 @@ class Bot {
         }
 
         const itemDataStopLossShouldFix = this.dataFixStopLoss.listDataFixStopLoss.shift();
+        this.sendListDataFixStopLoss();
         // this.logWorker.info(`🤷 itemDataStopLossShouldFix`, itemDataStopLossShouldFix?.contract);
 
         if (!itemDataStopLossShouldFix) {
@@ -2211,7 +2204,10 @@ class Bot {
             return;
         }
 
-        this.dataFixStopLoss.dataStopLossShouldFix = itemDataStopLossShouldFix;
+        this.dataFixStopLoss.dataStopLossShouldFix = {
+            contract: itemDataStopLossShouldFix.contract,
+            open_time: itemDataStopLossShouldFix.open_time,
+        };
         this.dataFixStopLoss.startTimeSec = this.toUnixSeconds(itemDataStopLossShouldFix.open_time);
 
         this.upsertFixStopLoss();
@@ -2261,7 +2257,12 @@ class Bot {
             if (!ok) return false;
             const res = await this.openEntry(payload, `🤷 Martingale StopLoss step ${step}`);
 
-            this.dataFixStopLoss.dataOrderOpenFixStopLoss = res;
+            this.dataFixStopLoss.dataOrderOpenFixStopLoss = {
+                contract: res.contract,
+                create_time: res.create_time,
+                fill_price: res.fill_price,
+                price: res.price,
+            };
 
             this.upsertFixStopLoss();
 

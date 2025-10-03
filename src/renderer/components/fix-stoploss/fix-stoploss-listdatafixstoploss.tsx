@@ -1,10 +1,11 @@
+import { TDataFixStopLoss } from "@/types/fix-stoploss.type";
 import { TPosition } from "@/types/position.type";
 import { TWorkerData } from "@/types/worker.type";
 import { Badge, Group, Paper, Text } from "@mantine/core";
 import { useLayoutEffect, useState } from "react";
 
 type TProps = {
-    listDataFixStopLossInit: TPosition[];
+    listDataFixStopLossInit: TDataFixStopLoss["listDataFixStopLoss"];
 };
 
 export default function FixStoplossListdatafixstoploss({ listDataFixStopLossInit }: TProps) {
@@ -23,7 +24,7 @@ export default function FixStoplossListdatafixstoploss({ listDataFixStopLossInit
             {listDataFixStopLoss.map((item, i) => {
                 return (
                     <Paper key={i} withBorder radius="md" p="sm">
-                        <Group align="center" gap={10} mb={6} wrap="nowrap">
+                        <Group align="center" gap={10} wrap="nowrap">
                             <Badge variant="light" size="xs">
                                 #{i}
                             </Badge>

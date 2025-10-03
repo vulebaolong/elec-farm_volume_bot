@@ -1,7 +1,3 @@
-import { THistoryAggregate } from "./bot.type";
-import { TOrderOpen } from "./order.type";
-import { TPosition } from "./position.type";
-
 export type MartingaleOption = {
     inputUSDT: number;
     leverage: number;
@@ -11,16 +7,6 @@ export type MartingaleConfig = {
     initialInputUSDT: number;
     initialLeverage: number;
     options: MartingaleOption[];
-};
-
-export type TDataFixLiquidation = {
-    dataLiquidationShouldFix: THistoryAggregate | null;
-    dataOrderOpenFixLiquidation: TOrderOpen | null;
-    dataCloseTP: TOrderOpen | null;
-    startTimeSec: number | null;
-    stepFixLiquidation: number;
-    inputUSDTFix: number | null;
-    leverageFix: number | null;
 };
 
 export type MartingaleSummary = {
@@ -40,15 +26,4 @@ export type MartingaleSummary = {
     tpCreateTime: number | null;
 
     updatedAt: number; // ms
-};
-
-export type TDataFixStopLoss = {
-    dataStopLossShouldFix: TPosition | null;
-    dataOrderOpenFixStopLoss: TOrderOpen | null;
-    dataCloseTP: TOrderOpen | null;
-    startTimeSec: number | null;
-    stepFixStopLoss: number;
-    inputUSDTFix: number | null;
-    leverageFix: number | null;
-    listDataFixStopLoss: TPosition[];
 };
