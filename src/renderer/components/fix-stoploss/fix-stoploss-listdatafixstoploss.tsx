@@ -11,7 +11,9 @@ export default function FixStoplossListdatafixstoploss({ listDataFixStopLossInit
     const [listDataFixStopLoss, setListDataFixStopLoss] = useState(listDataFixStopLossInit);
 
     useLayoutEffect(() => {
-        const offListDataFixStopLoss = window.electron.ipcRenderer.on("bot:listDataFixStopLoss", (data: TWorkerData<TPosition[]>) => {});
+        const offListDataFixStopLoss = window.electron.ipcRenderer.on("bot:listDataFixStopLoss", (data: TWorkerData<TPosition[]>) => {
+            setListDataFixStopLoss(data.payload);
+        });
         return () => {
             offListDataFixStopLoss();
         };
