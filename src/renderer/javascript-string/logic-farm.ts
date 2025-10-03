@@ -567,27 +567,15 @@ export type TClickClearAll = {
 
     buttonTabOpenOrder: string;
     buttonCloseAllOpenOrder: string;
-
-    isClearAllPosition: boolean;
-    isClearAllOrderOpen: boolean;
 };
 
 export const createCodeStringClickClearAll = (payload: TClickClearAll) => {
     return `
 (async () => {
-  const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const shouldClearAllPosition = ${payload.isClearAllPosition ? "true" : "false"};
-  const shouldClearAllOpenOrder = ${payload.isClearAllOrderOpen ? "true" : "false"};
-
-  try {
-      // Nếu không có yêu cầu nào, thoát sớm
-      if (!shouldClearAllPosition && !shouldClearAllOpenOrder) {
-        return { ok: true, data: true, error: null };
-      }
-
-      // 1) Clear All Position (nếu được yêu cầu)
-      if (shouldClearAllPosition) {
+    try {
+        // 1) Clear All Position
         const buttonTabPosition = document.querySelector("${payload.buttonTabPosition}");
         if (!buttonTabPosition) throw new Error("buttonTabPosition not found");
         buttonTabPosition.click();
@@ -595,14 +583,11 @@ export const createCodeStringClickClearAll = (payload: TClickClearAll) => {
         await wait(120);
 
         const buttonCloseAllPosition = document.querySelector("${payload.buttonCloseAllPosition}");
-        if (!buttonCloseAllPosition) throw new Error("buttonCloseAllPosition not found");
-        buttonCloseAllPosition.click();
+        if (buttonCloseAllPosition) buttonCloseAllPosition.click();
 
         await wait(120);
-      }
 
-      // 2) Clear All Open Orders (nếu được yêu cầu)
-      if (shouldClearAllOpenOrder) {
+        // 2) Clear All Open Orders
         const buttonTabOpenOrder = document.querySelector("${payload.buttonTabOpenOrder}");
         if (!buttonTabOpenOrder) throw new Error("buttonTabOpenOrder not found");
         buttonTabOpenOrder.click();
@@ -610,17 +595,15 @@ export const createCodeStringClickClearAll = (payload: TClickClearAll) => {
         await wait(120);
 
         const buttonCloseAllOpenOrder = document.querySelector("${payload.buttonCloseAllOpenOrder}");
-        if (!buttonCloseAllOpenOrder) throw new Error("buttonCloseAllOpenOrder not found");
-        buttonCloseAllOpenOrder.click();
+        if (buttonCloseAllOpenOrder) buttonCloseAllOpenOrder.click();
 
         await wait(120);
-      }
 
-      // Thành công: đã thực thi ít nhất một yêu cầu
-      return { ok: true, data: true, error: null };
-  } catch (error) {
-      return { ok: false, data: null, error: String(error && error.message ? error.message : error) };
-  }
+        return { ok: true, data: true, error: null };
+    } catch (error) {
+        return { ok: false, data: null, error: String(error && error.message ? error.message : error) };
+    }
 })();
 `;
 };
+

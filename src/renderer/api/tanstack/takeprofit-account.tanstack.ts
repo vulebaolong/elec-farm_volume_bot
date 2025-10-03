@@ -19,7 +19,9 @@ export const useGetTakeProfitAccount = (payload: TQuery) => {
             window.electron?.ipcRenderer.sendMessage("bot:takeProfitAccount", data.data.items[0]);
 
             // console.log({ useGetTakeProfitAccount: data });
-            
+
+            // await wait(100000);
+
             return data.data;
         },
     });

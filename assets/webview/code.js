@@ -36,7 +36,7 @@ window.log = [];
     };
     const handlePayloadModification = (data, dataModify) => {
         if (data?.order_type === "market") {
-            console.info({ "Lệnh thanh lý market bỏ qua": data });
+            // console.info({ "Lệnh thanh lý market bỏ qua": data });
             return data;
         }
 

@@ -77,4 +77,8 @@ export const ENDPOINT = {
         UPSERT: "fix-liquidation/upsert",
         GET: "fix-liquidation",
     },
+    FIX_STOPLOSS: {
+        UPSERT: "fix-stoploss/upsert",
+        GET: "fix-stoploss",
+    },
 };

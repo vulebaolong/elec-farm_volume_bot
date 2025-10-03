@@ -330,6 +330,9 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
             if (msg?.type === "bot:upsertFixLiquidation") {
                 mainWindow?.webContents.send("bot:upsertFixLiquidation", msg);
             }
+            if (msg?.type === "bot:upsertFixStopLoss") {
+                mainWindow?.webContents.send("bot:upsertFixStopLoss", msg);
+            }
             if (msg?.type === "bot:clickClearAll") {
                 if (!gateView) return;
 
@@ -598,7 +601,7 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
 
 function handlePayloadModification(data: any, dataModify: any) {
     if (data?.order_type === "market") {
-        console.info({ "Lệnh thanh lý market bỏ qua": data });
+        // console.info({ "Lệnh thanh lý market bỏ qua": data });
         return data;
     }
 

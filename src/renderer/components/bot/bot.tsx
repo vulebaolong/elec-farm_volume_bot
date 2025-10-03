@@ -6,6 +6,7 @@ import RateCounter from "../rate-counter/rate-counter";
 import TakeprofitAccount from "../takeprofit-account/takeprofit-account";
 import { PageTitle } from "../title-page/title-page";
 import Controll from "./controll";
+import FixStopLoss from "../fix-stoploss/fix-stoploss";
 
 export default function Bot() {
     return (
@@ -17,6 +18,7 @@ export default function Bot() {
                 <Controll />
                 <RateCounter />
                 <FixLiquidation />
+                <FixStopLoss />
                 <Log />
                 <PassiveSticky />
                 <TakeprofitAccount />

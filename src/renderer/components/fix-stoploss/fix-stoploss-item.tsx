@@ -1,8 +1,8 @@
 import { formatLocalTime } from "@/helpers/function.helper";
-import { TFixLiquidationInDB } from "@/types/fix-liquidation.type";
+import { TFixStopLossInDB } from "@/types/fix-stoploss.type";
 import { Badge, Divider, Group, Paper, Stack, Text } from "@mantine/core";
-import FixLiquidationRow from "./fix-liquidation-row";
-import FixLiquidationStatus from "./fix-liquidation-status";
+import FixStopLossRow from "./fix-stoploss-row";
+import FixStopLossStatus from "./fix-stoploss-status";
 
 function firstNonEmptyPrice(...values: (string | number | undefined)[]): string {
     for (const v of values) {
@@ -14,23 +14,23 @@ function firstNonEmptyPrice(...values: (string | number | undefined)[]): string 
 }
 
 type TProps = {
-    item: TFixLiquidationInDB;
+    item: TFixStopLossInDB;
 };
 
-export default function FixLiquidationItem({ item }: TProps) {
+export default function FixStopLossItem({ item }: TProps) {
     // const optionsMartin = useAppSelector((state) => state.user.info?.SettingUsers.martingale?.options);
     const isDone = !!item?.isDone;
     const dataFix = item?.data;
 
     // Target (chỉ dùng cho header)
-    const targetContract = dataFix?.dataLiquidationShouldFix?.contract ?? "Idle";
-    const targetStep = dataFix?.stepFixLiquidation ?? 0;
+    const targetContract = dataFix?.dataStopLossShouldFix?.contract ?? "Idle";
+    const targetStep = dataFix?.stepFixStopLoss ?? 0;
     const targetInputUSDT = dataFix.inputUSDTFix ?? "-";
     const targetLeverage = dataFix.leverageFix ?? "-";
-    const targetLiqTime = dataFix.dataLiquidationShouldFix?.create_time ? formatLocalTime(dataFix.dataLiquidationShouldFix?.create_time) : "-";
+    const targetLiqTime = dataFix.dataStopLossShouldFix?.open_time ? formatLocalTime(dataFix.dataStopLossShouldFix?.open_time) : "-";
 
     // Fix
-    const fix = dataFix?.dataOrderOpenFixLiquidation;
+    const fix = dataFix?.dataOrderOpenFixStopLoss;
     const fixContract = fix?.contract ?? "-";
     const fixPrice = firstNonEmptyPrice(fix?.price, fix?.fill_price);
     const fixCreatedAt = fix?.create_time ? formatLocalTime(fix?.create_time) : "-";
@@ -39,7 +39,7 @@ export default function FixLiquidationItem({ item }: TProps) {
     const tp = dataFix?.dataCloseTP;
     const tpContract = tp?.contract ?? "-";
     const tpPrice = firstNonEmptyPrice(tp?.price, tp?.fill_price);
-    const tpCreatedAt = tp?.create_time ? formatLocalTime(tp?.create_time) : "-";
+    const tpCreatedAt =tp?.create_time ? formatLocalTime(tp?.create_time) : "-";
 
     return (
         <Paper withBorder radius="md" p="sm">
@@ -54,7 +54,7 @@ export default function FixLiquidationItem({ item }: TProps) {
                         <Text fz={12} fw={600} className="truncate">
                             {targetContract}
                         </Text>
-                        <FixLiquidationStatus item={item} />
+                        <FixStopLossStatus item={item} />
                     </Group>
 
                     <Group gap={10} wrap="wrap" className="flex-1">
@@ -81,7 +81,7 @@ export default function FixLiquidationItem({ item }: TProps) {
 
             {/* Body: CHỈ còn Fix và TP Fix */}
             <Stack gap={4}>
-                <FixLiquidationRow
+                <FixStopLossRow
                     label="Fix"
                     items={[
                         ["Contract", fixContract],
@@ -89,7 +89,7 @@ export default function FixLiquidationItem({ item }: TProps) {
                         ["CreatedAt", fixCreatedAt],
                     ]}
                 />
-                <FixLiquidationRow
+                <FixStopLossRow
                     label="TP Fix"
                     items={[
                         ["Contract", tpContract],

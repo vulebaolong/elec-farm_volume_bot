@@ -31,7 +31,6 @@ export const useGetFixLiquidation = (query: TQuery) => {
             const queryString = buildQueryString(query);
             const { data } = await api.get<TRes<TPaginationRes<TFixLiquidationInDB>>>(`${ENDPOINT.FIX_LIQUIDATION.GET}?${queryString}`);
             console.log({ useGetFixLiquidation: data });
-            window.electron?.ipcRenderer.sendMessage("bot:fixLiquidationInDB", data.data.items[0]);
             return data.data;
         },
     });

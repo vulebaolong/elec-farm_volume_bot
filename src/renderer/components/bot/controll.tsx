@@ -55,27 +55,32 @@ export default function Controll({}: TProps) {
             }
         });
 
-        const offBotStart = window.electron.ipcRenderer.on("bot:start", (dataWorker: TWorkerData<{ isStart: boolean }>) => {
-            if (!accountRef.current) {
-                toast.error("Please save account first");
-                return;
-            }
-            const payload: TCreateTakeprofitAccountReq = {
-                newTotal: accountRef.current.total,
-                oldTotal: accountRef.current.total,
-                source: "gate",
-                uid: accountRef.current.user,
-            };
+        const offBotStart = window.electron.ipcRenderer.on(
+            "bot:start",
+            async (dataWorker: TWorkerData<{ isStart: boolean; isNextPhase: boolean }>) => {
+                if (dataWorker.payload.isNextPhase) {
+                    if (!accountRef.current) {
+                        toast.error("Please save account first");
+                        return;
+                    }
 
-            console.log({ payload });
+                    const payload: TCreateTakeprofitAccountReq = {
+                        newTotal: accountRef.current.total,
+                        oldTotal: accountRef.current.total,
+                        source: "gate",
+                        uid: accountRef.current.user,
+                    };
 
-            createTakeProfitAccount.mutate(payload, {
-                onSuccess: (data) => {
-                    takeprofitAccountNewRef.current = data.data;
-                    dispatch(SET_IS_START(dataWorker.payload.isStart));
-                },
-            });
-        });
+                    await createTakeProfitAccount.mutateAsync(payload, {
+                        onSuccess: (data) => {
+                            takeprofitAccountNewRef.current = data.data;
+                        },
+                    });
+                }
+
+                dispatch(SET_IS_START(dataWorker.payload.isStart));
+            },
+        );
 
         const offBotStop = window.electron.ipcRenderer.on("bot:stop", (data: TWorkerData<{ isStart: boolean }>) => {
             dispatch(SET_IS_START(data.payload.isStart));
@@ -95,7 +100,7 @@ export default function Controll({}: TProps) {
     }, [isRunning, isStart, dispatch]);
 
     return (
-        <div className="sticky top-0 z-[1]">
+        <div className="sticky top-0 z-[99]">
             <Card>
                 <CardHeader className="flex items-center gap-2">
                     <div className="flex gap-2 items-center">

@@ -1,4 +1,5 @@
 import { useGetTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
+import { formatLocalTime } from "@/helpers/function.helper";
 import { TTakeprofitAccount } from "@/types/takeprofit-account.type";
 import { ActionIcon, Badge, Group, Loader, Paper, Table, Text } from "@mantine/core";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -58,7 +59,7 @@ export default function TakeprofitAccount() {
                     </Table.Td>
                     <Table.Td>
                         <Text size="xs" c="dimmed">
-                            {new Date(item.createdAt).toLocaleString()}
+                            {formatLocalTime(item.createdAt)}
                         </Text>
                     </Table.Td>
                     <Table.Td>
@@ -85,7 +86,10 @@ export default function TakeprofitAccount() {
     return (
         <Paper radius="md" withBorder p="md">
             <Group justify="space-between" align="center" mb="sm">
-                <Text fw={600}>Take Profit Account</Text>
+                <Group>
+                    <Text fw={600}>Take Profit Account</Text>
+                    {getTakeProfitAccount.isLoading ? <Loader size="xs" /> : null}
+                </Group>
 
                 <Group gap="xs">
                     <ActionIcon
@@ -107,35 +111,29 @@ export default function TakeprofitAccount() {
                     >
                         <ChevronRight size={16} />
                     </ActionIcon>
-                    {getTakeProfitAccount.isLoading ? <Loader size="xs" /> : null}
                 </Group>
             </Group>
 
-            <Table highlightOnHover stickyHeader withColumnBorders verticalSpacing="xs" horizontalSpacing="md">
-                <Table.Thead>
-                    <Table.Tr>
-                        <Table.Th>Phase</Table.Th>
-                        <Table.Th>Time</Table.Th>
-                        <Table.Th>Old total</Table.Th>
-                        <Table.Th>New total</Table.Th>
-                        <Table.Th>PnL</Table.Th>
-                        <Table.Th>ROI</Table.Th>
-                    </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                    {rows.length > 0 ? (
-                        rows
-                    ) : (
+            <div className="relative min-h-[455px]">
+                <Table highlightOnHover stickyHeader withColumnBorders verticalSpacing="xs" horizontalSpacing="md">
+                    <Table.Thead>
                         <Table.Tr>
-                            <Table.Td colSpan={6}>
-                                <Text size="sm" c="dimmed">
-                                    {getTakeProfitAccount.isLoading ? "Loading..." : "No data"}
-                                </Text>
-                            </Table.Td>
+                            <Table.Th>Phase</Table.Th>
+                            <Table.Th>Time</Table.Th>
+                            <Table.Th>Old total</Table.Th>
+                            <Table.Th>New total</Table.Th>
+                            <Table.Th>PnL</Table.Th>
+                            <Table.Th>ROI</Table.Th>
                         </Table.Tr>
-                    )}
-                </Table.Tbody>
-            </Table>
+                    </Table.Thead>
+                    <Table.Tbody>{rows.length > 0 && rows}</Table.Tbody>
+                </Table>
+                <div className="absolute flex items-center justify-center top-0 left-0 w-full h-full z-10">
+                    <Text size="sm" c="dimmed">
+                        {getTakeProfitAccount.isLoading ? "Loading..." : "No data"}
+                    </Text>
+                </div>
+            </div>
 
             <Text size="xs" c="dimmed" mt="xs">
                 ROI = (New - Old) / Old x 100%

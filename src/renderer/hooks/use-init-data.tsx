@@ -12,6 +12,8 @@ import { TWhiteList } from "@/types/white-list.type";
 import { useEffect, useRef } from "react";
 import { useSocket } from "./socket.hook";
 import { useGetFixLiquidation } from "@/api/tanstack/fix-liquidation.tanstack";
+import { TDataInitBot } from "@/types/bot.type";
+import { useGetFixStopLoss } from "@/api/tanstack/fix-stoploss.tanstack";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
@@ -24,6 +26,11 @@ export const useInitData = () => {
     const getMyBlackList = useGetMyBlackList();
 
     const getFixLiquidation = useGetFixLiquidation({
+        pagination: { page: 1, pageSize: 10 },
+        filters: {},
+        sort: { sortBy: `createdAt`, isDesc: true },
+    });
+    const getFixStopLoss = useGetFixStopLoss({
         pagination: { page: 1, pageSize: 10 },
         filters: {},
         sort: { sortBy: `createdAt`, isDesc: true },
@@ -80,14 +87,19 @@ export const useInitData = () => {
     }, [socket]);
 
     useEffect(() => {
-        if (!settingUser || !getUiSelector.data || !getMyBlackList.data || !getFixLiquidation.data) return;
+        if (!settingUser) return;
+        if (!getUiSelector.data) return;
+        if (!getMyBlackList.data) return;
+        if (!getFixLiquidation.data) return;
+        if (!getFixStopLoss.data) return;
 
         if (countRef.current === 0) {
-            const dataWorkerInit = {
+            const dataWorkerInit: Omit<TDataInitBot, "parentPort"> = {
                 settingUser: settingUser,
                 uiSelector: getUiSelector.data,
                 blackList: getMyBlackList.data.map((item) => item.symbol),
                 fixLiquidationInDB: getFixLiquidation.data.items[0],
+                fixStopLossInDB: getFixStopLoss.data.items[0],
             };
             window.electron?.ipcRenderer.sendMessage("bot:init", dataWorkerInit);
             countRef.current = 1;
