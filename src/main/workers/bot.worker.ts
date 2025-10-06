@@ -147,6 +147,8 @@ class Bot {
         this.settingUser = dataInitBot.settingUser;
         this.uiSelector = dataInitBot.uiSelector;
         this.blackList = dataInitBot.blackList;
+
+        // Fix Liquidation
         this.dataFixLiquidation = {
             dataLiquidationShouldFix: dataInitBot.fixLiquidationInDB?.data.dataLiquidationShouldFix || null,
             dataOrderOpenFixLiquidation: dataInitBot.fixLiquidationInDB?.data.dataOrderOpenFixLiquidation || null,
@@ -158,15 +160,28 @@ class Bot {
         };
         this.upsertFixLiquidation();
 
-        this.dataFixStopLoss = {
-            dataStopLossShouldFix: dataInitBot.fixStopLossInDB?.data.dataStopLossShouldFix || null,
-            dataOrderOpenFixStopLoss: dataInitBot.fixStopLossInDB?.data.dataOrderOpenFixStopLoss || null,
-            dataCloseTP: dataInitBot.fixStopLossInDB?.data.dataCloseTP || null,
-            startTimeSec: dataInitBot.fixStopLossInDB?.data.startTimeSec || null,
-            stepFixStopLoss: dataInitBot.fixStopLossInDB?.data.stepFixStopLoss || 0,
-            inputUSDTFix: dataInitBot.fixStopLossInDB?.data.inputUSDTFix || null,
-            leverageFix: dataInitBot.fixStopLossInDB?.data.leverageFix || null,
-        };
+        // Fix Stop Loss
+        if (dataInitBot.fixStopLossInDB && dataInitBot.fixStopLossInDB.isDone === false) {
+            this.dataFixStopLoss = {
+                dataStopLossShouldFix: dataInitBot.fixStopLossInDB.data.dataStopLossShouldFix,
+                dataOrderOpenFixStopLoss: dataInitBot.fixStopLossInDB.data.dataOrderOpenFixStopLoss,
+                dataCloseTP: dataInitBot.fixStopLossInDB.data.dataCloseTP,
+                startTimeSec: dataInitBot.fixStopLossInDB.data.startTimeSec,
+                stepFixStopLoss: dataInitBot.fixStopLossInDB.data.stepFixStopLoss,
+                inputUSDTFix: dataInitBot.fixStopLossInDB.data.inputUSDTFix,
+                leverageFix: dataInitBot.fixStopLossInDB.data.leverageFix,
+            };
+        } else {
+            this.dataFixStopLoss = {
+                dataStopLossShouldFix: null,
+                dataOrderOpenFixStopLoss: null,
+                dataCloseTP: null,
+                startTimeSec: null,
+                stepFixStopLoss: 0,
+                inputUSDTFix: null,
+                leverageFix: null,
+            };
+        }
         this.upsertFixStopLoss();
 
         this.fixStopLossQueue = dataInitBot.fixStopLossQueueInDB?.queue || [];
@@ -403,8 +418,8 @@ class Bot {
         // console.log("startTimeSec", this.startTimeSec);
         // console.log("stepFixLiquidation", this.stepFixLiquidation);
         // console.log("dataFixLiquidation", this.dataFixLiquidation);
-        // console.log("dataFixStopLoss", this.dataFixStopLoss);
-        // console.log("fixStopLossQueue", this.fixStopLossQueue);
+        console.log("dataFixStopLoss", this.dataFixStopLoss);
+        console.log("fixStopLossQueue", this.fixStopLossQueue);
     }
 
     private heartbeat() {
@@ -2597,3 +2612,23 @@ class SlidingRateCounter {
 // https://www.gate.com/vi/announcements/article/33995
 // "https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open"
 // "https://www.gate.com/apiw/v2/futures/usdt/positions"
+
+const a = [
+    { contract: "STRK/USDT", open_time: 1759749620 },
+    { contract: "STRK/USDT", open_time: 1759749764 },
+    { contract: "HANA/USDT", open_time: 1759749861 },
+    { contract: "DRIFT/USDT", open_time: 1759749559 },
+    { contract: "ETHFI/USDT", open_time: 1759749895 },
+    { contract: "DRIFT/USDT", open_time: 1759750310 },
+    { contract: "FORM/USDT", open_time: 1759750503 },
+    { contract: "FORM/USDT", open_time: 1759750699 },
+    { contract: "FORM/USDT", open_time: 1759750844 },
+    { contract: "FORM/USDT", open_time: 1759750876 },
+    { contract: "DRIFT/USDT", open_time: 1759750555 },
+    { contract: "FORM/USDT", open_time: 1759752115 },
+    { contract: "ENA/USDT", open_time: 1759751998 },
+    { contract: "CELO/USDT", open_time: 1759752252 },
+    { contract: "CELO/USDT", open_time: 1759752386 },
+    { contract: "KAITO/USDT", open_time: 1759751231 },
+    { contract: "MOODENG/USDT", open_time: 1759752524 },
+];

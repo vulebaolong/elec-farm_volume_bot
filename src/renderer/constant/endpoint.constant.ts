@@ -84,7 +84,7 @@ export const ENDPOINT = {
     },
     FIX_STOPLOSS_QUEUE: {
         UPSERT: "fix-stoploss-queue/upsert",
-        GET_BY_USERID: "fix-stoploss-queue/by-userid",
+        GET_ONE: "fix-stoploss-queue/one",
     },
     FIX_STOPLOSS_HISTORIES: {
         CREATE: "fix-stoploss-histories",

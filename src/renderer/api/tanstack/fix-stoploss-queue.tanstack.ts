@@ -32,10 +32,10 @@ export const useGetFixStopLossQueueByUserId = () => {
     return useQuery({
         queryKey: ["get-fix-stoploss-queue-by-userid", userId],
         queryFn: async () => {
-            if (!userId) return null;
-            const { data } = await api.get<TRes<TFixStopLossQueueInDB>>(`${ENDPOINT.FIX_STOPLOSS_QUEUE.GET_BY_USERID}/${userId}`);
+            const { data } = await api.get<TRes<TFixStopLossQueueInDB>>(`${ENDPOINT.FIX_STOPLOSS_QUEUE.GET_ONE}`);
             console.log({ useGetFixStopLossQueueByUserId: data });
             return data.data;
         },
+        enabled: !!userId,
     });
 };
