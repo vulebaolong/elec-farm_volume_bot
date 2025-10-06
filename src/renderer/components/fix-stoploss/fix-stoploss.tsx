@@ -1,6 +1,6 @@
 import { useGetFixStopLoss, useUpsertFixStopLoss } from "@/api/tanstack/fix-stoploss.tanstack";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TUpsertFixStopLossReq } from "@/types/fix-stoploss.type";
+import { TDataFixStopLossHistoriesReq, TUpsertFixStopLossReq } from "@/types/fix-stoploss.type";
 import { TWorkerData } from "@/types/worker.type";
 import { ActionIcon, Badge, Group, Pagination, Paper, Skeleton, Stack, Text } from "@mantine/core";
 import { RefreshCcw } from "lucide-react";
@@ -8,12 +8,14 @@ import { useEffect, useMemo, useState } from "react";
 import FixStopLossItem from "./fix-stoploss-item";
 import { cn } from "@/lib/utils";
 import FixStoplossListdatafixstoploss from "./fix-stoploss-listdatafixstoploss";
+import { useCreateFixStopLossHistories } from "@/api/tanstack/fix-stoploss-histories.tanstack";
 
 export default function FixStopLoss() {
     const [page, setPage] = useState(1);
     const pageSize = 10;
 
     const upsertStopLoss = useUpsertFixStopLoss();
+    const createFixStopLossHistories = useCreateFixStopLossHistories()
 
     const getFixStopLoss = useGetFixStopLoss({
         pagination: { page, pageSize },
@@ -25,7 +27,15 @@ export default function FixStopLoss() {
         const offFixStopLoss = window.electron.ipcRenderer.on("bot:upsertFixStopLoss", (data: TWorkerData<TUpsertFixStopLossReq>) => {
             upsertStopLoss.mutate(data.payload);
         });
-        return () => offFixStopLoss?.();
+
+        const offCreateFixStopLossHistories = window.electron.ipcRenderer.on("bot:createFixStopLossHistories", (data: TWorkerData<TDataFixStopLossHistoriesReq>) => {
+            createFixStopLossHistories.mutate(data.payload);
+        });
+
+        return () => {
+            offFixStopLoss?.()
+            offCreateFixStopLossHistories?.()
+        };
     }, [upsertStopLoss]);
 
     const isLoading = getFixStopLoss.isLoading;
@@ -107,8 +117,8 @@ export default function FixStopLoss() {
                     </Stack>
                 </Card>
                 <Card className="flex-1 p-0">
-                    {getFixStopLoss.data?.items?.[0]?.data?.listDataFixStopLoss && (
-                        <FixStoplossListdatafixstoploss listDataFixStopLossInit={getFixStopLoss.data?.items?.[0]?.data?.listDataFixStopLoss || []} />
+                    {getFixStopLoss.data?.items?.[0]?.data?.fixStopLossQueue && (
+                        <FixStoplossListdatafixstoploss fixStopLossQueueInit={getFixStopLoss.data?.items?.[0]?.data?.fixStopLossQueue || []} />
                     )}
                 </Card>
             </CardContent>

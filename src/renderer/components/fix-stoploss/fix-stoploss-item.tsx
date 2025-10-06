@@ -1,6 +1,7 @@
 import { formatLocalTime } from "@/helpers/function.helper";
 import { TFixStopLossInDB } from "@/types/fix-stoploss.type";
-import { Badge, Divider, Group, Paper, Stack, Text } from "@mantine/core";
+import { Accordion, Badge, Divider, Group, Paper, Stack, Text } from "@mantine/core";
+import { Fragment } from "react/jsx-runtime";
 import FixStopLossRow from "./fix-stoploss-row";
 import FixStopLossStatus from "./fix-stoploss-status";
 
@@ -18,86 +19,168 @@ type TProps = {
 };
 
 export default function FixStopLossItem({ item }: TProps) {
-    // const optionsMartin = useAppSelector((state) => state.user.info?.SettingUsers.martingale?.options);
     const isDone = !!item?.isDone;
-    const dataFix = item?.data;
+    const fixPayload = item?.data;
 
-    // Target (chỉ dùng cho header)
-    const targetContract = dataFix?.dataStopLossShouldFix?.contract ?? "Idle";
-    const targetStep = dataFix?.stepFixStopLoss ?? 0;
-    const targetInputUSDT = dataFix.inputUSDTFix ?? "-";
-    const targetLeverage = dataFix.leverageFix ?? "-";
-    const targetLiqTime = dataFix.dataStopLossShouldFix?.open_time ? formatLocalTime(dataFix.dataStopLossShouldFix?.open_time) : "-";
+    // Target (đang xử lý)
+    const targetContract = fixPayload?.dataStopLossShouldFix?.contract ?? "Idle";
+    const targetStep = fixPayload?.stepFixStopLoss ?? 0;
+    const targetInputUSDT = fixPayload?.inputUSDTFix ?? "-";
+    const targetLeverage = fixPayload?.leverageFix ?? "-";
+    // const targetLiqTime = fixPayload?.dataStopLossShouldFix?.open_time ? formatLocalTime(fixPayload.dataStopLossShouldFix.open_time) : "-";
 
-    // Fix
-    const fix = dataFix?.dataOrderOpenFixStopLoss;
-    const fixContract = fix?.contract ?? "-";
-    const fixPrice = firstNonEmptyPrice(fix?.price, fix?.fill_price);
-    const fixCreatedAt = fix?.create_time ? formatLocalTime(fix?.create_time) : "-";
+    // Order “Fix” hiện tại
+    const currentFixOrder = fixPayload?.dataOrderOpenFixStopLoss;
+    const currentFixContract = currentFixOrder?.contract ?? "-";
+    const currentFixPrice = firstNonEmptyPrice(currentFixOrder?.price, currentFixOrder?.fill_price);
+    const currentFixCreatedAt = currentFixOrder?.create_time ? formatLocalTime(currentFixOrder.create_time) : "-";
 
-    // TP Fix
-    const tp = dataFix?.dataCloseTP;
-    const tpContract = tp?.contract ?? "-";
-    const tpPrice = firstNonEmptyPrice(tp?.price, tp?.fill_price);
-    const tpCreatedAt =tp?.create_time ? formatLocalTime(tp?.create_time) : "-";
+    // Order “TP Fix” hiện tại
+    const currentTpOrder = fixPayload?.dataCloseTP;
+    const currentTpContract = currentTpOrder?.contract ?? "-";
+    const currentTpPrice = firstNonEmptyPrice(currentTpOrder?.price, currentTpOrder?.fill_price);
+    const currentTpCreatedAt = currentTpOrder?.create_time ? formatLocalTime(currentTpOrder.create_time) : "-";
+
+    const histories = item.FixStopLossHistories ?? [];
 
     return (
-        <Paper withBorder radius="md" p="sm">
-            {/* Header trái: #id + 2 dòng + status (không có cột phải) */}
-            <Group align="center" gap={10} mb={6} wrap="nowrap">
-                <Badge variant="light" size="xs">
-                    #{item.id}
-                </Badge>
+        <Accordion variant="separated" chevronPosition="right">
+            <Accordion.Item value={`fix-stoploss-${item.id}`}>
+                {/* HEADER: click để mở/đóng */}
+                <Accordion.Control>
+                    <Group align="center" gap={10} wrap="nowrap">
+                        <Badge variant="light" size="xs">
+                            #{item.id}
+                        </Badge>
 
-                <div className="flex flex-col leading-tight min-w-0">
-                    <Group gap={6} align="center" wrap="nowrap" className="min-w-0">
-                        <Text fz={12} fw={600} className="truncate">
-                            {targetContract}
-                        </Text>
-                        <FixStopLossStatus item={item} />
+                        <Group gap={6} align="center" wrap="nowrap" className="min-w-0 flex-1">
+                            <Text fz={12} fw={600} className="truncate">
+                                {targetContract}
+                            </Text>
+                            <FixStopLossStatus item={item} />
+                        </Group>
                     </Group>
+                </Accordion.Control>
 
-                    <Group gap={10} wrap="wrap" className="flex-1">
-                        {[
-                            ["Step", targetStep],
-                            ["Input", targetInputUSDT],
-                            ["Leverage", targetLeverage],
-                            ["LiqAt", targetLiqTime],
-                        ].map(([k, v]) => (
-                            <Group key={k} gap={6}>
-                                <Text fz={11} c="dimmed">
-                                    {k}:
-                                </Text>
-                                <Text fz={11} fw={500}>
-                                    {v}
-                                </Text>
+                {/* PANEL: Target (trên cùng, nền khác) + History */}
+                <Accordion.Panel>
+                    <Stack gap="xs">
+                        {/* Target block – nổi bật nhẹ */}
+                        <Paper withBorder radius="md" p="sm" className="bg-[var(--mantine-color-gray-0)] dark:bg-[var(--mantine-color-dark-6)]">
+                            <Text fz={11} fw={700} mb={6}>
+                                Target
+                            </Text>
+
+                            {/* Thông tin Target */}
+                            <Group gap={10} wrap="wrap" className="flex-1">
+                                {[
+                                    ["Step", targetStep + 1],
+                                    ["Input", targetInputUSDT],
+                                    ["Leverage", targetLeverage],
+                                ].map(([label, value]) => (
+                                    <Group key={String(label)} gap={6}>
+                                        <Text fz={11} c="dimmed">
+                                            {label}:
+                                        </Text>
+                                        <Text fz={11} fw={500}>
+                                            {String(value)}
+                                        </Text>
+                                    </Group>
+                                ))}
                             </Group>
-                        ))}
-                    </Group>
-                </div>
-            </Group>
 
-            <Divider my={6} />
+                            {/* Fix / TP Fix của Target hiện tại */}
+                            <Stack gap={4} mt={6}>
+                                <FixStopLossRow
+                                    label="Fix"
+                                    items={[
+                                        ["Contract", currentFixContract],
+                                        ["Price", currentFixPrice],
+                                        ["CreatedAt", currentFixCreatedAt],
+                                    ]}
+                                />
+                                <FixStopLossRow
+                                    label="TP Fix"
+                                    items={[
+                                        ["Contract", currentTpContract],
+                                        ["Price", currentTpPrice],
+                                        ["CreatedAt", currentTpCreatedAt],
+                                    ]}
+                                />
+                            </Stack>
+                        </Paper>
 
-            {/* Body: CHỈ còn Fix và TP Fix */}
-            <Stack gap={4}>
-                <FixStopLossRow
-                    label="Fix"
-                    items={[
-                        ["Contract", fixContract],
-                        ["Price", fixPrice],
-                        ["CreatedAt", fixCreatedAt],
-                    ]}
-                />
-                <FixStopLossRow
-                    label="TP Fix"
-                    items={[
-                        ["Contract", tpContract],
-                        ["Price", tpPrice],
-                        ["CreatedAt", tpCreatedAt],
-                    ]}
-                />
-            </Stack>
-        </Paper>
+                        {/* History */}
+                        {histories.length > 0 ? (
+                            <Stack gap="xs">
+                                <Divider my={2} />
+                                {histories.map((historyItem) => {
+                                    const historyFix = historyItem.data?.dataOrderOpenFixStopLoss;
+                                    const historyTp = historyItem.data?.dataCloseTP;
+
+                                    const historyFixContract = historyFix?.contract ?? "-";
+                                    const historyFixPrice = firstNonEmptyPrice(historyFix?.price, historyFix?.fill_price);
+                                    const historyFixCreatedAt = historyFix?.create_time ? formatLocalTime(historyFix.create_time) : "-";
+
+                                    const historyTpContract = historyTp?.contract ?? "-";
+                                    const historyTpPrice = firstNonEmptyPrice(historyTp?.price, historyTp?.fill_price);
+                                    const historyTpCreatedAt = historyTp?.create_time ? formatLocalTime(historyTp.create_time) : "-";
+
+                                    const historyStep = historyItem.data?.stepFixStopLoss ?? 0;
+                                    const historyInputUSDT = historyItem.data?.inputUSDTFix ?? "-";
+                                    const historyLeverage = historyItem.data?.leverageFix ?? "-";
+
+                                    return (
+                                        <Fragment key={historyItem.id}>
+                                            <Paper withBorder radius="md" p="sm">
+                                                <Group gap={10} wrap="wrap" className="flex-1" mb={6}>
+                                                    {[
+                                                        ["Step", historyStep + 1],
+                                                        ["Input", historyInputUSDT],
+                                                        ["Leverage", historyLeverage],
+                                                    ].map(([label, value]) => (
+                                                        <Group key={String(label)} gap={6}>
+                                                            <Text fz={11} c="dimmed">
+                                                                {label}:
+                                                            </Text>
+                                                            <Text fz={11} fw={500}>
+                                                                {String(value)}
+                                                            </Text>
+                                                        </Group>
+                                                    ))}
+                                                </Group>
+
+                                                <Stack gap={4}>
+                                                    <FixStopLossRow
+                                                        label="Fix"
+                                                        items={[
+                                                            ["Contract", historyFixContract],
+                                                            ["Price", historyFixPrice],
+                                                            ["CreatedAt", historyFixCreatedAt],
+                                                        ]}
+                                                    />
+                                                    <FixStopLossRow
+                                                        label="TP Fix"
+                                                        items={[
+                                                            ["Contract", historyTpContract],
+                                                            ["Price", historyTpPrice],
+                                                            ["CreatedAt", historyTpCreatedAt],
+                                                        ]}
+                                                    />
+                                                </Stack>
+                                            </Paper>
+                                        </Fragment>
+                                    );
+                                })}
+                            </Stack>
+                        ) : (
+                            <Text fz={11} c="dimmed">
+                                No history yet.
+                            </Text>
+                        )}
+                    </Stack>
+                </Accordion.Panel>
+            </Accordion.Item>
+        </Accordion>
     );
 }

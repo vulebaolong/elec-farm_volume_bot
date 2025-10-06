@@ -33,7 +33,7 @@ import { TGetInfoContractRes } from "@/types/contract.type";
 import { EStatusFixLiquidation } from "@/types/enum/fix-liquidation.enum";
 import { EStatusFixStopLoss } from "@/types/enum/fix-stoploss.enum";
 import { TDataFixLiquidation, TUpsertFixLiquidationReq } from "@/types/fix-liquidation.type";
-import { TDataFixStopLoss, TUpsertFixStopLossReq } from "@/types/fix-stoploss.type";
+import { TDataFixStopLoss, TDataFixStopLossHistoriesReq, TUpsertFixStopLossReq } from "@/types/fix-stoploss.type";
 import { TOrderOpen } from "@/types/order.type";
 import { TPosition } from "@/types/position.type";
 import { TSettingUsers } from "@/types/setting-user.type";
@@ -163,7 +163,7 @@ class Bot {
             stepFixStopLoss: dataInitBot.fixStopLossInDB?.data.stepFixStopLoss || 0,
             inputUSDTFix: dataInitBot.fixStopLossInDB?.data.inputUSDTFix || null,
             leverageFix: dataInitBot.fixStopLossInDB?.data.leverageFix || null,
-            listDataFixStopLoss: dataInitBot.fixStopLossInDB?.data.listDataFixStopLoss || [],
+            fixStopLossQueue: dataInitBot.fixStopLossInDB?.data.fixStopLossQueue || [],
         };
         this.upsertFixStopLoss();
         this.sendListDataFixStopLoss();
@@ -1425,11 +1425,7 @@ class Bot {
 
         await this.clickMarketPostion(pos.contract, Number(pos.size) > 0 ? "long" : "short");
 
-        this.dataFixStopLoss.listDataFixStopLoss.push({
-            contract: pos.contract,
-            open_time: pos.open_time,
-        });
-        this.sendListDataFixStopLoss();
+        this.handlePushListDataFixStopLoss(pos);
 
         // const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
         // // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
@@ -2129,17 +2125,10 @@ class Bot {
         this.dataFixLiquidation.leverageFix = null;
 
         // chốt trước khi chuyển phase
-        this.upsertFixStopLoss(false, EStatusFixStopLoss.FAILED);
         this.logWorker.info("➡️ Next phase 🤷 Reset All Fix StopLoss");
-        this.dataFixStopLoss.dataStopLossShouldFix = null;
-        this.dataFixStopLoss.dataOrderOpenFixStopLoss = null;
-        this.dataFixStopLoss.dataCloseTP = null;
-        this.dataFixStopLoss.startTimeSec = null;
-        this.dataFixStopLoss.stepFixStopLoss = 0;
-        this.dataFixStopLoss.listDataFixStopLoss = [];
+        this.dataFixStopLoss.fixStopLossQueue = [];
         this.sendListDataFixStopLoss();
-        this.dataFixStopLoss.inputUSDTFix = null;
-        this.dataFixStopLoss.leverageFix = null;
+        this.fixStopLossFailedPassTrue(0);
 
         if (this.takeProfitAccount) {
             this.takeProfitAccount.roi = 0;
@@ -2189,18 +2178,18 @@ class Bot {
             return;
         }
 
-        if (this.dataFixStopLoss.listDataFixStopLoss.length === 0) {
-            // this.logWorker.info("🤷 Create StopLoss Should Fix: Skip by listDataFixStopLoss empty");
-            console.log("🤷 Create StopLoss Should Fix: Skip by listDataFixStopLoss empty");
+        if (this.dataFixStopLoss.fixStopLossQueue.length === 0) {
+            // this.logWorker.info("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
+            console.log("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
             return;
         }
 
-        const itemDataStopLossShouldFix = this.dataFixStopLoss.listDataFixStopLoss.shift();
+        const itemDataStopLossShouldFix = this.dataFixStopLoss.fixStopLossQueue.shift();
         this.sendListDataFixStopLoss();
         // this.logWorker.info(`🤷 itemDataStopLossShouldFix`, itemDataStopLossShouldFix?.contract);
 
         if (!itemDataStopLossShouldFix) {
-            console.log("🤷 Create StopLoss Should Fix: Skip by listDataFixStopLoss empty");
+            console.log("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
             return;
         }
 
@@ -2341,36 +2330,60 @@ class Bot {
                 this.logWorker.info(
                     `🤷 ❌ ${contractShouldFix} Fix thất bại reset step: ${this.dataFixStopLoss.stepFixStopLoss} -> ${stepNext} / ${maxStep}`,
                 );
+                this.fixStopLossFailedPassTrue(stepNext);
+                return;
             } else {
                 this.logWorker.info(
                     `🤷 ❌ ${contractShouldFix} Fix thất bại tăng step: ${this.dataFixStopLoss.stepFixStopLoss} -> ${stepNext} / ${maxStep}`,
                 );
+                this.fixStopLossFailedPassFalse(stepNext);
+                return;
             }
-            this.upsertFixStopLoss(true, EStatusFixStopLoss.FAILED);
-
-            this.dataFixStopLoss.dataStopLossShouldFix = null;
-            this.dataFixStopLoss.dataOrderOpenFixStopLoss = null;
-            this.dataFixStopLoss.dataCloseTP = null;
-
-            this.dataFixStopLoss.stepFixStopLoss = stepNext;
-            this.dataFixStopLoss.startTimeSec = null;
-            // this.upsertFixStopLoss();
-            return;
         }
         if (hisCloseTPSuccess) {
             this.logWorker.info(`🤷 ✅ ${contractShouldFix} Fix thành công`);
-            this.upsertFixStopLoss(true, EStatusFixStopLoss.SUCCESS);
-
-            this.dataFixStopLoss.dataStopLossShouldFix = null;
-            this.dataFixStopLoss.dataOrderOpenFixStopLoss = null;
-            this.dataFixStopLoss.dataCloseTP = null;
-
-            this.dataFixStopLoss.stepFixStopLoss = 0;
-            this.dataFixStopLoss.startTimeSec = null;
-
-            // this.upsertFixStopLoss();
+            this.fixStopLossSuccess();
             return;
         }
+    }
+
+    private fixStopLossSuccess() {
+        this.sendFixStopLossHistories();
+
+        this.dataFixStopLoss.dataOrderOpenFixStopLoss = null;
+        this.dataFixStopLoss.dataCloseTP = null;
+        this.dataFixStopLoss.stepFixStopLoss = 0;
+        this.dataFixStopLoss.inputUSDTFix = null;
+        this.dataFixStopLoss.leverageFix = null;
+        this.upsertFixStopLoss(true, EStatusFixStopLoss.SUCCESS);
+
+        this.dataFixStopLoss.dataStopLossShouldFix = null;
+        this.dataFixStopLoss.startTimeSec = null;
+    }
+
+    private fixStopLossFailedPassFalse(stepNext: number) {
+        this.sendFixStopLossHistories();
+
+        this.dataFixStopLoss.dataOrderOpenFixStopLoss = null;
+        this.dataFixStopLoss.dataCloseTP = null;
+        this.dataFixStopLoss.stepFixStopLoss = stepNext;
+        this.dataFixStopLoss.inputUSDTFix = null;
+        this.dataFixStopLoss.leverageFix = null;
+        this.upsertFixStopLoss();
+    }
+
+    private fixStopLossFailedPassTrue(stepNext: number) {
+        this.sendFixStopLossHistories();
+
+        this.dataFixStopLoss.dataOrderOpenFixStopLoss = null;
+        this.dataFixStopLoss.dataCloseTP = null;
+        this.dataFixStopLoss.stepFixStopLoss = stepNext;
+        this.dataFixStopLoss.inputUSDTFix = null;
+        this.dataFixStopLoss.leverageFix = null;
+        this.upsertFixStopLoss(true, EStatusFixStopLoss.FAILED);
+
+        this.dataFixStopLoss.dataStopLossShouldFix = null;
+        this.dataFixStopLoss.startTimeSec = null;
     }
 
     private getLeverageLiquidationForFix(contract: string): number | undefined {
@@ -2413,6 +2426,28 @@ class Bot {
         return leverageFixStopLoss;
     }
 
+    private handlePushListDataFixStopLoss(position: TPosition) {
+        let isPush = true;
+
+        if (this.dataFixStopLoss.dataOrderOpenFixStopLoss) {
+            const contractPosition = position.contract.replace("/", "_");
+            const contractOrderOpenFixStopLoss = this.dataFixStopLoss.dataOrderOpenFixStopLoss.contract.replace("/", "_");
+
+            if (contractPosition === contractOrderOpenFixStopLoss) {
+                isPush = false;
+            }
+        }
+
+        if (isPush) {
+            this.dataFixStopLoss.fixStopLossQueue.push({
+                contract: position.contract,
+                open_time: position.open_time,
+            });
+
+            this.sendListDataFixStopLoss();
+        }
+    }
+
     private isFixStopLoss() {
         if (this.settingUser.stopLoss < 100) {
             return true;
@@ -2422,8 +2457,28 @@ class Bot {
 
     private sendListDataFixStopLoss() {
         this.parentPort?.postMessage({
-            type: "bot:listDataFixStopLoss",
-            payload: this.dataFixStopLoss.listDataFixStopLoss,
+            type: "bot:upsertFixStopLossQueue",
+            payload: this.dataFixStopLoss.fixStopLossQueue,
+        });
+    }
+
+    private sendFixStopLossHistories() {
+        if (!this.dataFixStopLoss.startTimeSec) return;
+
+        const payload: TDataFixStopLossHistoriesReq = {
+            data: {
+                dataOrderOpenFixStopLoss: this.dataFixStopLoss.dataOrderOpenFixStopLoss,
+                dataCloseTP: this.dataFixStopLoss.dataCloseTP,
+                stepFixStopLoss: this.dataFixStopLoss.stepFixStopLoss,
+                inputUSDTFix: this.dataFixStopLoss.inputUSDTFix,
+                leverageFix: this.dataFixStopLoss.leverageFix,
+            },
+            startTimeSec: this.dataFixStopLoss.startTimeSec,
+        };
+
+        this.parentPort?.postMessage({
+            type: "bot:createFixStopLossHistories",
+            payload: payload,
         });
     }
 }

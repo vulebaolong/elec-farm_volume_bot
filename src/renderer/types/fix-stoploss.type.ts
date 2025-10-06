@@ -19,6 +19,7 @@ export type TFixStopLossInDB = {
     startTimeSec: number;
     isDone: boolean;
     status: EStatusFixStopLoss;
+    FixStopLossHistories: TDataFixStopLossHistoriesInDB[];
 } & TBaseTimestamps;
 
 export type TDataFixStopLoss = {
@@ -29,10 +30,10 @@ export type TDataFixStopLoss = {
     stepFixStopLoss: number;
     inputUSDTFix: number | null;
     leverageFix: number | null;
-    listDataFixStopLoss: TDataStopLossShouldFix[];
+    fixStopLossQueue: TDataStopLossShouldFix[];
 };
 
-type TDataStopLossShouldFix = {
+export type TDataStopLossShouldFix = {
     contract: TPosition["contract"];
     open_time: TPosition["open_time"];
 };
@@ -51,3 +52,22 @@ type TDataCloseTP = {
     fill_price: TOrderOpen["fill_price"];
     create_time: TOrderOpen["create_time"];
 };
+
+export type TDataFixStopLossHistoriesReq = {
+    data: TDataFixStopLossHistories;
+    startTimeSec: number;
+};
+
+export type TDataFixStopLossHistories = {
+    dataOrderOpenFixStopLoss: TDataOrderOpenFixStopLoss | null;
+    dataCloseTP: TDataCloseTP | null;
+    stepFixStopLoss: number;
+    inputUSDTFix: number | null;
+    leverageFix: number | null;
+};
+
+export type TDataFixStopLossHistoriesInDB = {
+    id: number;
+    fixStopLossId: number;
+    data: TDataFixStopLossHistories;
+} & TBaseTimestamps;

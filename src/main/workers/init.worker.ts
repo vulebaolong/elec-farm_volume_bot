@@ -333,8 +333,11 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
             if (msg?.type === "bot:upsertFixStopLoss") {
                 mainWindow?.webContents.send("bot:upsertFixStopLoss", msg);
             }
-            if (msg?.type === "bot:listDataFixStopLoss") {
-                mainWindow?.webContents.send("bot:listDataFixStopLoss", msg);
+            if (msg?.type === "bot:upsertFixStopLossQueue") {
+                mainWindow?.webContents.send("bot:upsertFixStopLossQueue", msg);
+            }
+            if (msg?.type === "bot:createFixStopLossHistories") {
+                mainWindow?.webContents.send("bot:createFixStopLossHistories", msg);
             }
             if (msg?.type === "bot:clickClearAll") {
                 if (!gateView) return;
