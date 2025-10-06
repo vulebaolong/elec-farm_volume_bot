@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useCreateTakeProfitAccount, useUpdateTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
 import { TCreateTakeprofitAccountReq, TTakeprofitAccount } from "@/types/takeprofit-account.type";
 import Ripple from "./ripple";
+import { accountEquity } from "@/helpers/function.helper";
 
 type TProps = {};
 
@@ -46,10 +47,14 @@ export default function Controll({}: TProps) {
         const offBotSaveAccount = window.electron.ipcRenderer.on("bot:saveAccount", (data: TWorkerData<TAccount[]>) => {
             accountRef.current = data.payload[0];
             if (takeprofitAccountNewRef.current) {
+                const total = data.payload[0].total;
+                const unrealised_pnl = data.payload[0].unrealised_pnl;
+                const newTotal = accountEquity(total, unrealised_pnl);
+
                 updateTakeProfitAccount.mutate({
                     id: takeprofitAccountNewRef.current.id,
                     data: {
-                        newTotal: data.payload[0].total,
+                        newTotal: newTotal,
                     },
                 });
             }
@@ -64,9 +69,13 @@ export default function Controll({}: TProps) {
                         return;
                     }
 
+                    const totalCurrent = accountRef.current.total;
+                    const unrealised_pnl = accountRef.current.unrealised_pnl;
+                    const total = accountEquity(totalCurrent, unrealised_pnl);
+
                     const payload: TCreateTakeprofitAccountReq = {
-                        newTotal: accountRef.current.total,
-                        oldTotal: accountRef.current.total,
+                        newTotal: total,
+                        oldTotal: total,
                         source: "gate",
                         uid: accountRef.current.user,
                     };

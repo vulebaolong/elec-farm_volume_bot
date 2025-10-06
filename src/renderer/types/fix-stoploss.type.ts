@@ -30,7 +30,6 @@ export type TDataFixStopLoss = {
     stepFixStopLoss: number;
     inputUSDTFix: number | null;
     leverageFix: number | null;
-    fixStopLossQueue: TDataStopLossShouldFix[];
 };
 
 export type TDataStopLossShouldFix = {

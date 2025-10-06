@@ -1,5 +1,6 @@
 import { TSide } from "./base.type";
 import { TFixLiquidationInDB } from "./fix-liquidation.type";
+import { TFixStopLossQueueInDB } from "./fix-stoploss-queue.type";
 import { TFixStopLossInDB } from "./fix-stoploss.type";
 import { TSettingUsers } from "./setting-user.type";
 import { TUiSelector } from "./ui-selector.type";
@@ -11,6 +12,7 @@ export type TDataInitBot = {
     blackList: string[];
     fixLiquidationInDB?: TFixLiquidationInDB;
     fixStopLossInDB?: TFixStopLossInDB;
+    fixStopLossQueueInDB?: TFixStopLossQueueInDB;
 };
 
 export type TChangeLeverage = {

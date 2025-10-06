@@ -71,6 +71,7 @@ export const ENDPOINT = {
     },
     TAKEPROFIT_ACCOUNT: {
         CREATE: "takeprofit-account",
+        UPDATE: "takeprofit-account",
         GET: "takeprofit-account",
     },
     FIX_LIQUIDATION: {
@@ -83,6 +84,7 @@ export const ENDPOINT = {
     },
     FIX_STOPLOSS_QUEUE: {
         UPSERT: "fix-stoploss-queue/upsert",
+        GET_BY_USERID: "fix-stoploss-queue/by-userid",
     },
     FIX_STOPLOSS_HISTORIES: {
         CREATE: "fix-stoploss-histories",

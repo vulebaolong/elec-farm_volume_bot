@@ -66,49 +66,51 @@ export default function FixStopLossItem({ item }: TProps) {
                 <Accordion.Panel>
                     <Stack gap="xs">
                         {/* Target block – nổi bật nhẹ */}
-                        <Paper withBorder radius="md" p="sm" className="bg-[var(--mantine-color-gray-0)] dark:bg-[var(--mantine-color-dark-6)]">
-                            <Text fz={11} fw={700} mb={6}>
-                                Target
-                            </Text>
+                        {!item.isDone && (
+                            <Paper withBorder radius="md" p="sm" className="bg-[var(--mantine-color-gray-0)] dark:bg-[var(--mantine-color-dark-6)]">
+                                <Text fz={11} fw={700} mb={6}>
+                                    Target
+                                </Text>
 
-                            {/* Thông tin Target */}
-                            <Group gap={10} wrap="wrap" className="flex-1">
-                                {[
-                                    ["Step", targetStep + 1],
-                                    ["Input", targetInputUSDT],
-                                    ["Leverage", targetLeverage],
-                                ].map(([label, value]) => (
-                                    <Group key={String(label)} gap={6}>
-                                        <Text fz={11} c="dimmed">
-                                            {label}:
-                                        </Text>
-                                        <Text fz={11} fw={500}>
-                                            {String(value)}
-                                        </Text>
-                                    </Group>
-                                ))}
-                            </Group>
+                                {/* Thông tin Target */}
+                                <Group gap={10} wrap="wrap" className="flex-1">
+                                    {[
+                                        ["Step", targetStep + 1],
+                                        ["Input", targetInputUSDT],
+                                        ["Leverage", targetLeverage],
+                                    ].map(([label, value]) => (
+                                        <Group key={String(label)} gap={6}>
+                                            <Text fz={11} c="dimmed">
+                                                {label}:
+                                            </Text>
+                                            <Text fz={11} fw={500}>
+                                                {String(value)}
+                                            </Text>
+                                        </Group>
+                                    ))}
+                                </Group>
 
-                            {/* Fix / TP Fix của Target hiện tại */}
-                            <Stack gap={4} mt={6}>
-                                <FixStopLossRow
-                                    label="Fix"
-                                    items={[
-                                        ["Contract", currentFixContract],
-                                        ["Price", currentFixPrice],
-                                        ["CreatedAt", currentFixCreatedAt],
-                                    ]}
-                                />
-                                <FixStopLossRow
-                                    label="TP Fix"
-                                    items={[
-                                        ["Contract", currentTpContract],
-                                        ["Price", currentTpPrice],
-                                        ["CreatedAt", currentTpCreatedAt],
-                                    ]}
-                                />
-                            </Stack>
-                        </Paper>
+                                {/* Fix / TP Fix của Target hiện tại */}
+                                <Stack gap={4} mt={6}>
+                                    <FixStopLossRow
+                                        label="Fix"
+                                        items={[
+                                            ["Contract", currentFixContract],
+                                            ["Price", currentFixPrice],
+                                            ["CreatedAt", currentFixCreatedAt],
+                                        ]}
+                                    />
+                                    <FixStopLossRow
+                                        label="TP Fix"
+                                        items={[
+                                            ["Contract", currentTpContract],
+                                            ["Price", currentTpPrice],
+                                            ["CreatedAt", currentTpCreatedAt],
+                                        ]}
+                                    />
+                                </Stack>
+                            </Paper>
+                        )}
 
                         {/* History */}
                         {histories.length > 0 ? (

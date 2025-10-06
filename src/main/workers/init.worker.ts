@@ -419,6 +419,9 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
         ipcMain.on("bot:takeProfitAccount", (event, data) => {
             botWorker?.postMessage({ type: "bot:takeProfitAccount", payload: data });
         });
+        ipcMain.on("bot:removeFixStopLossQueue", (event, data) => {
+            botWorker?.postMessage({ type: "bot:removeFixStopLossQueue", payload: data });
+        });
     }
 
     return botWorker!;

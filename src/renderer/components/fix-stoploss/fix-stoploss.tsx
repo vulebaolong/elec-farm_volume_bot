@@ -1,21 +1,21 @@
+import { useCreateFixStopLossHistories } from "@/api/tanstack/fix-stoploss-histories.tanstack";
 import { useGetFixStopLoss, useUpsertFixStopLoss } from "@/api/tanstack/fix-stoploss.tanstack";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { TDataFixStopLossHistoriesReq, TUpsertFixStopLossReq } from "@/types/fix-stoploss.type";
 import { TWorkerData } from "@/types/worker.type";
-import { ActionIcon, Badge, Group, Pagination, Paper, Skeleton, Stack, Text } from "@mantine/core";
+import { ActionIcon, Group, Pagination, Paper, Skeleton, Stack, Text } from "@mantine/core";
 import { RefreshCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import FixStopLossItem from "./fix-stoploss-item";
-import { cn } from "@/lib/utils";
-import FixStoplossListdatafixstoploss from "./fix-stoploss-listdatafixstoploss";
-import { useCreateFixStopLossHistories } from "@/api/tanstack/fix-stoploss-histories.tanstack";
+import FixStoplossQueue from "./fix-stoploss-queue";
 
 export default function FixStopLoss() {
     const [page, setPage] = useState(1);
     const pageSize = 10;
 
     const upsertStopLoss = useUpsertFixStopLoss();
-    const createFixStopLossHistories = useCreateFixStopLossHistories()
+    const createFixStopLossHistories = useCreateFixStopLossHistories();
 
     const getFixStopLoss = useGetFixStopLoss({
         pagination: { page, pageSize },
@@ -28,13 +28,16 @@ export default function FixStopLoss() {
             upsertStopLoss.mutate(data.payload);
         });
 
-        const offCreateFixStopLossHistories = window.electron.ipcRenderer.on("bot:createFixStopLossHistories", (data: TWorkerData<TDataFixStopLossHistoriesReq>) => {
-            createFixStopLossHistories.mutate(data.payload);
-        });
+        const offCreateFixStopLossHistories = window.electron.ipcRenderer.on(
+            "bot:createFixStopLossHistories",
+            (data: TWorkerData<TDataFixStopLossHistoriesReq>) => {
+                createFixStopLossHistories.mutate(data.payload);
+            },
+        );
 
         return () => {
-            offFixStopLoss?.()
-            offCreateFixStopLossHistories?.()
+            offFixStopLoss?.();
+            offCreateFixStopLossHistories?.();
         };
     }, [upsertStopLoss]);
 
@@ -117,9 +120,7 @@ export default function FixStopLoss() {
                     </Stack>
                 </Card>
                 <Card className="flex-1 p-0">
-                    {getFixStopLoss.data?.items?.[0]?.data?.fixStopLossQueue && (
-                        <FixStoplossListdatafixstoploss fixStopLossQueueInit={getFixStopLoss.data?.items?.[0]?.data?.fixStopLossQueue || []} />
-                    )}
+                    <FixStoplossQueue />
                 </Card>
             </CardContent>
         </Card>

@@ -33,7 +33,7 @@ import { TGetInfoContractRes } from "@/types/contract.type";
 import { EStatusFixLiquidation } from "@/types/enum/fix-liquidation.enum";
 import { EStatusFixStopLoss } from "@/types/enum/fix-stoploss.enum";
 import { TDataFixLiquidation, TUpsertFixLiquidationReq } from "@/types/fix-liquidation.type";
-import { TDataFixStopLoss, TDataFixStopLossHistoriesReq, TUpsertFixStopLossReq } from "@/types/fix-stoploss.type";
+import { TDataFixStopLoss, TDataFixStopLossHistoriesReq, TDataStopLossShouldFix, TUpsertFixStopLossReq } from "@/types/fix-stoploss.type";
 import { TOrderOpen } from "@/types/order.type";
 import { TPosition } from "@/types/position.type";
 import { TSettingUsers } from "@/types/setting-user.type";
@@ -92,6 +92,8 @@ parentPort!.on("message", (msg: any) => {
                     uiSelector: msg.payload.uiSelector,
                     blackList: msg.payload.blackList,
                     fixLiquidationInDB: msg.payload.fixLiquidationInDB,
+                    fixStopLossQueueInDB: msg.payload.fixStopLossQueueInDB,
+                    fixStopLossInDB: msg.payload.fixStopLossInDB,
                 };
                 bot = new Bot(dataInitBot);
             }
@@ -138,6 +140,7 @@ class Bot {
     private takeProfitAccount: TTakeprofitAccount | null = null;
 
     private dataFixStopLoss: TDataFixStopLoss;
+    private fixStopLossQueue: TDataStopLossShouldFix[];
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
@@ -163,10 +166,11 @@ class Bot {
             stepFixStopLoss: dataInitBot.fixStopLossInDB?.data.stepFixStopLoss || 0,
             inputUSDTFix: dataInitBot.fixStopLossInDB?.data.inputUSDTFix || null,
             leverageFix: dataInitBot.fixStopLossInDB?.data.leverageFix || null,
-            fixStopLossQueue: dataInitBot.fixStopLossInDB?.data.fixStopLossQueue || [],
         };
         this.upsertFixStopLoss();
-        this.sendListDataFixStopLoss();
+
+        this.fixStopLossQueue = dataInitBot.fixStopLossQueueInDB?.queue || [];
+        this.sendFixStopLossQueue();
 
         this.run();
     }
@@ -249,7 +253,7 @@ class Bot {
                             let isCreateOrderOpenFix: boolean;
 
                             if (this.isFixStopLoss()) {
-                                isCreateOrderOpenFix = await this.createOrderOpenFixStopLoss(symbol, price, lastPriceGate, quanto_multiplier);
+                                isCreateOrderOpenFix = await this.createOrderOpenFixStopLoss(symbol, price, lastPriceGate, quanto_multiplier, side);
                             } else {
                                 isCreateOrderOpenFix = await this.createOrderOpenFixLiquidation(symbol, price, lastPriceGate, quanto_multiplier);
                             }
@@ -400,7 +404,7 @@ class Bot {
         // console.log("stepFixLiquidation", this.stepFixLiquidation);
         // console.log("dataFixLiquidation", this.dataFixLiquidation);
         // console.log("dataFixStopLoss", this.dataFixStopLoss);
-        console.log("stepFixStopLoss", this.dataFixStopLoss.stepFixStopLoss);
+        // console.log("fixStopLossQueue", this.fixStopLossQueue);
     }
 
     private heartbeat() {
@@ -467,6 +471,10 @@ class Bot {
 
             case "bot:takeProfitAccount":
                 this.setTakeProfitAccount(msg);
+                break;
+
+            case "bot:removeFixStopLossQueue":
+                this.removeFixStopLossQueue(msg);
                 break;
 
             default:
@@ -1425,7 +1433,7 @@ class Bot {
 
         await this.clickMarketPostion(pos.contract, Number(pos.size) > 0 ? "long" : "short");
 
-        this.handlePushListDataFixStopLoss(pos);
+        this.handlePushFixStopLossQueue(pos);
 
         // const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
         // // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
@@ -2126,8 +2134,8 @@ class Bot {
 
         // chốt trước khi chuyển phase
         this.logWorker.info("➡️ Next phase 🤷 Reset All Fix StopLoss");
-        this.dataFixStopLoss.fixStopLossQueue = [];
-        this.sendListDataFixStopLoss();
+        this.fixStopLossQueue = [];
+        this.sendFixStopLossQueue();
         this.fixStopLossFailedPassTrue(0);
 
         if (this.takeProfitAccount) {
@@ -2178,14 +2186,14 @@ class Bot {
             return;
         }
 
-        if (this.dataFixStopLoss.fixStopLossQueue.length === 0) {
+        if (this.fixStopLossQueue.length === 0) {
             // this.logWorker.info("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
             console.log("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
             return;
         }
 
-        const itemDataStopLossShouldFix = this.dataFixStopLoss.fixStopLossQueue.shift();
-        this.sendListDataFixStopLoss();
+        const itemDataStopLossShouldFix = this.fixStopLossQueue.shift();
+        this.sendFixStopLossQueue();
         // this.logWorker.info(`🤷 itemDataStopLossShouldFix`, itemDataStopLossShouldFix?.contract);
 
         if (!itemDataStopLossShouldFix) {
@@ -2202,7 +2210,13 @@ class Bot {
         this.upsertFixStopLoss();
     }
 
-    private async createOrderOpenFixStopLoss(symbol: string, price: string, lastPriceGate: number, quanto_multiplier: number): Promise<boolean> {
+    private async createOrderOpenFixStopLoss(
+        symbol: string,
+        price: string,
+        lastPriceGate: number,
+        quanto_multiplier: number,
+        side: string,
+    ): Promise<boolean> {
         if (this.settingUser.stopLoss >= 100) {
             console.log(`🤷 Create Order Fix StopLoss: Skip by stoploss >= 100`);
             return false;
@@ -2234,9 +2248,9 @@ class Bot {
 
         const sizeStr = calcSize(inputUSDT, lastPriceGate, quanto_multiplier).toString();
 
-        const payload = {
+        const payload: TPayloadOrder = {
             contract: contract,
-            size: sizeStr,
+            size: side === "long" ? sizeStr : `-${sizeStr}`,
             price: price,
             reduce_only: false,
         };
@@ -2426,7 +2440,7 @@ class Bot {
         return leverageFixStopLoss;
     }
 
-    private handlePushListDataFixStopLoss(position: TPosition) {
+    private handlePushFixStopLossQueue(position: TPosition) {
         let isPush = true;
 
         if (this.dataFixStopLoss.dataOrderOpenFixStopLoss) {
@@ -2438,13 +2452,23 @@ class Bot {
             }
         }
 
+        const isExits = this.fixStopLossQueue.some((item) => {
+            const time1 = this.toUnixSeconds(position.open_time);
+            const time2 = this.toUnixSeconds(item.open_time);
+            return time1 === time2;
+        });
+
+        if (isExits) {
+            isPush = false;
+        }
+
         if (isPush) {
-            this.dataFixStopLoss.fixStopLossQueue.push({
+            this.fixStopLossQueue.push({
                 contract: position.contract,
-                open_time: position.open_time,
+                open_time: this.toUnixSeconds(position.open_time),
             });
 
-            this.sendListDataFixStopLoss();
+            this.sendFixStopLossQueue();
         }
     }
 
@@ -2455,10 +2479,10 @@ class Bot {
         return false;
     }
 
-    private sendListDataFixStopLoss() {
+    private sendFixStopLossQueue() {
         this.parentPort?.postMessage({
             type: "bot:upsertFixStopLossQueue",
-            payload: this.dataFixStopLoss.fixStopLossQueue,
+            payload: this.fixStopLossQueue,
         });
     }
 
@@ -2480,6 +2504,14 @@ class Bot {
             type: "bot:createFixStopLossHistories",
             payload: payload,
         });
+    }
+
+    private removeFixStopLossQueue(msg: TWorkerData<TDataStopLossShouldFix>) {
+        const { payload } = msg;
+        this.fixStopLossQueue = this.fixStopLossQueue.filter((item) => {
+            return item.open_time !== payload.open_time;
+        });
+        this.sendFixStopLossQueue();
     }
 }
 

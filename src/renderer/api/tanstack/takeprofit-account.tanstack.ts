@@ -44,7 +44,7 @@ export const useUpdateTakeProfitAccount = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (payload: TUpdateTakeprofitAccountReq) => {
-            const { data } = await api.patch<TRes<boolean>>(`${ENDPOINT.TAKEPROFIT_ACCOUNT.CREATE}/${payload.id}`, payload.data);
+            const { data } = await api.patch<TRes<boolean>>(`${ENDPOINT.TAKEPROFIT_ACCOUNT.UPDATE}/${payload.id}`, payload.data);
             return data;
         },
         onSuccess: () => {

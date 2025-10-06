@@ -83,3 +83,16 @@ export const formatLocalTime = (time?: dayjs.ConfigType, format = "HH:mm:ss DD/M
         return dayjs().local().format(format);
     }
 };
+
+function truncateToDp(value: number, dp = 2): number {
+    const factor = 10 ** dp;
+    return Math.trunc(value * factor) / factor; // cắt bớt, không làm tròn
+}
+
+export function accountEquity(total: string, unrealised_pnl: string): string {
+    const equity = Number(total) + Number(unrealised_pnl);
+    const truncated = truncateToDp(equity, 2);
+    // Nếu muốn tránh -0.00 thì bỏ đoạn dưới; nếu muốn giữ giống UI có thể giữ -0.00
+    const cleaned = Object.is(truncated, -0) ? 0 : truncated;
+    return cleaned.toFixed(2);
+}

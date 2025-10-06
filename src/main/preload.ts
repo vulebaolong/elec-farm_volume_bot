@@ -22,6 +22,7 @@ export type Channels =
     | "bot:log"
     | "bot:metrics"
     | "bot:upsertFixStopLossQueue"
+    | "bot:removeFixStopLossQueue"
     | "bot:createFixStopLossHistories"
     | "gate:get-state"
     | "gate:set-dock"
