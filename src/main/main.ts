@@ -167,8 +167,8 @@ app.whenReady()
                 .then((ext) => console.log(`Added Extension:  ${ext.name}`))
                 .catch((err) => console.log("An error occurred: ", err));
         }
-
         createWindow();
+
         app.on("activate", () => {
             // On macOS it's common to re-create a window in the app when the
             // dock icon is clicked and there are no other windows open.
@@ -176,14 +176,3 @@ app.whenReady()
         });
     })
     .catch(console.log);
-
-ipcMain.handle("get-webview-preload-url", () => {
-    // Dev: đọc thẳng trong thư mục dự án
-    const devPath = path.join(process.cwd(), "assets", "webview", "wv-preload.js");
-
-    // Prod: dùng file đã copy vào resources
-    const prodPath = path.join(process.resourcesPath, "assets", "webview", "wv-preload.js");
-
-    const finalPath = app.isPackaged ? prodPath : devPath;
-    return pathToFileURL(finalPath).toString(); // -> "file:///.../wv-preload.js"
-});

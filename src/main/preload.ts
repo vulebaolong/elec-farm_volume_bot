@@ -7,7 +7,6 @@ export type Channels =
     | "open-macro-window"
     | "macro-click"
     | "run-gate-macro"
-    | "get-webview-preload-url"
     | "app:get-versions"
     | "bot:init"
     | "bot:isReady"
