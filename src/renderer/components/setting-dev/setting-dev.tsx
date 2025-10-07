@@ -1,5 +1,4 @@
 import { CodeXml } from "lucide-react";
-import PerfPanel from "../metrics/perf-panel";
 import { PageTitle } from "../title-page/title-page";
 import SettingSelector from "./setting-selector";
 
@@ -9,7 +8,6 @@ export default function SettingDev() {
             <PageTitle title="Setting Dev" icon={CodeXml} size="md" />
 
             <div className="grid gap-5 w-full p-5">
-                <PerfPanel />
                 <SettingSelector />
             </div>
         </div>

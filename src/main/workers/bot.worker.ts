@@ -2608,27 +2608,3 @@ class SlidingRateCounter {
         while (q.length && q[0] <= edge) q.shift();
     }
 }
-
-// https://www.gate.com/vi/announcements/article/33995
-// "https://www.gate.com/apiw/v2/futures/usdt/orders?contract=&status=open"
-// "https://www.gate.com/apiw/v2/futures/usdt/positions"
-
-const a = [
-    { contract: "STRK/USDT", open_time: 1759749620 },
-    { contract: "STRK/USDT", open_time: 1759749764 },
-    { contract: "HANA/USDT", open_time: 1759749861 },
-    { contract: "DRIFT/USDT", open_time: 1759749559 },
-    { contract: "ETHFI/USDT", open_time: 1759749895 },
-    { contract: "DRIFT/USDT", open_time: 1759750310 },
-    { contract: "FORM/USDT", open_time: 1759750503 },
-    { contract: "FORM/USDT", open_time: 1759750699 },
-    { contract: "FORM/USDT", open_time: 1759750844 },
-    { contract: "FORM/USDT", open_time: 1759750876 },
-    { contract: "DRIFT/USDT", open_time: 1759750555 },
-    { contract: "FORM/USDT", open_time: 1759752115 },
-    { contract: "ENA/USDT", open_time: 1759751998 },
-    { contract: "CELO/USDT", open_time: 1759752252 },
-    { contract: "CELO/USDT", open_time: 1759752386 },
-    { contract: "KAITO/USDT", open_time: 1759751231 },
-    { contract: "MOODENG/USDT", open_time: 1759752524 },
-];

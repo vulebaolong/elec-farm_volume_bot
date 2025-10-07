@@ -96,8 +96,6 @@ const createWindow = async () => {
     });
 
     setupUpdaterIPC();
-    // registerMetricsIPC();
-    // blockGateWebSockets(gateView);
     initBot(mainWindow, mainLog, workerLog);
 
     mainWindow.loadURL(resolveHtmlPath("index.html"));

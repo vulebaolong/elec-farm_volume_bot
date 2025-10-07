@@ -21,7 +21,6 @@ import { app, BrowserWindow, Event, ipcMain, RenderProcessGoneDetails, WebConten
 import Logger from "electron-log";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
-import { GateRateCounter } from "../endpoint-counter";
 import { initGateView } from "../gate/gate-view";
 
 export const GATE_TIMEOUT = "GATE_TIMEOUT";
@@ -37,8 +36,6 @@ if (!isDebug) {
 
 let botWorker: Worker | null = null;
 let gateView: WebContentsView | undefined;
-const endpointCounter = new GateRateCounter("endpoint-counts.json"); // true = kèm host
-// const { broadcast: broadcastRate } = setupRateIpc(endpointCounter);
 
 let payloadOrder: TPayloadOrder = {
     contract: "BTC_USDT",
@@ -79,9 +76,6 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
             if (msg?.type === "bot:heartbeat") {
                 // mainLog.info("bot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeat");
                 mainWindow?.webContents.send("bot:heartbeat", msg);
-            }
-            if (msg?.type === "bot:metrics") {
-                mainWindow?.webContents.send("bot:metrics", msg);
             }
             if (msg?.type === "bot:start") {
                 mainWindow?.webContents.send("bot:start", msg);
@@ -535,9 +529,6 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
                             break;
                     }
 
-                    endpointCounter.bumpFromHttp(method, url);
-                    // broadcastRate();
-
                     break;
                 }
 
@@ -750,45 +741,3 @@ async function reloadAndWait(gateView: Electron.WebContentsView, botWorker: impo
         wc.reload(); // hoặc reloadIgnoringCache()
     });
 }
-
-async function applyNoThrottle(dbg: Electron.Debugger): Promise<void> {
-    try {
-        await dbg.sendCommand("Network.enable");
-        await dbg.sendCommand("Network.setCacheDisabled", { cacheDisabled: false });
-
-        // Ép No throttling (Network)
-        await dbg.sendCommand("Network.emulateNetworkConditions", {
-            offline: false,
-            latency: 0,
-            downloadThroughput: 0,
-            uploadThroughput: 0,
-        });
-
-        // Ép No throttling (CPU)
-        await dbg.sendCommand("Emulation.setCPUThrottlingRate", { rate: 1 });
-
-        console.log("[applyNoThrottle] done");
-    } catch (e) {
-        console.error("[applyNoThrottle]", e);
-    }
-}
-
-// postonly
-// {
-//     "contract": "SOMI_USDT",
-//     "price": "0.8452",
-//     "size": "1",
-//     "reduce_only": false,
-//     "tif": "poc",
-//     "text": "web"
-// }
-
-// ioc
-// {
-//     "contract": "SOMI_USDT",
-//     "price": "0.8443",
-//     "size": "1",
-//     "reduce_only": false,
-//     "tif": "ioc",
-//     "text": "web"
-// }
