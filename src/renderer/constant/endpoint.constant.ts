@@ -66,6 +66,13 @@ export const ENDPOINT = {
         REMOVE_BLACK_LIST: "black-list",
         CLEAR_ALL_BLACK_LIST: "black-list/clear-all",
     },
+    WHITE_LIST_MARTINGALE: {
+        GET_WHITE_LIST_MARTINGALE: "white-list-martingale",
+        GET_ALL_WHITE_LIST_MARTINGALE: "white-list-martingale/all",
+        CREATE_WHITE_LIST_MARTINGALE: "white-list-martingale",
+        REMOVE_WHITE_LIST_MARTINGALE: "white-list-martingale",
+        CLEAR_ALL_WHITE_LIST_MARTINGALE: "white-list-martingale/clear-all",
+    },
     CCC: {
         GET_SIDE: "https://api-coincraze.feliciastation.com/api/v1/tool/pnl-safe-mode/strong-side",
     },

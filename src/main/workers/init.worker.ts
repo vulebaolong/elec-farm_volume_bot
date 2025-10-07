@@ -403,6 +403,9 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
         ipcMain.on("bot:blackList", (event, data) => {
             botWorker?.postMessage({ type: "bot:blackList", payload: data });
         });
+        ipcMain.on("bot:whiteListMartingale", (event, data) => {
+            botWorker?.postMessage({ type: "bot:whiteListMartingale", payload: data });
+        });
         ipcMain.on("bot:rateMax:set", (event, data) => {
             botWorker?.postMessage({ type: "bot:rateMax:set", payload: data });
         });
