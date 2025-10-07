@@ -1,6 +1,7 @@
 // src/main/workers/init.worker.ts
 import { codeStringKillMantineToasts, createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
 import {
+    TDataInitBot,
     TFectMainRes,
     TGateClick,
     TGateClickCancelAllOpenRes,
@@ -34,7 +35,6 @@ if (!isDebug) {
     console.trace = () => {};
 }
 
-let botWorker: Worker | null = null;
 let gateView: WebContentsView | undefined;
 
 let payloadOrder: TPayloadOrder = {
@@ -44,62 +44,61 @@ let payloadOrder: TPayloadOrder = {
     size: "1",
 };
 
-export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions, workerLog: Logger.LogFunctions) {
-    if (!botWorker) {
-        const workerPath = app.isPackaged
-            ? path.join(process.resourcesPath, "app.asar.unpacked", "dist", "main", "workers", "bot.worker.js")
-            : path.join(__dirname, "workers", "bot.worker.bundle.dev.js");
+export function initWorker(
+    mainWindow: BrowserWindow,
+    mainLog: Logger.LogFunctions,
+    workerLog: Logger.LogFunctions,
+    dataInit: Omit<TDataInitBot, "parentPort">,
+) {
+    const workerPath = app.isPackaged
+        ? path.join(process.resourcesPath, "app.asar.unpacked", "dist", "main", "workers", "bot.worker.js")
+        : path.join(__dirname, "workers", "bot.worker.bundle.dev.js");
 
-        botWorker = new Worker(workerPath);
-        mainLog.info("New Worker | threadId: ", botWorker.threadId);
+    const botWorker = new Worker(workerPath);
+    mainLog.info("New Worker | threadId: ", botWorker.threadId);
 
-        ipcMain.on("bot:init", (event, data) => {
-            botWorker?.postMessage({ type: "bot:init", payload: data });
-            mainLog.info("1) bot:init - send  | threadId ", botWorker?.threadId);
-        });
+    // lắng nghe từ worker
+    botWorker.on("message", async (msg) => {
+        if (msg?.type === "bot:log") {
+            const { level = "info", text = "" }: TWorkLog = msg.payload;
+            // map level cơ bản
+            if (level === "error") workerLog.error(text);
+            else if (level === "warn") workerLog.warn(text);
+            else if (level === "debug") workerLog.debug?.(text);
+            else workerLog.info(text);
+        }
+        if (msg?.type === "bot:init:done") {
+            mainLog.info("3) bot:init:done");
+            gateView = initGateView(mainWindow, isDebug);
+            interceptRequest(gateView, botWorker!);
+        }
+        if (msg?.type === "bot:heartbeat") {
+            // mainLog.info("bot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeat");
+            mainWindow?.webContents.send("bot:heartbeat", msg);
+        }
+        if (msg?.type === "bot:start") {
+            mainWindow?.webContents.send("bot:start", msg);
+        }
+        if (msg?.type === "bot:stop") {
+            mainWindow?.webContents.send("bot:stop", msg);
+        }
+        if (msg?.type === "bot:reloadWebContentsView") {
+            mainWindow?.webContents.send("bot:reloadWebContentsView", msg);
+        }
+        if (msg?.type === "bot:isReady") {
+            mainWindow?.webContents.send("bot:isReady", msg);
+        }
+        if (msg?.type === "bot:fetch") {
+            const { url, init, reqId } = msg.payload;
 
-        // lắng nghe từ worker
-        botWorker.on("message", async (msg) => {
-            if (msg?.type === "bot:log") {
-                const { level = "info", text = "" }: TWorkLog = msg.payload;
-                // map level cơ bản
-                if (level === "error") workerLog.error(text);
-                else if (level === "warn") workerLog.warn(text);
-                else if (level === "debug") workerLog.debug?.(text);
-                else workerLog.info(text);
-            }
-            if (msg?.type === "bot:init:done") {
-                mainLog.info("3) bot:init:done");
-                gateView = initGateView(mainWindow, isDebug);
-                interceptRequest(gateView, botWorker!);
-            }
-            if (msg?.type === "bot:heartbeat") {
-                // mainLog.info("bot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeatbot:heartbeat");
-                mainWindow?.webContents.send("bot:heartbeat", msg);
-            }
-            if (msg?.type === "bot:start") {
-                mainWindow?.webContents.send("bot:start", msg);
-            }
-            if (msg?.type === "bot:stop") {
-                mainWindow?.webContents.send("bot:stop", msg);
-            }
-            if (msg?.type === "bot:reloadWebContentsView") {
-                mainWindow?.webContents.send("bot:reloadWebContentsView", msg);
-            }
-            if (msg?.type === "bot:isReady") {
-                mainWindow?.webContents.send("bot:isReady", msg);
-            }
-            if (msg?.type === "bot:fetch") {
-                const { url, init, reqId } = msg.payload;
+            const timeoutMs = 5_000;
 
-                const timeoutMs = 5_000;
+            try {
+                if (!gateView) {
+                    throw new Error("gateView not found");
+                }
 
-                try {
-                    if (!gateView) {
-                        throw new Error("gateView not found");
-                    }
-
-                    const js = `
+                const js = `
                     (async () => {
                         const ctrl = new AbortController();
                         const to = setTimeout(() => ctrl.abort(new DOMException('timeout','AbortError')), ${timeoutMs});
@@ -122,303 +121,302 @@ export function initBot(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions,
                     })()
                     `;
 
-                    const result: TFectMainRes = await gateView.webContents.executeJavaScript(js, true);
+                const result: TFectMainRes = await gateView.webContents.executeJavaScript(js, true);
 
-                    if (result.ok === false && result.error) {
-                        throw new Error(result.error);
-                    }
-
-                    const payload: TGateFectMainRes = {
-                        ok: true,
-                        reqId,
-                        bodyText: result?.bodyText,
-                        error: null,
-                    };
-
-                    botWorker?.postMessage({ type: "bot:fetch:res", payload });
-                } catch (e: any) {
-                    const msg = String(e?.message || e);
-                    const looksTimeout = /\btime(?:d\s+)?out\b/i.test(msg) || e?.name === "AbortError" || e?.code === "ETIMEDOUT";
-                    const payload: TGateFectMainRes = {
-                        ok: false,
-                        reqId,
-                        bodyText: "",
-                        error: looksTimeout ? GATE_TIMEOUT : msg, // <-- chuẩn hoá thêm lần nữa
-                    };
-                    botWorker?.postMessage({ type: "bot:fetch:res", payload });
-                }
-            }
-            if (msg?.type === "bot:order") {
-                if (!gateView) return;
-                const { payloadOrder: payloadOrderRaw, selector, reqOrderId } = msg?.payload;
-                const tag = `O${reqOrderId}`;
-                try {
-                    payloadOrder = payloadOrderRaw;
-
-                    // Tạo promise chờ API order
-                    const waitOrder = waitForOneRequest(
-                        gateView.webContents,
-                        {
-                            method: "POST",
-                            urlPrefix: "https://www.gate.com/apiw/v2/futures/usdt/orders",
-                        },
-                        tag,
-                    );
-
-                    // Thực hiện click (trả về khi JS của bạn xong, không phải khi API xong)
-                    const js = createCodeStringClickOrder(selector);
-                    const resultClick: TResultClickOpenOrder = await gateView.webContents.executeJavaScript(js, true);
-                    if (resultClick.ok === false && resultClick.error) {
-                        throw new Error(resultClick.error);
-                    }
-
-                    // Chờ API xong, lấy body
-                    const { bodyText } = await waitOrder;
-
-                    const payload: TGateOrderMainRes = {
-                        ok: true,
-                        reqOrderId,
-                        bodyText,
-                        error: null,
-                    };
-
-                    botWorker?.postMessage({ type: "bot:order:res", payload: payload });
-                } catch (e: any) {
-                    const payload: TGateOrderMainRes = {
-                        ok: false,
-                        reqOrderId: reqOrderId,
-                        bodyText: "",
-                        error: String(e?.message || e),
-                    };
-                    botWorker?.postMessage({ type: "bot:order:res", payload: payload });
-                }
-            }
-            if (msg?.type === "bot:clickTabOpenOrder") {
-                if (!gateView) return;
-
-                const { reqClickTabOpenOrderId, stringClickTabOpenOrder } = msg?.payload;
-
-                try {
-                    const result: TResultClickTabOpenOrder = await gateView.webContents.executeJavaScript(stringClickTabOpenOrder, true);
-
-                    if (result.ok === false && result.error) {
-                        throw new Error(result.error);
-                    }
-
-                    const payload: TGateClickTabOpenOrderRes = {
-                        ok: true,
-                        body: result.data,
-                        reqClickTabOpenOrderId: reqClickTabOpenOrderId,
-                        error: null,
-                    };
-
-                    botWorker?.postMessage({ type: "bot:clickTabOpenOrder:res", payload: payload });
-                } catch (e: any) {
-                    const payload: TGateClickTabOpenOrderRes = {
-                        ok: false,
-                        body: null,
-                        reqClickTabOpenOrderId: reqClickTabOpenOrderId,
-                        error: String(e?.message || e),
-                    };
-                    botWorker?.postMessage({ type: "bot:clickTabOpenOrder:res", payload: payload });
-                }
-            }
-            if (msg?.type === "bot:clickCanelAllOpen") {
-                if (!gateView) return;
-
-                const { reqClickCanelAllOpenOrderId, stringClickCanelAllOpen } = msg?.payload;
-
-                try {
-                    const result: TResultClickCancelOpen = await gateView.webContents.executeJavaScript(stringClickCanelAllOpen, true);
-
-                    if (result.ok === false && result.error) {
-                        throw new Error(result.error);
-                    }
-
-                    const payload: TGateClickCancelAllOpenRes = {
-                        ok: result.ok,
-                        body: result.data,
-                        reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
-                        error: null,
-                    };
-
-                    botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
-                } catch (e: any) {
-                    const payload: TGateClickCancelAllOpenRes = {
-                        ok: false,
-                        body: null,
-                        reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
-                        error: String(e?.message || e),
-                    };
-                    botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
-                }
-            }
-            if (msg?.type === "bot:sticky:set") {
-                mainWindow?.webContents.send("bot:sticky:set", msg.payload);
-            }
-            if (msg?.type === "bot:sticky:remove") {
-                mainWindow?.webContents.send("bot:sticky:remove", msg.payload);
-            }
-            if (msg?.type === "bot:sticky:clear") {
-                mainWindow?.webContents.send("bot:sticky:clear", msg.payload);
-            }
-            if (msg?.type === "bot:reloadWebContentsView:Request") {
-                if (!gateView) {
-                    mainLog.error("bot:reloadWebContentsView:Request: gateView not found");
-                    return;
+                if (result.ok === false && result.error) {
+                    throw new Error(result.error);
                 }
 
-                try {
-                    if (!botWorker) {
-                        throw new Error("bot:reloadWebContentsView:Request: botWorker not found");
-                    }
+                const payload: TGateFectMainRes = {
+                    ok: true,
+                    reqId,
+                    bodyText: result?.bodyText,
+                    error: null,
+                };
 
-                    await reloadAndWait(gateView, botWorker, 30000);
-                    // re-inject mọi thứ cần chạy lại sau reload
-                    gateView.webContents.executeJavaScript(setLocalStorageScript, true).catch(() => {});
-                    gateView.webContents.executeJavaScript(codeStringKillMantineToasts, true).catch(() => {});
-                    // (nếu có) re-enable các patch WS / CDP, v.v.
+                botWorker?.postMessage({ type: "bot:fetch:res", payload });
+            } catch (e: any) {
+                const msg = String(e?.message || e);
+                const looksTimeout = /\btime(?:d\s+)?out\b/i.test(msg) || e?.name === "AbortError" || e?.code === "ETIMEDOUT";
+                const payload: TGateFectMainRes = {
+                    ok: false,
+                    reqId,
+                    bodyText: "",
+                    error: looksTimeout ? GATE_TIMEOUT : msg, // <-- chuẩn hoá thêm lần nữa
+                };
+                botWorker?.postMessage({ type: "bot:fetch:res", payload });
+            }
+        }
+        if (msg?.type === "bot:order") {
+            if (!gateView) return;
+            const { payloadOrder: payloadOrderRaw, selector, reqOrderId } = msg?.payload;
+            const tag = `O${reqOrderId}`;
+            try {
+                payloadOrder = payloadOrderRaw;
 
-                    botWorker?.postMessage({ type: "bot:reloadWebContentsView:Response", payload: msg?.payload });
-                } catch (e) {
-                    // log lỗi reload nếu cần
-                    workerLog.error(`bot:reloadWebContentsView:Request: ${e}`);
+                // Tạo promise chờ API order
+                const waitOrder = waitForOneRequest(
+                    gateView.webContents,
+                    {
+                        method: "POST",
+                        urlPrefix: "https://www.gate.com/apiw/v2/futures/usdt/orders",
+                    },
+                    tag,
+                );
+
+                // Thực hiện click (trả về khi JS của bạn xong, không phải khi API xong)
+                const js = createCodeStringClickOrder(selector);
+                const resultClick: TResultClickOpenOrder = await gateView.webContents.executeJavaScript(js, true);
+                if (resultClick.ok === false && resultClick.error) {
+                    throw new Error(resultClick.error);
                 }
+
+                // Chờ API xong, lấy body
+                const { bodyText } = await waitOrder;
+
+                const payload: TGateOrderMainRes = {
+                    ok: true,
+                    reqOrderId,
+                    bodyText,
+                    error: null,
+                };
+
+                botWorker?.postMessage({ type: "bot:order:res", payload: payload });
+            } catch (e: any) {
+                const payload: TGateOrderMainRes = {
+                    ok: false,
+                    reqOrderId: reqOrderId,
+                    bodyText: "",
+                    error: String(e?.message || e),
+                };
+                botWorker?.postMessage({ type: "bot:order:res", payload: payload });
             }
-            if (msg?.type === "bot:rateCounter") {
-                mainWindow?.webContents.send("bot:rateCounter", msg);
-            }
-            if (msg?.type === "bot:clickMarketPosition") {
-                if (!gateView) return;
+        }
+        if (msg?.type === "bot:clickTabOpenOrder") {
+            if (!gateView) return;
 
-                const { reqClickMarketPositionId, stringClickMarketPosition } = msg?.payload;
+            const { reqClickTabOpenOrderId, stringClickTabOpenOrder } = msg?.payload;
 
-                try {
-                    const result: TResultClickMarketPosition = await gateView.webContents.executeJavaScript(stringClickMarketPosition, true);
+            try {
+                const result: TResultClickTabOpenOrder = await gateView.webContents.executeJavaScript(stringClickTabOpenOrder, true);
 
-                    if (result.ok === false && result.error) {
-                        throw new Error(result.error);
-                    }
-
-                    const payload: TGateClickMarketPositionRes = {
-                        ok: result.ok,
-                        body: result.data,
-                        reqClickMarketPositionId: reqClickMarketPositionId,
-                        error: null,
-                    };
-
-                    botWorker?.postMessage({ type: "bot:clickMarketPosition:res", payload: payload });
-                } catch (e: any) {
-                    const payload: TGateClickMarketPositionRes = {
-                        ok: false,
-                        body: null,
-                        reqClickMarketPositionId: reqClickMarketPositionId,
-                        error: String(e?.message || e),
-                    };
-                    botWorker?.postMessage({ type: "bot:clickMarketPosition:res", payload: payload });
+                if (result.ok === false && result.error) {
+                    throw new Error(result.error);
                 }
-            }
-            if (msg?.type === "bot:saveAccount") {
-                mainWindow?.webContents.send("bot:saveAccount", msg);
-            }
-            if (msg?.type === "bot:upsertFixLiquidation") {
-                mainWindow?.webContents.send("bot:upsertFixLiquidation", msg);
-            }
-            if (msg?.type === "bot:upsertFixStopLoss") {
-                mainWindow?.webContents.send("bot:upsertFixStopLoss", msg);
-            }
-            if (msg?.type === "bot:upsertFixStopLossQueue") {
-                mainWindow?.webContents.send("bot:upsertFixStopLossQueue", msg);
-            }
-            if (msg?.type === "bot:createFixStopLossHistories") {
-                mainWindow?.webContents.send("bot:createFixStopLossHistories", msg);
-            }
-            if (msg?.type === "bot:clickClearAll") {
-                if (!gateView) return;
 
-                const { reqClickClearAllId, stringClickClearAll } = msg?.payload;
+                const payload: TGateClickTabOpenOrderRes = {
+                    ok: true,
+                    body: result.data,
+                    reqClickTabOpenOrderId: reqClickTabOpenOrderId,
+                    error: null,
+                };
 
-                try {
-                    const result: TResultClick<boolean> = await gateView.webContents.executeJavaScript(stringClickClearAll, true);
+                botWorker?.postMessage({ type: "bot:clickTabOpenOrder:res", payload: payload });
+            } catch (e: any) {
+                const payload: TGateClickTabOpenOrderRes = {
+                    ok: false,
+                    body: null,
+                    reqClickTabOpenOrderId: reqClickTabOpenOrderId,
+                    error: String(e?.message || e),
+                };
+                botWorker?.postMessage({ type: "bot:clickTabOpenOrder:res", payload: payload });
+            }
+        }
+        if (msg?.type === "bot:clickCanelAllOpen") {
+            if (!gateView) return;
 
-                    if (result.ok === false && result.error) {
-                        throw new Error(result.error);
-                    }
+            const { reqClickCanelAllOpenOrderId, stringClickCanelAllOpen } = msg?.payload;
 
-                    const payload: TGateClick<boolean> & { reqClickClearAllId: number } = {
-                        ok: result.ok,
-                        body: result.data,
-                        reqClickClearAllId: reqClickClearAllId,
-                        error: null,
-                    };
+            try {
+                const result: TResultClickCancelOpen = await gateView.webContents.executeJavaScript(stringClickCanelAllOpen, true);
 
-                    botWorker?.postMessage({ type: "bot:clickClearAll:res", payload: payload });
-                } catch (e: any) {
-                    const payload: TGateClick<boolean> & { reqClickClearAllId: number } = {
-                        ok: false,
-                        body: null,
-                        reqClickClearAllId: reqClickClearAllId,
-                        error: String(e?.message || e),
-                    };
-                    botWorker?.postMessage({ type: "bot:clickClearAll:res", payload: payload });
+                if (result.ok === false && result.error) {
+                    throw new Error(result.error);
                 }
-            }
-        });
-        botWorker.on("error", (err) => {
-            workerLog.error(err);
-        });
-        botWorker.on("exit", (code) => {
-            workerLog.error(`bot exited code: ${code}, need to reload app`);
-            botWorker = null;
-        });
-        botWorker.once("online", () => {
-            workerLog.info(`Worker Online`);
-        });
 
-        // lắng nghe từ rerender
-        ipcMain.on("bot:start", (event, data) => {
-            botWorker?.postMessage({ type: "bot:start", payload: data });
-        });
-        ipcMain.on("bot:stop", (event, data) => {
-            botWorker?.postMessage({ type: "bot:stop", payload: data });
-        });
-        ipcMain.on("bot:reloadWebContentsView", (event, data) => {
-            botWorker?.postMessage({ type: "bot:reloadWebContentsView", payload: data });
-        });
-        ipcMain.on("bot:setWhiteList", (event, data) => {
-            botWorker?.postMessage({ type: "bot:setWhiteList", payload: data });
-        });
-        ipcMain.on("bot:settingUser", (event, data) => {
-            botWorker?.postMessage({ type: "bot:settingUser", payload: data });
-        });
-        ipcMain.on("bot:uiSelector", (event, data) => {
-            botWorker?.postMessage({ type: "bot:uiSelector", payload: data });
-        });
-        ipcMain.on("bot:blackList", (event, data) => {
-            botWorker?.postMessage({ type: "bot:blackList", payload: data });
-        });
-        ipcMain.on("bot:rateMax:set", (event, data) => {
-            botWorker?.postMessage({ type: "bot:rateMax:set", payload: data });
-        });
-        ipcMain.handle("devtools:toggle", () => {
-            if (!gateView) return { ok: false, opened: false, error: "gateView not found" };
-            if (gateView.webContents.isDevToolsOpened()) {
-                gateView.webContents.closeDevTools();
-                return { ok: true, opened: false };
-            } else {
-                gateView.webContents.openDevTools({ mode: "detach" });
-                return { ok: true, opened: true };
-            }
-        });
-        ipcMain.on("bot:takeProfitAccount", (event, data) => {
-            botWorker?.postMessage({ type: "bot:takeProfitAccount", payload: data });
-        });
-        ipcMain.on("bot:removeFixStopLossQueue", (event, data) => {
-            botWorker?.postMessage({ type: "bot:removeFixStopLossQueue", payload: data });
-        });
-    }
+                const payload: TGateClickCancelAllOpenRes = {
+                    ok: result.ok,
+                    body: result.data,
+                    reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
+                    error: null,
+                };
 
-    return botWorker!;
+                botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
+            } catch (e: any) {
+                const payload: TGateClickCancelAllOpenRes = {
+                    ok: false,
+                    body: null,
+                    reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
+                    error: String(e?.message || e),
+                };
+                botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
+            }
+        }
+        if (msg?.type === "bot:sticky:set") {
+            mainWindow?.webContents.send("bot:sticky:set", msg.payload);
+        }
+        if (msg?.type === "bot:sticky:remove") {
+            mainWindow?.webContents.send("bot:sticky:remove", msg.payload);
+        }
+        if (msg?.type === "bot:sticky:clear") {
+            mainWindow?.webContents.send("bot:sticky:clear", msg.payload);
+        }
+        if (msg?.type === "bot:reloadWebContentsView:Request") {
+            if (!gateView) {
+                mainLog.error("bot:reloadWebContentsView:Request: gateView not found");
+                return;
+            }
+
+            try {
+                if (!botWorker) {
+                    throw new Error("bot:reloadWebContentsView:Request: botWorker not found");
+                }
+
+                await reloadAndWait(gateView, botWorker, 30000);
+                // re-inject mọi thứ cần chạy lại sau reload
+                gateView.webContents.executeJavaScript(setLocalStorageScript, true).catch(() => {});
+                gateView.webContents.executeJavaScript(codeStringKillMantineToasts, true).catch(() => {});
+                // (nếu có) re-enable các patch WS / CDP, v.v.
+
+                botWorker?.postMessage({ type: "bot:reloadWebContentsView:Response", payload: msg?.payload });
+            } catch (e) {
+                // log lỗi reload nếu cần
+                workerLog.error(`bot:reloadWebContentsView:Request: ${e}`);
+            }
+        }
+        if (msg?.type === "bot:rateCounter") {
+            mainWindow?.webContents.send("bot:rateCounter", msg);
+        }
+        if (msg?.type === "bot:clickMarketPosition") {
+            if (!gateView) return;
+
+            const { reqClickMarketPositionId, stringClickMarketPosition } = msg?.payload;
+
+            try {
+                const result: TResultClickMarketPosition = await gateView.webContents.executeJavaScript(stringClickMarketPosition, true);
+
+                if (result.ok === false && result.error) {
+                    throw new Error(result.error);
+                }
+
+                const payload: TGateClickMarketPositionRes = {
+                    ok: result.ok,
+                    body: result.data,
+                    reqClickMarketPositionId: reqClickMarketPositionId,
+                    error: null,
+                };
+
+                botWorker?.postMessage({ type: "bot:clickMarketPosition:res", payload: payload });
+            } catch (e: any) {
+                const payload: TGateClickMarketPositionRes = {
+                    ok: false,
+                    body: null,
+                    reqClickMarketPositionId: reqClickMarketPositionId,
+                    error: String(e?.message || e),
+                };
+                botWorker?.postMessage({ type: "bot:clickMarketPosition:res", payload: payload });
+            }
+        }
+        if (msg?.type === "bot:saveAccount") {
+            mainWindow?.webContents.send("bot:saveAccount", msg);
+        }
+        if (msg?.type === "bot:upsertFixLiquidation") {
+            mainWindow?.webContents.send("bot:upsertFixLiquidation", msg);
+        }
+        if (msg?.type === "bot:upsertFixStopLoss") {
+            mainWindow?.webContents.send("bot:upsertFixStopLoss", msg);
+        }
+        if (msg?.type === "bot:upsertFixStopLossQueue") {
+            mainWindow?.webContents.send("bot:upsertFixStopLossQueue", msg);
+        }
+        if (msg?.type === "bot:createFixStopLossHistories") {
+            mainWindow?.webContents.send("bot:createFixStopLossHistories", msg);
+        }
+        if (msg?.type === "bot:clickClearAll") {
+            if (!gateView) return;
+
+            const { reqClickClearAllId, stringClickClearAll } = msg?.payload;
+
+            try {
+                const result: TResultClick<boolean> = await gateView.webContents.executeJavaScript(stringClickClearAll, true);
+
+                if (result.ok === false && result.error) {
+                    throw new Error(result.error);
+                }
+
+                const payload: TGateClick<boolean> & { reqClickClearAllId: number } = {
+                    ok: result.ok,
+                    body: result.data,
+                    reqClickClearAllId: reqClickClearAllId,
+                    error: null,
+                };
+
+                botWorker?.postMessage({ type: "bot:clickClearAll:res", payload: payload });
+            } catch (e: any) {
+                const payload: TGateClick<boolean> & { reqClickClearAllId: number } = {
+                    ok: false,
+                    body: null,
+                    reqClickClearAllId: reqClickClearAllId,
+                    error: String(e?.message || e),
+                };
+                botWorker?.postMessage({ type: "bot:clickClearAll:res", payload: payload });
+            }
+        }
+    });
+    botWorker.on("error", (err) => {
+        workerLog.error(err);
+    });
+    botWorker.on("exit", (code) => {
+        workerLog.error(`bot exited code: ${code}, need to reload app`);
+        // botWorker = null;
+    });
+    botWorker.once("online", () => {
+        workerLog.info(`Worker Online`);
+        botWorker.postMessage({ type: "bot:init", payload: dataInit });
+        mainLog.info("1) bot:init - send  | threadId ", botWorker?.threadId);
+    });
+
+    // lắng nghe từ rerender
+    ipcMain.on("bot:start", (event, data) => {
+        botWorker.postMessage({ type: "bot:start", payload: data });
+    });
+    ipcMain.on("bot:stop", (event, data) => {
+        botWorker.postMessage({ type: "bot:stop", payload: data });
+    });
+    ipcMain.on("bot:reloadWebContentsView", (event, data) => {
+        botWorker.postMessage({ type: "bot:reloadWebContentsView", payload: data });
+    });
+    ipcMain.on("bot:setWhiteList", (event, data) => {
+        botWorker.postMessage({ type: "bot:setWhiteList", payload: data });
+    });
+    ipcMain.on("bot:settingUser", (event, data) => {
+        botWorker.postMessage({ type: "bot:settingUser", payload: data });
+    });
+    ipcMain.on("bot:uiSelector", (event, data) => {
+        botWorker.postMessage({ type: "bot:uiSelector", payload: data });
+    });
+    ipcMain.on("bot:blackList", (event, data) => {
+        botWorker.postMessage({ type: "bot:blackList", payload: data });
+    });
+    ipcMain.on("bot:rateMax:set", (event, data) => {
+        botWorker.postMessage({ type: "bot:rateMax:set", payload: data });
+    });
+    ipcMain.handle("devtools:toggle", () => {
+        if (!gateView) return { ok: false, opened: false, error: "gateView not found" };
+        if (gateView.webContents.isDevToolsOpened()) {
+            gateView.webContents.closeDevTools();
+            return { ok: true, opened: false };
+        } else {
+            gateView.webContents.openDevTools({ mode: "detach" });
+            return { ok: true, opened: true };
+        }
+    });
+    ipcMain.on("bot:takeProfitAccount", (event, data) => {
+        botWorker.postMessage({ type: "bot:takeProfitAccount", payload: data });
+    });
+    ipcMain.on("bot:removeFixStopLossQueue", (event, data) => {
+        botWorker.postMessage({ type: "bot:removeFixStopLossQueue", payload: data });
+    });
 }
 
 const FLOWS_API = {

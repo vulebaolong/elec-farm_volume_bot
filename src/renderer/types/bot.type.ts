@@ -4,6 +4,7 @@ import { TFixStopLossQueueInDB } from "./fix-stoploss-queue.type";
 import { TFixStopLossInDB } from "./fix-stoploss.type";
 import { TSettingUsers } from "./setting-user.type";
 import { TUiSelector } from "./ui-selector.type";
+import { TUid } from "./uid.type";
 
 export type TDataInitBot = {
     parentPort: import("worker_threads").MessagePort;
@@ -13,6 +14,7 @@ export type TDataInitBot = {
     fixLiquidationInDB?: TFixLiquidationInDB;
     fixStopLossInDB?: TFixStopLossInDB;
     fixStopLossQueueInDB?: TFixStopLossQueueInDB;
+    uids: TUid[]
 };
 
 export type TChangeLeverage = {

@@ -128,11 +128,13 @@ export default function TakeprofitAccount() {
                     </Table.Thead>
                     <Table.Tbody>{rows.length > 0 && rows}</Table.Tbody>
                 </Table>
-                <div className="absolute flex items-center justify-center top-0 left-0 w-full h-full z-10">
-                    <Text size="sm" c="dimmed">
-                        {getTakeProfitAccount.isLoading ? "Loading..." : "No data"}
-                    </Text>
-                </div>
+                {getTakeProfitAccount.data?.items.length === 0 && (
+                    <div className="absolute flex items-center justify-center top-0 left-0 w-full h-full z-10">
+                        <Text size="sm" c="dimmed">
+                            {getTakeProfitAccount.isLoading ? "Loading..." : "No data"}
+                        </Text>
+                    </div>
+                )}
             </div>
 
             <Text size="xs" c="dimmed" mt="xs">

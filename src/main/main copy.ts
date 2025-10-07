@@ -8,7 +8,6 @@ import MenuBuilder from "./menu";
 import { setupUpdaterIPC } from "./updater";
 import { resolveHtmlPath } from "./util";
 import { initWorker } from "./workers/init.worker";
-import { BotWorkerManager } from "./workers/worker-manager";
 
 const log = initLog();
 
@@ -17,8 +16,8 @@ const workerLog = log.scope("worker");
 
 mainLog.info("✅ Main started =================");
 
-const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
-// const isDebug = false;
+// const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
+const isDebug = false;
 
 if (!isDebug) {
     // console.log = () => {};
@@ -37,7 +36,7 @@ class AppUpdater {
     }
 }
 
-// let mainWindow: BrowserWindow | null = null;
+let mainWindow: BrowserWindow | null = null;
 
 if (process.env.NODE_ENV === "production") {
     const sourceMapSupport = require("source-map-support");
@@ -75,7 +74,7 @@ const createWindow = async () => {
     const MIN_WIDTH = 1024; // >= lg của Tailwind (desktop)
     const MIN_HEIGHT = 700;
 
-    const mainWindow = new BrowserWindow({
+    mainWindow = new BrowserWindow({
         show: false,
         // width: 1024,
         // height: 728,
@@ -125,7 +124,7 @@ const createWindow = async () => {
     });
 
     mainWindow.on("closed", () => {
-        // mainWindow = null;
+        mainWindow = null;
     });
 
     const menuBuilder = new MenuBuilder(mainWindow);
@@ -140,8 +139,6 @@ const createWindow = async () => {
     // Remove this if your app does not use auto updates
     // eslint-disable-next-line
     new AppUpdater();
-
-    return mainWindow
 };
 
 /**
@@ -158,15 +155,13 @@ app.on("window-all-closed", async () => {
 });
 
 app.whenReady()
-    .then(async () => {
+    .then(() => {
         if (!IS_PRODUCTION) {
             installExtension(REDUX_DEVTOOLS)
                 .then((ext) => console.log(`Added Extension:  ${ext.name}`))
                 .catch((err) => console.log("An error occurred: ", err));
         }
-        const mainWindow = await createWindow();
-
-        new BotWorkerManager(mainWindow, mainLog, workerLog);
+        createWindow();
 
         // app.on("activate", () => {
         //     // On macOS it's common to re-create a window in the app when the
@@ -182,10 +177,10 @@ ipcMain.on("ipc-example", async (event, arg) => {
     event.reply("ipc-example", msgTemplate("pong"));
 });
 
-// ipcMain.on("worker:init",  (event, arg) => {
-//     if(!mainWindow) {
-//         mainLog.error("mainWindow is null");
-//         return
-//     };
-//     initWorker(mainWindow, mainLog, workerLog, arg);
-// });
+ipcMain.on("worker:init",  (event, arg) => {
+    if(!mainWindow) {
+        mainLog.error("mainWindow is null");
+        return
+    };
+    initWorker(mainWindow, mainLog, workerLog, arg);
+});

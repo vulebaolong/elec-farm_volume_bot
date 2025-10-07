@@ -18,6 +18,7 @@ import { useSocket } from "./socket.hook";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
+    const uids = useAppSelector((state) => state.user.info?.Uids);
     const info = useAppSelector((state) => state.user.info);
     const { socket } = useSocket();
     const dispatch = useAppDispatch();
@@ -95,6 +96,7 @@ export const useInitData = () => {
         if (!getFixLiquidation.data) return;
         if (!getFixStopLoss.data) return;
         if (!getFixStopLossQueueByUserId.data) return;
+        if (!uids) return;
 
         if (countRef.current === 0) {
             const dataWorkerInit: Omit<TDataInitBot, "parentPort"> = {
@@ -104,11 +106,12 @@ export const useInitData = () => {
                 fixLiquidationInDB: getFixLiquidation.data.items?.[0],
                 fixStopLossInDB: getFixStopLoss.data.items?.[0],
                 fixStopLossQueueInDB: getFixStopLossQueueByUserId.data,
+                uids: uids,
             };
-            window.electron?.ipcRenderer.sendMessage("bot:init", dataWorkerInit);
+            window.electron?.ipcRenderer.sendMessage("worker:initMany", dataWorkerInit);
             countRef.current = 1;
         }
-    }, [settingUser, getUiSelector.data, getMyBlackList.data, getFixLiquidation.data, getFixStopLoss.data, getFixStopLossQueueByUserId.data]);
+    }, [settingUser, uids, getUiSelector.data, getMyBlackList.data, getFixLiquidation.data, getFixStopLoss.data, getFixStopLossQueueByUserId.data]);
 
     useEffect(() => {
         if (info && socket) {
