@@ -15,6 +15,7 @@ import { TSettingUsersSocket } from "@/types/setting-user.type";
 import { TWhiteList } from "@/types/white-list.type";
 import { useEffect, useRef } from "react";
 import { useSocket } from "./socket.hook";
+import { useGetAllWhiteListMartingale } from "@/api/tanstack/white-list-martingale.tanstack";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
@@ -26,6 +27,7 @@ export const useInitData = () => {
     const countRef = useRef(0);
     const getInfoMutation = useGetInfoMutation();
     const getMyBlackList = useGetMyBlackList();
+    const getAllWhiteListMartingale = useGetAllWhiteListMartingale();
 
     const getFixLiquidation = useGetFixLiquidation({
         pagination: { page: 1, pageSize: 10 },
@@ -93,6 +95,7 @@ export const useInitData = () => {
         if (!settingUser) return;
         if (!getUiSelector.data) return;
         if (!getMyBlackList.data) return;
+        if (!getAllWhiteListMartingale.data) return;
         if (!getFixLiquidation.data) return;
         if (!getFixStopLoss.data) return;
         if (!getFixStopLossQueueByUserId.data) return;
@@ -103,6 +106,7 @@ export const useInitData = () => {
                 settingUser: settingUser,
                 uiSelector: getUiSelector.data,
                 blackList: getMyBlackList.data.map((item) => item.symbol),
+                whiteListMartingale: getAllWhiteListMartingale.data.map((item) => item.symbol),
                 fixLiquidationInDB: getFixLiquidation.data.items?.[0],
                 fixStopLossInDB: getFixStopLoss.data.items?.[0],
                 fixStopLossQueueInDB: getFixStopLossQueueByUserId.data,
@@ -111,7 +115,7 @@ export const useInitData = () => {
             window.electron?.ipcRenderer.sendMessage("worker:initMany", dataWorkerInit);
             countRef.current = 1;
         }
-    }, [settingUser, uids, getUiSelector.data, getMyBlackList.data, getFixLiquidation.data, getFixStopLoss.data, getFixStopLossQueueByUserId.data]);
+    }, [settingUser, getUiSelector.data, getMyBlackList.data, getAllWhiteListMartingale.data, getFixLiquidation.data, getFixStopLoss.data, getFixStopLossQueueByUserId.data]);
 
     useEffect(() => {
         if (info && socket) {

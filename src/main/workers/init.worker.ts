@@ -240,7 +240,7 @@ export function initWorker(
                     reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
                     error: null,
                 };
-
+       
                 botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
             } catch (e: any) {
                 const payload: TGateClickCancelAllOpenRes = {
@@ -252,6 +252,7 @@ export function initWorker(
                 botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
             }
         }
+        
         if (msg?.type === "bot:sticky:set") {
             mainWindow?.webContents.send("bot:sticky:set", msg.payload);
         }

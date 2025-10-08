@@ -46,6 +46,7 @@ import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { calcSize, handleEntryCheckAll } from "./util-bot.worker";
+import { TWhiteListMartingale } from "@/types/white-list-martingale.type";
 
 const FLOWS_API = {
     acounts: {
@@ -91,6 +92,7 @@ parentPort!.on("message", (msg: any) => {
                     settingUser: msg.payload.settingUser,
                     uiSelector: msg.payload.uiSelector,
                     blackList: msg.payload.blackList,
+                    whiteListMartingale: msg.payload.whiteListMartingale,
                     fixLiquidationInDB: msg.payload.fixLiquidationInDB,
                     fixStopLossQueueInDB: msg.payload.fixStopLossQueueInDB,
                     fixStopLossInDB: msg.payload.fixStopLossInDB,
@@ -121,6 +123,7 @@ class Bot {
     private whiteList: TWhiteList = {};
     private infoContract = new Map<string, TGetInfoContractRes>();
     private blackList: string[] = [];
+    private whiteListMartingale: TWhiteListMartingale["symbol"][] = [];
     private nextOpenAt: number = 0;
     private accounts: TAccount[] = [];
     private rateCounter = new SlidingRateCounter();
@@ -147,6 +150,7 @@ class Bot {
         this.settingUser = dataInitBot.settingUser;
         this.uiSelector = dataInitBot.uiSelector;
         this.blackList = dataInitBot.blackList;
+        this.whiteListMartingale = dataInitBot.whiteListMartingale;
 
         // Fix Liquidation
         this.dataFixLiquidation = {
@@ -418,8 +422,9 @@ class Bot {
         // console.log("startTimeSec", this.startTimeSec);
         // console.log("stepFixLiquidation", this.stepFixLiquidation);
         // console.log("dataFixLiquidation", this.dataFixLiquidation);
-        console.log("dataFixStopLoss", this.dataFixStopLoss);
-        console.log("fixStopLossQueue", this.fixStopLossQueue);
+        // console.log("dataFixStopLoss", this.dataFixStopLoss);
+        // console.log("fixStopLossQueue", this.fixStopLossQueue);
+        console.log("whiteListMartingale", this.whiteListMartingale);
     }
 
     private heartbeat() {
@@ -466,6 +471,10 @@ class Bot {
 
             case "bot:blackList":
                 this.setBlackList(msg.payload);
+                break;
+
+            case "bot:whiteListMartingale":
+                this.setWhiteListMartingale(msg.payload);
                 break;
 
             case "bot:reloadWebContentsView:Response":
@@ -526,6 +535,10 @@ class Bot {
 
     private setBlackList(blackList: string[]) {
         this.blackList = blackList;
+    }
+
+    private setWhiteListMartingale(whiteListMartingale: TWhiteListMartingale["symbol"][]) {
+        this.whiteListMartingale = whiteListMartingale;
     }
 
     private setOrderOpens(orderOpens: TOrderOpen[]) {
@@ -2246,6 +2259,12 @@ class Bot {
         if (this.dataFixStopLoss.dataOrderOpenFixStopLoss) {
             // this.logWorker.info(`🤷 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
             console.log(`🤷 Create Order Fix StopLoss: Skip by đã có lệnh chờ để fix, không vào nữa`);
+            return false;
+        }
+
+        if (!this.whiteListMartingale.includes(symbol.replace("/", "_"))) {
+            // console.log(`🤷 Create Order Fix StopLoss: Skip by ${symbol} exist whiteListMartingale`);
+            this.logWorker.info(`🤷 Create Order Fix StopLoss: Skip by ${symbol} not exist whiteListMartingale`);
             return false;
         }
 

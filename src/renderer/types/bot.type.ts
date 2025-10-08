@@ -5,12 +5,14 @@ import { TFixStopLossInDB } from "./fix-stoploss.type";
 import { TSettingUsers } from "./setting-user.type";
 import { TUiSelector } from "./ui-selector.type";
 import { TUid } from "./uid.type";
+import { TWhiteListMartingale } from "./white-list-martingale.type";
 
 export type TDataInitBot = {
     parentPort: import("worker_threads").MessagePort;
     settingUser: TSettingUsers;
     uiSelector: TUiSelector[];
     blackList: string[];
+    whiteListMartingale: TWhiteListMartingale["symbol"][];
     fixLiquidationInDB?: TFixLiquidationInDB;
     fixStopLossInDB?: TFixStopLossInDB;
     fixStopLossQueueInDB?: TFixStopLossQueueInDB;
