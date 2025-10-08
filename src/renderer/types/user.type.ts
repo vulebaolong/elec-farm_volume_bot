@@ -11,10 +11,13 @@ export type TUser = {
     fullName: string;
     avatar: any;
     googleId: any;
+    isLoginAllowed: boolean;
     Roles: TRole;
     SettingUsers: TSettingUsers;
-    Uids: TUid[];
+    Uids: TUid[] | [];
 } & TBaseTimestamps;
+
+export type TUserManager = Omit<TUser, "SettingUsers">;
 
 export type TUploadAvatarLocalRes = {
     folder: string;

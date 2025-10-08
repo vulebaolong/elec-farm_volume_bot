@@ -37,6 +37,7 @@ export type Channels =
     | "bot:takeProfitAccount"
     | "bot:upsertFixLiquidation"
     | "bot:upsertFixStopLoss"
+    | "bot:isChildView"
     | "logs:path"
     | "logs:size"
     | "logs:read"
@@ -48,9 +49,11 @@ export type Channels =
     | "rate:counts:clear"
     | "rate:counts:reveal"
     | "rate:counts:update"
-    | "devtools:toggle"
     | "worker:init"
-    | "worker:initMany";
+    | "worker:initMany"
+    | "worker:stopAll"
+    | "worker:toggleWebView"
+    | "worker:stopOne";
 
 const electronHandler = {
     ipcRenderer: {

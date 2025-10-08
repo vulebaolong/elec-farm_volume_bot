@@ -2,6 +2,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { TWorkerData } from "@/types/worker.type";
 import { useEffect, useMemo, useState } from "react";
 
 type StickySet = { key: string; text: string; ts: number };
@@ -10,11 +11,13 @@ export default function PassiveSticky() {
     const [map, setMap] = useState<Record<string, StickySet>>({});
 
     useEffect(() => {
-        const offSet = window.electron.ipcRenderer.on("bot:sticky:set", (p: StickySet) => {
-            setMap((prev) => ({ ...prev, [p.key]: p }));
+        const offSet = window.electron.ipcRenderer.on("bot:sticky:set", (data: TWorkerData<StickySet>) => {
+            const { payload } = data;
+            setMap((prev) => ({ ...prev, [payload.key]: payload }));
         });
-        const offRemove = window.electron.ipcRenderer.on("bot:sticky:remove", (p: { key: string }) => {
-            setMap(({ [p.key]: _omit, ...rest }) => rest);
+        const offRemove = window.electron.ipcRenderer.on("bot:sticky:remove", (data: TWorkerData<{ key: string }>) => {
+            const { payload } = data;
+            setMap(({ [payload.key]: _omit, ...rest }) => rest);
         });
         const offClear = window.electron.ipcRenderer.on("bot:sticky:clear", () => setMap({}));
         return () => {

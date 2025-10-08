@@ -1,32 +1,31 @@
-import { useToggleDevTool } from "@/api/tanstack/devtool.tanstack";
+import { useUpsertAccount } from "@/api/tanstack/account.tanstack";
+import { useCreateTakeProfitAccount, useUpdateTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { accountEquity } from "@/helpers/function.helper";
 import { ADD_RIPPLE, SET_IS_RUNNING, SET_IS_START } from "@/redux/slices/bot.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
+import { TAccount } from "@/types/account.type";
+import { TCreateTakeprofitAccountReq, TTakeprofitAccount } from "@/types/takeprofit-account.type";
 import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
 import { Play, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ButtonLoading } from "../ui/button-loading";
-import { TAccount } from "@/types/account.type";
 import { toast } from "sonner";
-import { useCreateTakeProfitAccount, useUpdateTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
-import { TCreateTakeprofitAccountReq, TTakeprofitAccount } from "@/types/takeprofit-account.type";
+import { ButtonLoading } from "../ui/button-loading";
 import Ripple from "./ripple";
-import { accountEquity } from "@/helpers/function.helper";
 
 type TProps = {};
 
 export default function Controll({}: TProps) {
     const isStart = useAppSelector((state) => state.bot.isStart);
     const isRunning = useAppSelector((state) => state.bot.isRunning);
-    const roleId = useAppSelector((state) => state.user.info?.roleId);
     const dispatch = useAppDispatch();
     const [loadingReloadWebContent, setLoadingReloadWebContent] = useState(false);
-    const toggleDevTool = useToggleDevTool();
     const accountRef = useRef<TAccount | null>(null);
     const takeprofitAccountNewRef = useRef<TTakeprofitAccount | null>(null);
     const createTakeProfitAccount = useCreateTakeProfitAccount();
     const updateTakeProfitAccount = useUpdateTakeProfitAccount();
+    const upsertAccount = useUpsertAccount();
 
     const start = () => {
         window.electron?.ipcRenderer.sendMessage("bot:start");
@@ -45,6 +44,10 @@ export default function Controll({}: TProps) {
         });
 
         const offBotSaveAccount = window.electron.ipcRenderer.on("bot:saveAccount", (data: TWorkerData<TAccount[]>) => {
+            upsertAccount.mutate({
+                data: data.payload,
+            });
+
             accountRef.current = data.payload[0];
             if (takeprofitAccountNewRef.current) {
                 const total = data.payload[0].total;
@@ -109,7 +112,7 @@ export default function Controll({}: TProps) {
     }, [isRunning, isStart, dispatch]);
 
     return (
-        <div className="sticky top-0 z-[99]">
+        <div className="sticky top-0 z-20">
             <Card>
                 <CardHeader className="flex items-center gap-2">
                     <div className="flex gap-2 items-center">
@@ -128,10 +131,10 @@ export default function Controll({}: TProps) {
                                 onClick={start}
                                 className={[
                                     "group relative h-9 rounded-xl px-3",
-                                    "text-white shadow-sm transition-all",
+                                    "text-white transition-all",
                                     "bg-gradient-to-br from-emerald-500 to-emerald-600",
-                                    "hover:shadow-md hover:from-emerald-500 hover:to-emerald-700",
-                                    "!opacity-100 disabled:shadow-none",
+                                    "hover:from-emerald-500 hover:to-emerald-700",
+                                    "!opacity-100",
                                     "disabled:from-emerald-900/30 disabled:to-emerald-900/50 disabled:text-emerald-200/50",
                                 ].join(" ")}
                             >
@@ -146,10 +149,10 @@ export default function Controll({}: TProps) {
                                 onClick={stop}
                                 className={[
                                     "group relative h-9 rounded-xl px-3",
-                                    "text-white shadow-sm transition-all",
+                                    "text-white transition-all",
                                     "bg-gradient-to-br from-rose-500 to-rose-600",
-                                    "hover:shadow-md hover:from-rose-500 hover:to-rose-700",
-                                    "disabled:opacity-60 disabled:shadow-none",
+                                    "hover:from-rose-500 hover:to-rose-700",
+                                    "disabled:opacity-60",
                                     "disabled:from-rose-800/30 disabled:to-rose-900/30 disabled:text-rose-200/70",
                                 ].join(" ")}
                             >
@@ -169,19 +172,20 @@ export default function Controll({}: TProps) {
                             </ButtonLoading>
 
                             {/* Devtool */}
-                            {roleId === 3 && (
-                                <ButtonLoading
-                                    loading={toggleDevTool.isPending}
-                                    className="w-[100px]"
-                                    variant={"outline"}
-                                    size="sm"
-                                    onClick={() => {
-                                        toggleDevTool.mutate();
-                                    }}
-                                >
-                                    {!toggleDevTool?.data ? "Open" : "Close"} Devtool
-                                </ButtonLoading>
-                            )}
+                            <Button
+                                onClick={() => {
+                                    window.electron?.ipcRenderer.sendMessage("worker:toggleWebView", { uid: 31674740 });
+                                }}
+                            >
+                                Toggle 1
+                            </Button>
+                            <Button
+                                onClick={() => {
+                                    window.electron?.ipcRenderer.sendMessage("worker:toggleWebView", { uid: 31674741 });
+                                }}
+                            >
+                                Toggle 2
+                            </Button>
                         </div>
                     </div>
                 </CardContent>

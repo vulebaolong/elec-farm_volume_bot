@@ -17,6 +17,7 @@ export type TDataInitBot = {
     fixStopLossInDB?: TFixStopLossInDB;
     fixStopLossQueueInDB?: TFixStopLossQueueInDB;
     uids: TUid[]
+    uidDB: TUid["uid"]
 };
 
 export type TChangeLeverage = {
@@ -230,5 +231,11 @@ export type TGateClick<T> = {
 export type TResultClick<T> = {
     ok: boolean;
     data: T;
+    error: string | null;
+};
+
+export type TResultCheckLogin = {
+    ok: boolean;
+    data: boolean;
     error: string | null;
 };

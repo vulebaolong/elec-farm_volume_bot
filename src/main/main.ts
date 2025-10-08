@@ -7,7 +7,6 @@ import { initLog } from "./log";
 import MenuBuilder from "./menu";
 import { setupUpdaterIPC } from "./updater";
 import { resolveHtmlPath } from "./util";
-import { initWorker } from "./workers/init.worker";
 import { BotWorkerManager } from "./workers/worker-manager";
 
 const log = initLog();
@@ -15,7 +14,7 @@ const log = initLog();
 const mainLog = log.scope("main");
 const workerLog = log.scope("worker");
 
-mainLog.info("✅ Main started =================");
+mainLog.info("1) ✅ Main started =================");
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
 // const isDebug = false;

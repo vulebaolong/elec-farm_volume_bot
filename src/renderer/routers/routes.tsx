@@ -12,6 +12,7 @@ import { useNavigate, useRoutes } from "react-router-dom";
 import Setting from "@/components/setting/setting";
 import SettingDev from "@/components/setting-dev/setting-dev";
 import ListManager from "@/components/list-manager/list-manager";
+import UserManager from "@/components/user-manager/user-manager";
 
 export const routes = [
     {
@@ -33,6 +34,10 @@ export const routes = [
             {
                 path: ROUTER.LIST_MANAGER,
                 element: <ListManager />,
+            },
+            {
+                path: ROUTER.USER_MANAGER,
+                element: <UserManager />,
             },
         ],
     },

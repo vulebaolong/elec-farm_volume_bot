@@ -5,26 +5,27 @@ import { useGetFixStopLossQueueByUserId } from "@/api/tanstack/fix-stoploss-queu
 import { useGetFixStopLoss } from "@/api/tanstack/fix-stoploss.tanstack";
 import { useGetUiSelector } from "@/api/tanstack/selector.tanstack";
 import { useSocketEmit } from "@/api/tanstack/socket.tanstack";
+import { useGetAllWhiteListMartingale } from "@/api/tanstack/white-list-martingale.tanstack";
 import { SOCKET_ENVENT } from "@/constant/socket.constant";
 import { SET_SETTING_SYSTEM, SET_WHITELIST_RESET_IN_PROGRESS } from "@/redux/slices/bot.slice";
+import { SET_IS_INIT_WORKER } from "@/redux/slices/user.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
 import { TDataInitBot } from "@/types/bot.type";
 import { TSettingSystemsSocket } from "@/types/setting-system.type";
 import { TSettingUsersSocket } from "@/types/setting-user.type";
 import { TWhiteList } from "@/types/white-list.type";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useSocket } from "./socket.hook";
-import { useGetAllWhiteListMartingale } from "@/api/tanstack/white-list-martingale.tanstack";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
     const uids = useAppSelector((state) => state.user.info?.Uids);
     const info = useAppSelector((state) => state.user.info);
+    const isInitWorker = useAppSelector((state) => state.user.isInitWorker);
     const { socket } = useSocket();
     const dispatch = useAppDispatch();
     const getUiSelector = useGetUiSelector();
-    const countRef = useRef(0);
     const getInfoMutation = useGetInfoMutation();
     const getMyBlackList = useGetMyBlackList();
     const getAllWhiteListMartingale = useGetAllWhiteListMartingale();
@@ -92,6 +93,17 @@ export const useInitData = () => {
     }, [socket]);
 
     useEffect(() => {
+        console.log(456, {
+            settingUser,
+            getUiSelector: getUiSelector.data,
+            getMyBlackList: getMyBlackList.data,
+            getAllWhiteListMartingale: getAllWhiteListMartingale.data,
+            getFixLiquidation: getFixLiquidation.data,
+            getFixStopLoss: getFixStopLoss.data,
+            getFixStopLossQueueByUserId: getFixStopLossQueueByUserId.data,
+            uids: uids,
+            isInitWorker: isInitWorker,
+        });
         if (!settingUser) return;
         if (!getUiSelector.data) return;
         if (!getMyBlackList.data) return;
@@ -100,22 +112,32 @@ export const useInitData = () => {
         if (!getFixStopLoss.data) return;
         if (!getFixStopLossQueueByUserId.data) return;
         if (!uids) return;
+        if (!isInitWorker) return;
 
-        if (countRef.current === 0) {
-            const dataWorkerInit: Omit<TDataInitBot, "parentPort"> = {
-                settingUser: settingUser,
-                uiSelector: getUiSelector.data,
-                blackList: getMyBlackList.data.map((item) => item.symbol),
-                whiteListMartingale: getAllWhiteListMartingale.data.map((item) => item.symbol),
-                fixLiquidationInDB: getFixLiquidation.data.items?.[0],
-                fixStopLossInDB: getFixStopLoss.data.items?.[0],
-                fixStopLossQueueInDB: getFixStopLossQueueByUserId.data,
-                uids: uids,
-            };
-            window.electron?.ipcRenderer.sendMessage("worker:initMany", dataWorkerInit);
-            countRef.current = 1;
-        }
-    }, [settingUser, getUiSelector.data, getMyBlackList.data, getAllWhiteListMartingale.data, getFixLiquidation.data, getFixStopLoss.data, getFixStopLossQueueByUserId.data]);
+        console.log(123);
+
+        const dataWorkerInit: Omit<TDataInitBot, "parentPort" | "uidDB"> = {
+            settingUser: settingUser,
+            uiSelector: getUiSelector.data,
+            blackList: getMyBlackList.data.map((item) => item.symbol),
+            whiteListMartingale: getAllWhiteListMartingale.data.map((item) => item.symbol),
+            fixLiquidationInDB: getFixLiquidation.data.items?.[0],
+            fixStopLossInDB: getFixStopLoss.data.items?.[0],
+            fixStopLossQueueInDB: getFixStopLossQueueByUserId.data,
+            uids: uids,
+        };
+        window.electron?.ipcRenderer.sendMessage("worker:initMany", dataWorkerInit);
+        dispatch(SET_IS_INIT_WORKER(false));
+    }, [
+        settingUser,
+        getUiSelector.data,
+        getMyBlackList.data,
+        getAllWhiteListMartingale.data,
+        getFixLiquidation.data,
+        getFixStopLoss.data,
+        getFixStopLossQueueByUserId.data,
+        isInitWorker,
+    ]);
 
     useEffect(() => {
         if (info && socket) {

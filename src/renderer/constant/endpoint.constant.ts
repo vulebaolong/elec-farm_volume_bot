@@ -21,7 +21,7 @@ export const ENDPOINT = {
         TOGGLE_ROLE_PERMISSION: `role-permission/toggle`,
     },
     USER: {
-        USER: "user",
+        LIST_USER: "user",
         UPLOAD_AVATAR: "user/upload-avatar",
     },
     TOTP: {
@@ -31,8 +31,7 @@ export const ENDPOINT = {
         DISABLE: "totp/disable",
     },
     ACCOUNT: {
-        SAVE_ACCOUNT: "account/save",
-        SAVE_POSITION_ACCOUNT: "account/save-position",
+        UPSERT: "account/upsert",
     },
     SETTING_SYSTEM: {
         GET_SETTING_SYSTEM: "setting-system",

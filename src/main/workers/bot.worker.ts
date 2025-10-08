@@ -2,10 +2,12 @@
 import { BASE_URL, IS_PRODUCTION } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
 import {
+    createCodeStringCheckLogin,
     createCodeStringClickCancelAllOpen,
     createCodeStringClickClearAll,
     createCodeStringClickMarketPosition,
     createCodeStringClickTabOpenOrder,
+    createCodeStringGetUid,
 } from "@/javascript-string/logic-farm";
 import { TAccount } from "@/types/account.type";
 import { TRes } from "@/types/app.type";
@@ -47,6 +49,8 @@ import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { calcSize, handleEntryCheckAll } from "./util-bot.worker";
 import { TWhiteListMartingale } from "@/types/white-list-martingale.type";
+import { TUid } from "@/types/uid.type";
+import { TInfoGate } from "@/types/info-gate.type";
 
 const FLOWS_API = {
     acounts: {
@@ -59,6 +63,10 @@ const FLOWS_API = {
     },
     positions: {
         url: "https://www.gate.com/apiw/v2/futures/usdt/positions",
+        method: "GET",
+    },
+    getUserInfo: {
+        url: "https://www.gate.com/api/web/v1/rebate/get_user_info",
         method: "GET",
     },
 };
@@ -82,7 +90,7 @@ parentPort!.on("message", (msg: any) => {
                 type: "bot:log",
                 payload: {
                     level: "info",
-                    text: "2) bot:init - received",
+                    text: "6) ✅ bot:init - received",
                 },
             };
             parentPort?.postMessage(payload);
@@ -96,6 +104,8 @@ parentPort!.on("message", (msg: any) => {
                     fixLiquidationInDB: msg.payload.fixLiquidationInDB,
                     fixStopLossQueueInDB: msg.payload.fixStopLossQueueInDB,
                     fixStopLossInDB: msg.payload.fixStopLossInDB,
+                    uids: msg.payload.uids,
+                    uidDB: msg.payload.uidDB,
                 };
                 bot = new Bot(dataInitBot);
             }
@@ -145,12 +155,17 @@ class Bot {
     private dataFixStopLoss: TDataFixStopLoss;
     private fixStopLossQueue: TDataStopLossShouldFix[];
 
+    private uidDB: TUid["uid"];
+
+    private uidWeb: TUid["uid"] | null | undefined = undefined;
+
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
         this.settingUser = dataInitBot.settingUser;
         this.uiSelector = dataInitBot.uiSelector;
         this.blackList = dataInitBot.blackList;
         this.whiteListMartingale = dataInitBot.whiteListMartingale;
+        this.uidDB = dataInitBot.uidDB;
 
         // Fix Liquidation
         this.dataFixLiquidation = {
@@ -199,12 +214,17 @@ class Bot {
         this.running = true;
         this.parentPort.postMessage({ type: "bot:init:done", payload: true });
 
+        // const infoGate = await this.getInfoGate();
+        // this.infoGate = infoGate;
+
         for (;;) {
             const iterStart = performance.now();
             try {
                 this.log("\n\n\n\n\n");
                 this.log(`✅✅✅✅✅ ITER START ${this.count} | ${this.isStart} | ${this.running} =====`);
-                this.beforeEach();
+                await this.beforeEach();
+
+                if (!this.uidWeb) continue;
 
                 if (this.isStart) {
                     if (this.isNextPhase()) {
@@ -411,9 +431,14 @@ class Bot {
         console.log("\n\n");
     }
 
-    private beforeEach() {
+    private async beforeEach() {
         this.heartbeat();
         this.rateCounterSendRenderer();
+        await this.getUid();
+        this.checkUid()
+        // await this.checkLoginGate();
+        // await this.handleGetInfoGate();
+        // await this.checkUid();
         // this.getSideCCC();
         // this.logWorker.log(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
         // console.log(`positions`, Object(this.positions).keys());
@@ -424,7 +449,8 @@ class Bot {
         // console.log("dataFixLiquidation", this.dataFixLiquidation);
         // console.log("dataFixStopLoss", this.dataFixStopLoss);
         // console.log("fixStopLossQueue", this.fixStopLossQueue);
-        console.log("whiteListMartingale", this.whiteListMartingale);
+        // console.log("whiteListMartingale", this.whiteListMartingale);
+        // console.log("uidDB", this.uidDB);
     }
 
     private heartbeat() {
@@ -1546,6 +1572,11 @@ class Bot {
                     this.handleAccountWebGate(bodyAccounts.data || []);
                     break;
 
+                case `${FLOWS_API.getUserInfo.method} ${FLOWS_API.getUserInfo.url}`:
+                    const bodyGetUserInfos: TGateApiRes<TAccount[] | null> = JSON.parse(bodyText);
+                    console.log("bodyGetUserInfos: ", bodyGetUserInfos);
+                    break;
+
                 case `${FLOWS_API.orders.method} ${FLOWS_API.orders.url}`:
                     const bodyOrderOpens: TGateApiRes<TOrderOpen[] | null> = JSON.parse(bodyText);
                     this.setOrderOpens(bodyOrderOpens.data || []);
@@ -2546,6 +2577,84 @@ class Bot {
             return item.open_time !== payload.open_time;
         });
         this.sendFixStopLossQueue();
+    }
+
+    private async checkLoginGate() {
+        const selectorCheckLogin = this.uiSelector?.find((item) => item.code === "checkLogin")?.selectorValue;
+
+        if (!selectorCheckLogin) {
+            this.logWorker.info(`❌ Not found selector checkLogin`);
+            throw new Error(`Not found selector checkLogin`);
+        }
+
+        const stringCheckLogin = createCodeStringCheckLogin({ checkLogin: selectorCheckLogin });
+
+        const { body, error, ok } = await this.sendIpcRpc<boolean>({
+            sequenceKey: "checkLogin",
+            requestType: "bot:checkLogin",
+            responseType: "bot:checkLogin:res",
+            idFieldName: "reqCheckLoginId",
+            buildPayload: (requestId) => ({
+                reqCheckLoginId: requestId,
+                stringCheckLogin,
+            }),
+            timeoutMs: 10_000,
+        });
+
+        if (!ok || error || body == null) {
+            throw new Error(`❌ Check Login error: ${error ?? "unknown"} ${body} ${ok}`);
+        }
+
+        this.logWorker.info(`✅ Check Login`);
+
+        return body;
+    }
+
+    private async getUid() {
+        const selectorGetUid = this.uiSelector?.find((item) => item.code === "getUid")?.selectorValue;
+
+        if (!selectorGetUid) {
+            this.logWorker.info(`❌ Not found selector getUid`);
+            throw new Error(`Not found selector getUid`);
+        }
+
+        const stringGetUid = createCodeStringGetUid({ getUid: selectorGetUid });
+
+        const { body, error, ok } = await this.sendIpcRpc<string | null>({
+            sequenceKey: "getUid",
+            requestType: "bot:getUid",
+            responseType: "bot:getUid:res",
+            idFieldName: "reqGetUidId",
+            buildPayload: (requestId) => ({
+                reqGetUidId: requestId,
+                stringGetUid,
+            }),
+            timeoutMs: 10_000,
+        });
+
+        if (!ok || error) {
+            throw new Error(`❌ Get Uid error: ${error ?? "unknown"} ${body} ${ok}`);
+        }
+
+        if (body == null) {
+            if (this.uidWeb || this.uidWeb === undefined) {
+                this.logWorker.info("❌ Not logined to gate");
+            }
+            this.uidWeb = null;
+        } else {
+            if (!this.uidWeb) {
+                this.logWorker.info("✅ Logined to gate");
+            }
+            this.uidWeb = Number(body);
+        }
+    }
+
+    private checkUid() {
+        if (this.uidWeb) {
+            if (this.uidWeb !== this.uidDB) {
+                throw new Error(`❌ Please login uid: ${this.uidDB}`);
+            }
+        }
     }
 }
 

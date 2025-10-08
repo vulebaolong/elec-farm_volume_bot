@@ -240,7 +240,7 @@ export function initWorker(
                     reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
                     error: null,
                 };
-       
+
                 botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
             } catch (e: any) {
                 const payload: TGateClickCancelAllOpenRes = {
@@ -252,15 +252,14 @@ export function initWorker(
                 botWorker?.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
             }
         }
-        
         if (msg?.type === "bot:sticky:set") {
-            mainWindow?.webContents.send("bot:sticky:set", msg.payload);
+            mainWindow?.webContents.send("bot:sticky:set", msg);
         }
         if (msg?.type === "bot:sticky:remove") {
-            mainWindow?.webContents.send("bot:sticky:remove", msg.payload);
+            mainWindow?.webContents.send("bot:sticky:remove", msg);
         }
         if (msg?.type === "bot:sticky:clear") {
-            mainWindow?.webContents.send("bot:sticky:clear", msg.payload);
+            mainWindow?.webContents.send("bot:sticky:clear", msg);
         }
         if (msg?.type === "bot:reloadWebContentsView:Request") {
             if (!gateView) {
@@ -433,6 +432,10 @@ const FLOWS_API = {
         url: "https://www.gate.com/apiw/v2/futures/usdt/positions",
         method: "GET",
     },
+    getUserInfo: {
+        url: "https://www.gate.com/api/web/v1/rebate/get_user_info",
+        method: "GET",
+    },
 };
 
 export function interceptRequest(gateView: WebContentsView, botWorker: import("worker_threads").Worker) {
@@ -522,6 +525,9 @@ export function interceptRequest(gateView: WebContentsView, botWorker: import("w
                             tracked.set(reqId, { method, url });
                             break;
                         case `${FLOWS_API.positions.method} ${FLOWS_API.positions.url}`:
+                            tracked.set(reqId, { method, url });
+                            break;
+                        case `${FLOWS_API.getUserInfo.method} ${FLOWS_API.getUserInfo.url}`:
                             tracked.set(reqId, { method, url });
                             break;
                         default:

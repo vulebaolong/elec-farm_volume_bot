@@ -28,7 +28,7 @@ export const getRefreshToken = () => {
 
 export const logOut = (reason?: string) => {
     if(reason) logRenderer.info(reason);
-    window.electron?.ipcRenderer.sendMessage("bot:stop");
+    window.electron?.ipcRenderer.sendMessage("worker:stopAll");
     const theme = localStorage.getItem("theme");
     localStorage.clear();
     if (theme) localStorage.setItem("theme", theme);
