@@ -18,6 +18,7 @@ import {
 } from "@mantine/core";
 import { Check, CircleSlash, Clock, Copy, Edit, Play } from "lucide-react";
 import { useState } from "react";
+import UserLoginSwitch from "./user-login-switch";
 
 export default function UserList() {
     const [page, setPage] = useState(1);
@@ -114,7 +115,7 @@ export default function UserList() {
 
                             {/* Action Row */}
                             <Group justify="space-between">
-                                <Switch size="xs" defaultChecked />
+                                <UserLoginSwitch userId={user.id} initial={user.isLoginAllowed} />
 
                                 <ActionIcon variant="light" size="xs" color="green" disabled={isDisabled}>
                                     <Play size={16} />

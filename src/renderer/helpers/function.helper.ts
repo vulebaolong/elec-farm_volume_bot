@@ -1,5 +1,7 @@
+import { ROLE_ADMIN_ALLOWED } from "@/constant/app.constant";
 import { TSide } from "@/types/base.type";
 import { TPosition } from "@/types/position.type";
+import { TRole } from "@/types/role.type";
 import dayjs from "dayjs";
 
 export const resError = (error: any, defaultMes: string) => {
@@ -95,4 +97,13 @@ export function accountEquity(total: string, unrealised_pnl: string): string {
     // Nếu muốn tránh -0.00 thì bỏ đoạn dưới; nếu muốn giữ giống UI có thể giữ -0.00
     const cleaned = Object.is(truncated, -0) ? 0 : truncated;
     return cleaned.toFixed(2);
+}
+
+export function roleAllowed(roleId: TRole["id"] | undefined): boolean {
+    if (roleId === undefined) return false;
+    if (ROLE_ADMIN_ALLOWED.includes(roleId)) {
+        return true;
+    } else {
+        return false;
+    }
 }

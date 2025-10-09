@@ -140,7 +140,7 @@ const createWindow = async () => {
     // eslint-disable-next-line
     new AppUpdater();
 
-    return mainWindow
+    return mainWindow;
 };
 
 /**
@@ -180,11 +180,3 @@ ipcMain.on("ipc-example", async (event, arg) => {
     console.log(msgTemplate(arg));
     event.reply("ipc-example", msgTemplate("pong"));
 });
-
-// ipcMain.on("worker:init",  (event, arg) => {
-//     if(!mainWindow) {
-//         mainLog.error("mainWindow is null");
-//         return
-//     };
-//     initWorker(mainWindow, mainLog, workerLog, arg);
-// });

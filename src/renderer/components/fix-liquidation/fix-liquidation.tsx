@@ -8,23 +8,22 @@ import { useEffect, useMemo, useState } from "react";
 import FixLiquidationItem from "./fix-liquidation-item";
 
 export default function FixLiquidation() {
-    const [page, setPage] = useState(1);
-    const pageSize = 10;
-
     const upsertFixLiquidation = useUpsertFixLiquidation();
-
-    const getFixLiquidation = useGetFixLiquidation({
-        pagination: { page, pageSize },
-        filters: {},
-        sort: { sortBy: "createdAt", isDesc: true },
-    });
-
     useEffect(() => {
         const offFixLiquidation = window.electron.ipcRenderer.on("bot:upsertFixLiquidation", (data: TWorkerData<TUpsertFixLiquidationReq>) => {
             upsertFixLiquidation.mutate(data.payload);
         });
         return () => offFixLiquidation?.();
     }, [upsertFixLiquidation]);
+
+    const [page, setPage] = useState(1);
+    const pageSize = 10;
+
+    const getFixLiquidation = useGetFixLiquidation({
+        pagination: { page, pageSize },
+        filters: {},
+        sort: { sortBy: "createdAt", isDesc: true },
+    });
 
     const isLoading = getFixLiquidation.isLoading;
     const isError = getFixLiquidation.isError;

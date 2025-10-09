@@ -23,6 +23,8 @@ export const ENDPOINT = {
     USER: {
         LIST_USER: "user",
         UPLOAD_AVATAR: "user/upload-avatar",
+        LOGIN_TRUE: "user/login-true",
+        LOGIN_FALSE: "user/login-false",
     },
     TOTP: {
         GENERATE: "totp/generate",

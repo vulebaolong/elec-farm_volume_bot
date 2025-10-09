@@ -111,6 +111,10 @@ export class BotWorkerManager {
     }
 
     startMany(dataInitBot: Omit<TDataInitBot, "parentPort">) {
+        if (dataInitBot.uids.length === 0) {
+            this.sendIsChildView(false);
+            return;
+        }
         for (const uid of dataInitBot.uids) {
             this.startOne(uid.uid, dataInitBot, true);
         }
@@ -150,11 +154,9 @@ export class BotWorkerManager {
                 }
                 case "bot:init:done": {
                     this.mainLog.info(`7) ✅ [WorkerManager] bot:init:done uid=${uid}`);
+
                     const gateView = this.createGateViewForUid(uid, isDebug);
-                    entry.gateView = {
-                        webContentsView: gateView,
-                        attached: true,
-                    };
+
                     this.interceptRequest(gateView, worker);
 
                     break;
@@ -582,7 +584,7 @@ export class BotWorkerManager {
             // (a) Tháo khỏi cây view để giải phóng liên kết layout/render
             try {
                 this.mainWindow.contentView.removeChildView(view);
-                this.sendIsChildView(uid, false);
+                this.sendIsChildView(false);
             } catch {}
 
             // (b) Dọn dẹp phụ trợ trước khi close
@@ -660,7 +662,15 @@ export class BotWorkerManager {
         });
 
         this.mainWindow.contentView.addChildView(gateView);
-        this.sendIsChildView(uid, true);
+        this.sendIsChildView(true);
+
+        const entry = this.entries.get(uid);
+        if (entry) {
+            entry.gateView = {
+                webContentsView: gateView,
+                attached: true,
+            };
+        }
 
         const layoutGateView = () => {
             if (this.mainWindow.isDestroyed()) return;
@@ -701,7 +711,7 @@ export class BotWorkerManager {
         if (!rec || !rec.gateView || rec.gateView.attached) return;
 
         this.mainWindow.contentView.addChildView(rec.gateView.webContentsView);
-        this.sendIsChildView(uid, true);
+        this.sendIsChildView(true);
 
         rec.gateView.attached = true;
     }
@@ -712,7 +722,7 @@ export class BotWorkerManager {
 
         try {
             this.mainWindow.contentView.removeChildView(rec.gateView.webContentsView);
-            this.sendIsChildView(uid, false);
+            this.sendIsChildView(false);
         } catch {}
 
         rec.gateView.attached = false;
@@ -732,8 +742,8 @@ export class BotWorkerManager {
         }
     }
 
-    private sendIsChildView(uid: number, isChildView: boolean) {
-        this.mainWindow.webContents.send("bot:isChildView", { isChildView, uid });
+    private sendIsChildView(isChildView: boolean) {
+        this.mainWindow.webContents.send("bot:isChildView", { isChildView });
     }
 
     private waitForOneRequest(

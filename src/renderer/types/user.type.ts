@@ -29,3 +29,7 @@ export type TEditProfileReq = {
     id: number;
     fullName: string;
 };
+
+export type TLoginTrueOrFalseReq = {
+    userId: TUser["id"];
+};

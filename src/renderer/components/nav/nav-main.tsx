@@ -34,7 +34,7 @@ export function NavMain() {
                 navigateTo(ROUTER.HOME);
                 scrollToTop();
             },
-            roles: ["user", "admin", "dev"],
+            roles: ["admin", "dev"],
         },
         {
             key: "theme",
