@@ -22,7 +22,7 @@ export function NavUser() {
         <SidebarMenu>
             <SidebarMenuItem>
                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                    <DropdownMenuTrigger asChild className="rounded-full">
                         <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground">
                             <NavUserInfo />
                             <ChevronsUpDown className="ml-auto size-4" />
@@ -37,7 +37,7 @@ export function NavUser() {
                         <DropdownMenuLabel className="p-0 font-normal">
                             <NavUserInfo />
                         </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
+                        {/* <DropdownMenuSeparator />
                         <DropdownMenuGroup>
                             <DropdownMenuItem>
                                 <Sparkles />
@@ -58,7 +58,7 @@ export function NavUser() {
                                 <Bell />
                                 Notifications
                             </DropdownMenuItem>
-                        </DropdownMenuGroup>
+                        </DropdownMenuGroup> */}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onClick={() => {

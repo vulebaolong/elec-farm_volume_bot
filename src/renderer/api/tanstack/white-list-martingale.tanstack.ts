@@ -5,10 +5,13 @@ import { TCreateWhiteListMartingaleReq, TRemoveWhiteListMartingaleReq, TWhiteLis
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import api from "../axios/app.axios";
+import { useAppSelector } from "@/redux/store";
 
 export const useGetAllWhiteListMartingale = () => {
+    const info = useAppSelector((state) => state.user.info);
+
     return useQuery({
-        queryKey: ["get-all-white-list-martingale"],
+        queryKey: ["get-all-white-list-martingale", info],
         queryFn: async () => {
             const { data } = await api.get<TRes<TWhiteListMartingale[]>>(ENDPOINT.WHITE_LIST_MARTINGALE.GET_ALL_WHITE_LIST_MARTINGALE);
             window.electron?.ipcRenderer.sendMessage(

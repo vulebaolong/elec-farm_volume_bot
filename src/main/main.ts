@@ -2,22 +2,22 @@ import { IS_PRODUCTION } from "@/constant/app.constant";
 import { app, BrowserWindow, ipcMain, powerMonitor, shell } from "electron";
 import { installExtension, REDUX_DEVTOOLS } from "electron-devtools-installer";
 import { autoUpdater } from "electron-updater";
-import { pathToFileURL } from "node:url";
 import path from "path";
+import { initLog } from "./log";
 import MenuBuilder from "./menu";
 import { setupUpdaterIPC } from "./updater";
 import { resolveHtmlPath } from "./util";
-import { initBot } from "./workers/init.worker";
-import { initLog } from "./log";
+import { BotWorkerManager } from "./workers/worker-manager";
 
 const log = initLog();
 
 const mainLog = log.scope("main");
 const workerLog = log.scope("worker");
 
-mainLog.info("✅ Main started =================");
+mainLog.info("1) ✅ Main started =================");
 
 const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD === "true";
+// const isDebug = false;
 
 if (!isDebug) {
     // console.log = () => {};
@@ -36,13 +36,7 @@ class AppUpdater {
     }
 }
 
-let mainWindow: BrowserWindow | null = null;
-
-ipcMain.on("ipc-example", async (event, arg) => {
-    const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-    console.log(msgTemplate(arg));
-    event.reply("ipc-example", msgTemplate("pong"));
-});
+// let mainWindow: BrowserWindow | null = null;
 
 if (process.env.NODE_ENV === "production") {
     const sourceMapSupport = require("source-map-support");
@@ -80,7 +74,7 @@ const createWindow = async () => {
     const MIN_WIDTH = 1024; // >= lg của Tailwind (desktop)
     const MIN_HEIGHT = 700;
 
-    mainWindow = new BrowserWindow({
+    const mainWindow = new BrowserWindow({
         show: false,
         // width: 1024,
         // height: 728,
@@ -96,9 +90,6 @@ const createWindow = async () => {
     });
 
     setupUpdaterIPC();
-    // registerMetricsIPC();
-    // blockGateWebSockets(gateView);
-    initBot(mainWindow, mainLog, workerLog);
 
     mainWindow.loadURL(resolveHtmlPath("index.html"));
 
@@ -133,7 +124,7 @@ const createWindow = async () => {
     });
 
     mainWindow.on("closed", () => {
-        mainWindow = null;
+        // mainWindow = null;
     });
 
     const menuBuilder = new MenuBuilder(mainWindow);
@@ -148,6 +139,8 @@ const createWindow = async () => {
     // Remove this if your app does not use auto updates
     // eslint-disable-next-line
     new AppUpdater();
+
+    return mainWindow;
 };
 
 /**
@@ -155,37 +148,35 @@ const createWindow = async () => {
  */
 
 app.on("window-all-closed", async () => {
+    app.quit();
     // Respect the OSX convention of having the application in memory even
     // after all windows have been closed
-    if (process.platform !== "darwin") {
-        app.quit();
-    }
+    // if (process.platform !== "darwin") {
+    //     app.quit();
+    // }
 });
 
 app.whenReady()
-    .then(() => {
+    .then(async () => {
         if (!IS_PRODUCTION) {
             installExtension(REDUX_DEVTOOLS)
                 .then((ext) => console.log(`Added Extension:  ${ext.name}`))
                 .catch((err) => console.log("An error occurred: ", err));
         }
+        const mainWindow = await createWindow();
 
-        createWindow();
-        app.on("activate", () => {
-            // On macOS it's common to re-create a window in the app when the
-            // dock icon is clicked and there are no other windows open.
-            if (mainWindow === null) createWindow();
-        });
+        new BotWorkerManager(mainWindow, mainLog, workerLog);
+
+        // app.on("activate", () => {
+        //     // On macOS it's common to re-create a window in the app when the
+        //     // dock icon is clicked and there are no other windows open.
+        //     // createWindow();
+        // });
     })
     .catch(console.log);
 
-ipcMain.handle("get-webview-preload-url", () => {
-    // Dev: đọc thẳng trong thư mục dự án
-    const devPath = path.join(process.cwd(), "assets", "webview", "wv-preload.js");
-
-    // Prod: dùng file đã copy vào resources
-    const prodPath = path.join(process.resourcesPath, "assets", "webview", "wv-preload.js");
-
-    const finalPath = app.isPackaged ? prodPath : devPath;
-    return pathToFileURL(finalPath).toString(); // -> "file:///.../wv-preload.js"
+ipcMain.on("ipc-example", async (event, arg) => {
+    const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
+    console.log(msgTemplate(arg));
+    event.reply("ipc-example", msgTemplate("pong"));
 });

@@ -1,22 +1,23 @@
 import { TBaseTimestamps } from "./base.type";
 import { TRole } from "./role.type";
 import { TSettingUsers } from "./setting-user.type";
+import { TUid } from "./uid.type";
 
 export type TUser = {
     id: number;
     roleId: number;
-    settingId: number;
-    isLoginAllowed: boolean | null;
-    sessionVersion: number;
+    settingUserId: number;
     email: string;
-    fullName: string | null;
-    avatar: string | null;
-    password: string | null;
-    googleId: string | null;
-    totpSecret: string | null;
+    fullName: string;
+    avatar: any;
+    googleId: any;
+    isLoginAllowed: boolean;
     Roles: TRole;
     SettingUsers: TSettingUsers;
+    Uids: TUid[] | [];
 } & TBaseTimestamps;
+
+export type TUserManager = Omit<TUser, "SettingUsers">;
 
 export type TUploadAvatarLocalRes = {
     folder: string;
@@ -27,4 +28,8 @@ export type TUploadAvatarLocalRes = {
 export type TEditProfileReq = {
     id: number;
     fullName: string;
+};
+
+export type TLoginTrueOrFalseReq = {
+    userId: TUser["id"];
 };

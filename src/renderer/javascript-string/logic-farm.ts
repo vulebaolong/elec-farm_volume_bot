@@ -3,10 +3,12 @@ import { TUiSelectorOrder } from "@/types/bot.type";
 import { TPayloadLeverage } from "@/types/leverage.type";
 
 // "future-order-type-usdt": "market",
-export const setLocalStorageScript = `(function () {
+export const setLocalStorageScript = `
+(() => {
+  // Chạy càng sớm càng tốt
   try {
-    var desiredSettings = {
-      "future-order-type-usdt": "prolimit",
+    const desiredSettings = {
+     "future-order-type-usdt": "prolimit",
       "similar.introduction": "false",
       "f-usdt-unit-type-pro": "unit",
       "future_no_noty_all_orders": "false",
@@ -39,34 +41,33 @@ export const setLocalStorageScript = `(function () {
       "PRO_FUTURE_SAVE_CURRENCY_TITLES": ["fullHoursSettle"],
     };
 
-    function toStore(v) {
-      if (v === null || v === undefined) return '';
-      var t = typeof v;
-      if (t === 'string') return v;
-      if (t === 'number' || t === 'boolean') return String(v);
-      // array / object
-      try { return JSON.stringify(v); } catch(_) { return String(v); }
-    }
+    const toStore = (v) => {
+      if (v == null) return "";
+      const t = typeof v;
+      if (t === "string") return v;
+      if (t === "number" || t === "boolean") return String(v);
+      try { return JSON.stringify(v); } catch { return String(v); }
+    };
 
-    var changed = [];
-    for (var k in desiredSettings) {
+    let changed = 0;
+    for (const k in desiredSettings) {
       if (!Object.prototype.hasOwnProperty.call(desiredSettings, k)) continue;
-      var want = toStore(desiredSettings[k]);
-      var cur  = localStorage.getItem(k);
-      if (cur !== want) {
-        localStorage.setItem(k, want);
-        changed.push([k, cur, want]);
-      }
+      const want = toStore(desiredSettings[k]);
+      const cur  = localStorage.getItem(k);
+      if (cur !== want) { localStorage.setItem(k, want); changed++; }
     }
 
-    console.info('[localStorage] updated:', changed.length, changed);
-    window.ready = true;
-    return { done: true, updated: changed.length };
+    // Đảm bảo chỉ reload 1 lần (dùng sessionStorage để chặn vòng lặp)
+    // if (!sessionStorage.getItem("__ls_applied_once__")) {
+    //   sessionStorage.setItem("__ls_applied_once__", "1");
+    //   // Reload ngay để lần sau trang khởi tạo với localStorage mới
+    //   location.reload();
+    // }
   } catch (e) {
-    console.error('[localStorage] error:', e);
-    return { done: false, error: String(e) };
+    console.error("[gate-preload] localStorage error:", e);
   }
-})();`;
+})();
+`;
 
 export type TOpenOrder = {
     symbol: string;
@@ -607,3 +608,53 @@ export const createCodeStringClickClearAll = (payload: TClickClearAll) => {
 `;
 };
 
+
+export type TCheckLogin = {
+    checkLogin: string;
+};
+
+export const createCodeStringCheckLogin = (payload: TCheckLogin) => {
+    return `
+(async () => {
+    try {
+        const listNodeCheckLogin = document.querySelectorAll("${payload.checkLogin}");
+        if (!listNodeCheckLogin) throw new Error("listNodeCheckLogin not found");
+
+        if(listNodeCheckLogin?.length > 0) {
+            return { ok: true, data: true, error: null };
+        } else {
+            return { ok: true, data: false, error: null };
+        }
+    } catch (error) {
+        return { ok: false, data: null, error: String(error && error.message ? error.message : error) };
+    }
+})();
+`;
+};
+
+export type TGetUid = {
+    getUid: string;
+};
+
+export const createCodeStringGetUid = (payload: TGetUid) => {
+    return `
+(async () => {
+    try {
+        const listNodeGetUid = document.querySelectorAll("${payload.getUid}");
+        if (!listNodeGetUid) throw new Error("listNodeGetUid not found");
+
+        const text = Array.from(listNodeGetUid)
+                    .map(n => (n.textContent || "").trim())
+                    .join(" ");
+
+        // LƯU Ý: vì đang ở trong string, cần escape \\b và \\d
+        const m = text.match(/\\b\\d{8}\\b/);
+        const uid = m ? m[0] : null;
+
+        return { ok: true, data: uid, error: null };
+    } catch (error) {
+        return { ok: false, data: null, error: String(error && error.message ? error.message : error) };
+    }
+})();
+`;
+};

@@ -14,6 +14,7 @@ export type TInitialState = {
     whitelistResetInProgress: boolean;
     priority: TPriority;
     uiSelector: TUiSelector[] | null;
+    isChildView: boolean;
 };
 
 const initialState: TInitialState = {
@@ -26,6 +27,7 @@ const initialState: TInitialState = {
     whitelistResetInProgress: false,
     priority: "normal",
     uiSelector: null,
+    isChildView: false,
 };
 
 const genRippleId = () => (Date.now() << 8) | (Math.random() * 256) | 0;
@@ -68,6 +70,9 @@ const botSlice = createSlice({
         SET_UI_SELECTOR: (state, { payload }) => {
             state.uiSelector = payload;
         },
+        SET_IS_CHILD_VIEW: (state, { payload }) => {
+            state.isChildView = payload;
+        },
     },
 });
 
@@ -82,6 +87,7 @@ export const {
     SET_WHITELIST_RESET_IN_PROGRESS,
     SET_PRIORITY,
     SET_UI_SELECTOR,
+    SET_IS_CHILD_VIEW,
 } = botSlice.actions;
 
 export default botSlice.reducer;

@@ -11,18 +11,8 @@ import FixStopLossItem from "./fix-stoploss-item";
 import FixStoplossQueue from "./fix-stoploss-queue";
 
 export default function FixStopLoss() {
-    const [page, setPage] = useState(1);
-    const pageSize = 10;
-
     const upsertStopLoss = useUpsertFixStopLoss();
     const createFixStopLossHistories = useCreateFixStopLossHistories();
-
-    const getFixStopLoss = useGetFixStopLoss({
-        pagination: { page, pageSize },
-        filters: {},
-        sort: { sortBy: "createdAt", isDesc: true },
-    });
-
     useEffect(() => {
         const offFixStopLoss = window.electron.ipcRenderer.on("bot:upsertFixStopLoss", (data: TWorkerData<TUpsertFixStopLossReq>) => {
             upsertStopLoss.mutate(data.payload);
@@ -40,6 +30,15 @@ export default function FixStopLoss() {
             offCreateFixStopLossHistories?.();
         };
     }, [upsertStopLoss]);
+
+    const [page, setPage] = useState(1);
+    const pageSize = 10;
+
+    const getFixStopLoss = useGetFixStopLoss({
+        pagination: { page, pageSize },
+        filters: {},
+        sort: { sortBy: "createdAt", isDesc: true },
+    });
 
     const isLoading = getFixStopLoss.isLoading;
     const isError = getFixStopLoss.isError;

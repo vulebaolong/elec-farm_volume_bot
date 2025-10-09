@@ -14,13 +14,11 @@ import { Button } from "@/components/ui/button";
 import { ButtonLoading } from "@/components/ui/button-loading";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { PasswordInput } from "@/components/ui/password-input";
-import { IS_PRODUCTION } from "@/constant/app.constant";
+import { IS_PRODUCTION, TITLE } from "@/constant/app.constant";
 import { useAppSelector } from "@/redux/store";
 import { GalleryVerticalEnd } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Version from "../dialog/version";
-import { useSocket } from "@/hooks/socket.hook";
-import { useEffect } from "react";
 
 export const validatePassword = [
     { re: /[0-9]/, label: "Includes number." },
@@ -76,15 +74,15 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                     <div className="flex size-8 items-center justify-center rounded-md">
                         <GalleryVerticalEnd className="size-6" />
                     </div>
-                    <span className="sr-only">Acme Inc.</span>
+                    <span className="sr-only">{TITLE}</span>
                 </a>
-                <h1 className="text-xl font-bold">Welcome to Acme Inc.</h1>
-                <div className="text-center text-sm">
+                <h1 className="text-xl font-bold">Welcome to {TITLE}</h1>
+                {/* <div className="text-center text-sm">
                     Don&apos;t have an account?{" "}
                     <Button className="text-sm font-light p-0" onClick={() => navigate(ROUTER.REGISTER)} variant="link">
                         Register
                     </Button>
-                </div>
+                </div> */}
             </div>
 
             {/* from */}
@@ -111,9 +109,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
                                 <FormItem className="h-[75px] content-start gap-1">
                                     <div className="flex items-center">
                                         <FormLabel className="mb-[3px]">Password</FormLabel>
-                                        <a tabIndex={-1} href="#" className="ml-auto text-sm leading-none underline-offset-4 hover:underline">
+                                        {/* <a tabIndex={-1} href="#" className="ml-auto text-sm leading-none underline-offset-4 hover:underline">
                                             Forgot your password?
-                                        </a>
+                                        </a> */}
                                     </div>
                                     <FormControl>
                                         <PasswordInput placeholder="Password" {...field} />

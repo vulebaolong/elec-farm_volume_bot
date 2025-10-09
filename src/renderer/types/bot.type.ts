@@ -4,7 +4,10 @@ import { TFixStopLossQueueInDB } from "./fix-stoploss-queue.type";
 import { TFixStopLossInDB } from "./fix-stoploss.type";
 import { TSettingUsers } from "./setting-user.type";
 import { TUiSelector } from "./ui-selector.type";
+import { TUid } from "./uid.type";
+import { TWhiteListFarmIoc } from "./white-list-farm-ioc.type";
 import { TWhiteListMartingale } from "./white-list-martingale.type";
+import { TWhiteListScalpIoc } from "./white-list-scalp-ioc.type";
 
 export type TDataInitBot = {
     parentPort: import("worker_threads").MessagePort;
@@ -12,9 +15,13 @@ export type TDataInitBot = {
     uiSelector: TUiSelector[];
     blackList: string[];
     whiteListMartingale: TWhiteListMartingale["symbol"][];
+    whiteListFarmIoc: TWhiteListFarmIoc["symbol"][];
+    whiteListScalpIoc: TWhiteListScalpIoc["symbol"][];
     fixLiquidationInDB?: TFixLiquidationInDB;
     fixStopLossInDB?: TFixStopLossInDB;
     fixStopLossQueueInDB?: TFixStopLossQueueInDB;
+    uids: TUid[]
+    uidDB: TUid["uid"]
 };
 
 export type TChangeLeverage = {
@@ -62,6 +69,7 @@ export type TPayloadOrder = {
     price: string;
     reduce_only: boolean;
     size: string;
+    tif: "ioc" | "poc"
 };
 
 export type TDataOrder = {
@@ -228,5 +236,11 @@ export type TGateClick<T> = {
 export type TResultClick<T> = {
     ok: boolean;
     data: T;
+    error: string | null;
+};
+
+export type TResultCheckLogin = {
+    ok: boolean;
+    data: boolean;
     error: string | null;
 };

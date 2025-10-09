@@ -113,7 +113,6 @@ export default function RateCounter({ className }: { className?: string }) {
 
     return (
         <Card className={cn("flex flex-col gap-1 text-xs", className)}>
-          
             <CardHeader className="flex items-center gap-2">
                 <CardTitle className="text-base">Rate limits</CardTitle>
             </CardHeader>

@@ -10,3 +10,7 @@ export const MAX_DELAY = 3_000;
 
 export const ACCESS_TOKEN_KEY = "U2FsdGVkX1/PGRHiSgRPAwQ6+4jyZrFjcSCT2WPP9/UEE0s=";
 export const REFRESH_TOKEN_KEY = "U2FsdGVkX18K8l1hJ+jkZE7n4s9nT2zikEiMNUSjAnm0";
+
+export const TITLE = "Mega Trade"
+
+export const ROLE_ADMIN_ALLOWED = [1, 3];

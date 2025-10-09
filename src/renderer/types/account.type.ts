@@ -76,3 +76,7 @@ export type TSavePositionAccountReq = {
     totalOpenPO: number;
     poPerToken: Record<string, number>;
 };
+
+export type TUpsertAccountReq = {
+    data: any;
+};

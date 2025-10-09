@@ -4,8 +4,8 @@ import Provider from "./components/provider/provider";
 import { IS_PRODUCTION } from "./constant/app.constant";
 
 import log from "electron-log/renderer";
-export const logRenderer = log.scope("renderer");
-logRenderer.info("Renderer started");
+export const logRenderer = log.scope("render");
+logRenderer.info("2) ✅ Renderer started");
 
 if (process.env.NODE_ENV === "production") {
     console.log = () => {};
