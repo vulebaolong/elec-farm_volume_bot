@@ -51,6 +51,7 @@ export class BotWorkerManager {
         price: "100095.0",
         reduce_only: false,
         size: "1",
+        tif: "poc",
     };
 
     // Tuỳ chỉnh: offset trái/phải & panel trên
@@ -553,6 +554,27 @@ export class BotWorkerManager {
         ipcMain.on("bot:removeFixStopLossQueue", (event, data) => {
             worker.postMessage({ type: "bot:removeFixStopLossQueue", payload: data });
         });
+        ipcMain.on("bot:ioc:long", (event, data) => {
+            worker.postMessage({ type: "bot:ioc:long", payload: data });
+        });
+        ipcMain.on("bot:ioc:short", (event, data) => {
+            worker.postMessage({ type: "bot:ioc:short", payload: data });
+        });
+        ipcMain.on("bot:ioc:hedge", (event, data) => {
+            worker.postMessage({ type: "bot:ioc:hedge", payload: data });
+        });
+        ipcMain.on("bot:ioc:oneway", (event, data) => {
+            worker.postMessage({ type: "bot:ioc:oneway", payload: data });
+        });
+        ipcMain.on("bot:whiteListMartingale", (event, data) => {
+            worker.postMessage({ type: "bot:whiteListMartingale", payload: data });
+        });
+        ipcMain.on("bot:whiteListFarmIoc", (event, data) => {
+            worker.postMessage({ type: "bot:whiteListFarmIoc", payload: data });
+        });
+        ipcMain.on("bot:whiteListScalpIoc", (event, data) => {
+            worker.postMessage({ type: "bot:whiteListScalpIoc", payload: data });
+        });
     }
 
     stopOne(uid: number) {
@@ -917,6 +939,7 @@ export class BotWorkerManager {
                                         price: this.payloadOrder.price,
                                         reduce_only: this.payloadOrder.reduce_only,
                                         size: this.payloadOrder.size,
+                                        tif: this.payloadOrder.tif,
                                     });
 
                                     const jsonText = JSON.stringify(modified);

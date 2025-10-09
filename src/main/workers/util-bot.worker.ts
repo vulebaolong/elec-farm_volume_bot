@@ -163,7 +163,7 @@ type THandleEntryCheckAllRes = {
         bidBest: number;
         order_price_round: number;
         lastPriceGate: number;
-        quanto_multiplier: number
+        quanto_multiplier: number;
 
         // cho component whitelist
         core: TCore;
@@ -247,6 +247,139 @@ export function handleEntryCheckAll({ whitelistItem, settingUser, sideCCC }: THa
         case EntrySignalMode.SIDE_CCC:
             isLong = sideCCC === "LONG";
             isShort = sideCCC === "SHORT";
+            break;
+    }
+
+    const side = isLong ? "long" : isShort ? "short" : null;
+
+    const qualified = isSpread && isDepth && isSize && !!side;
+
+    return {
+        errString: null,
+        qualified,
+        result: {
+            // cả 2 đều cần
+            symbol,
+            sizeStr,
+            side,
+
+            // cho bot worker
+            askBest,
+            bidBest,
+            order_price_round,
+            lastPriceGate,
+            quanto_multiplier: contractInfo.quanto_multiplier,
+
+            // cho component whitelist
+            core,
+            isDepth,
+            isLong,
+            isShort,
+            isSize,
+            isSpread,
+            gapPercentBiVsGate: gapPercentBinanceVsGate(lastPriceGate, lastPriceBinance),
+        },
+    };
+}
+
+type THandleEntryCheckAll2 = {
+    whitelistItem: TWhiteListItem;
+    settingUser: TSettingUsers;
+};
+type THandleEntryCheckAllRes2 = {
+    errString: string | null;
+    qualified: boolean;
+    result: {
+        // cả 2 đều cần
+        symbol: string;
+        sizeStr: string;
+        side: TSide | null;
+
+        // cho bot worker
+        askBest: number;
+        bidBest: number;
+        order_price_round: number;
+        lastPriceGate: number;
+        quanto_multiplier: number;
+
+        // cho component whitelist
+        core: TCore;
+        isDepth: boolean;
+        isLong: boolean;
+        isShort: boolean;
+        isSize: boolean;
+        isSpread: boolean;
+        gapPercentBiVsGate: number;
+    } | null;
+};
+export function handleEntryCheckAll2({ whitelistItem, settingUser }: THandleEntryCheckAll2): THandleEntryCheckAllRes2 {
+    const { core, contractInfo } = whitelistItem;
+    const {
+        askBest,
+        askSumDepth,
+        bidBest,
+        bidSumDepth,
+        imbalanceAskPercent,
+        imbalanceBidPercent,
+        lastPrice: lastPriceGate,
+        spreadPercent,
+        symbol,
+    } = core.gate ?? {};
+
+    const { lastPrice: lastPriceBinance } = core.binance ?? {};
+
+    const { order_price_round } = contractInfo;
+
+    const missing =
+        !symbol ||
+        spreadPercent == null ||
+        bidSumDepth == null ||
+        askSumDepth == null ||
+        lastPriceGate == null ||
+        lastPriceBinance == null ||
+        imbalanceAskPercent == null ||
+        imbalanceBidPercent == null ||
+        order_price_round == null;
+
+    if (missing) {
+        const msg = `❌ ${symbol ?? "UNKNOWN"} core thiếu field: ${JSON.stringify(core)}`;
+        return { errString: msg, qualified: false, result: null };
+    }
+
+    const isZero = lastPriceGate <= 0 || lastPriceBinance <= 0;
+    if (isZero) {
+        const msg = `❌ ${symbol} core có field giá trị 0: ${JSON.stringify(core)}`;
+        return { errString: msg, qualified: false, result: null };
+    }
+
+    const isSpread = isSpreadPercent(spreadPercent, settingUser.minSpreadPercent, settingUser.maxSpreadPercent);
+    const isDepth = isDepthCalc(askSumDepth, bidSumDepth, settingUser.maxDepth);
+
+    const sizeStr = handleSize(whitelistItem, settingUser.inputUSDT);
+    const isSize = checkSize(sizeStr);
+
+    // 3) Kết hợp theo mode (mặc định BOTH = AND)
+    const mode = settingUser.entrySignalMode;
+
+    let isLong = false;
+    let isShort = false;
+
+    switch (mode) {
+        case EntrySignalMode.GAP:
+            isLong = handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+            isShort = handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+            break;
+        case EntrySignalMode.IMBALANCE:
+            isLong = handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
+            isShort = handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
+            break;
+        case EntrySignalMode.BOTH:
+            const isLongGap = handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+            const isLongImb = handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
+            isLong = isLongGap && isLongImb;
+            const isShortGap = handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
+            const isShortImb = handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
+            isShort = isShortGap && isShortImb;
             break;
     }
 

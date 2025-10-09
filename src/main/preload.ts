@@ -17,6 +17,8 @@ export type Channels =
     | "bot:settingUser"
     | "bot:blackList"
     | "bot:whiteListMartingale"
+    | "bot:whiteListFarmIoc"
+    | "bot:whiteListScalpIoc"
     | "bot:uiSelector"
     | "bot:log"
     | "bot:upsertFixStopLossQueue"
@@ -53,7 +55,11 @@ export type Channels =
     | "worker:initMany"
     | "worker:stopAll"
     | "worker:toggleWebView"
-    | "worker:stopOne";
+    | "worker:stopOne"
+    | "bot:ioc:long"
+    | "bot:ioc:short"
+    | "bot:ioc:hedge"
+    | "bot:ioc:oneway";
 
 const electronHandler = {
     ipcRenderer: {

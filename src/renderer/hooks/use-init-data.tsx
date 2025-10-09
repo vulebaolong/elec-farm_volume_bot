@@ -17,6 +17,8 @@ import { TSettingUsersSocket } from "@/types/setting-user.type";
 import { TWhiteList } from "@/types/white-list.type";
 import { useEffect } from "react";
 import { useSocket } from "./socket.hook";
+import { useGetAllWhiteListFarmIoc } from "@/api/tanstack/white-list-farm-ioc.tanstack";
+import { useGetAllWhiteListScalpIoc } from "@/api/tanstack/white-list-scalp-ioc.tanstack";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
@@ -29,6 +31,8 @@ export const useInitData = () => {
     const getInfoMutation = useGetInfoMutation();
     const getMyBlackList = useGetMyBlackList();
     const getAllWhiteListMartingale = useGetAllWhiteListMartingale();
+    const getAllWhiteListFarmIoc = useGetAllWhiteListFarmIoc();
+    const getAllWhiteListScalpIoc = useGetAllWhiteListScalpIoc();
 
     const getFixLiquidation = useGetFixLiquidation({
         pagination: { page: 1, pageSize: 10 },
@@ -98,6 +102,8 @@ export const useInitData = () => {
             getUiSelector: getUiSelector.data,
             getMyBlackList: getMyBlackList.data,
             getAllWhiteListMartingale: getAllWhiteListMartingale.data,
+            getAllWhiteListFarmIoc: getAllWhiteListFarmIoc.data,
+            getAllWhiteListScalpIoc: getAllWhiteListScalpIoc.data,
             getFixLiquidation: getFixLiquidation.data,
             getFixStopLoss: getFixStopLoss.data,
             getFixStopLossQueueByUserId: getFixStopLossQueueByUserId.data,
@@ -108,19 +114,21 @@ export const useInitData = () => {
         if (!getUiSelector.data) return;
         if (!getMyBlackList.data) return;
         if (!getAllWhiteListMartingale.data) return;
+        if (!getAllWhiteListFarmIoc.data) return;
+        if (!getAllWhiteListScalpIoc.data) return;
         if (!getFixLiquidation.data) return;
         if (!getFixStopLoss.data) return;
         if (!getFixStopLossQueueByUserId.data) return;
         if (!uids) return;
         if (!isInitWorker) return;
 
-        console.log(123);
-
         const dataWorkerInit: Omit<TDataInitBot, "parentPort" | "uidDB"> = {
             settingUser: settingUser,
             uiSelector: getUiSelector.data,
             blackList: getMyBlackList.data.map((item) => item.symbol),
             whiteListMartingale: getAllWhiteListMartingale.data.map((item) => item.symbol),
+            whiteListFarmIoc: getAllWhiteListFarmIoc.data.map((item) => item.symbol),
+            whiteListScalpIoc: getAllWhiteListScalpIoc.data.map((item) => item.symbol),
             fixLiquidationInDB: getFixLiquidation.data.items?.[0],
             fixStopLossInDB: getFixStopLoss.data.items?.[0],
             fixStopLossQueueInDB: getFixStopLossQueueByUserId.data,
@@ -133,6 +141,8 @@ export const useInitData = () => {
         getUiSelector.data,
         getMyBlackList.data,
         getAllWhiteListMartingale.data,
+        getAllWhiteListFarmIoc.data,
+        getAllWhiteListScalpIoc.data,
         getFixLiquidation.data,
         getFixStopLoss.data,
         getFixStopLossQueueByUserId.data,

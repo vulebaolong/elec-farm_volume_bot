@@ -74,6 +74,20 @@ export const ENDPOINT = {
         REMOVE_WHITE_LIST_MARTINGALE: "white-list-martingale",
         CLEAR_ALL_WHITE_LIST_MARTINGALE: "white-list-martingale/clear-all",
     },
+    WHITE_LIST_FARM_IOC: {
+        GET_WHITE_LIST_FARM_IOC: "white-list-farm-ioc",
+        GET_ALL_WHITE_LIST_FARM_IOC: "white-list-farm-ioc/all",
+        CREATE_WHITE_LIST_FARM_IOC: "white-list-farm-ioc",
+        REMOVE_WHITE_LIST_FARM_IOC: "white-list-farm-ioc",
+        CLEAR_ALL_WHITE_LIST_FARM_IOC: "white-list-farm-ioc/clear-all",
+    },
+    WHITE_LIST_SCALP_IOC: {
+        GET_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc",
+        GET_ALL_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc/all",
+        CREATE_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc",
+        REMOVE_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc",
+        CLEAR_ALL_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc/clear-all",
+    },
     CCC: {
         GET_SIDE: "https://api-coincraze.feliciastation.com/api/v1/tool/pnl-safe-mode/strong-side",
     },

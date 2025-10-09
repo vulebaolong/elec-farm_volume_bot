@@ -65,6 +65,7 @@ export const FormSchema = z.object({
     maxTotalOpenPO: intField(1, "Maximum Position"),
     leverage: intField(1, "Leverage"),
     inputUSDT: intField(1, "Input USDT"),
+    sizeIOC: intField(1, "size IOC"),
     takeProfit: positiveNumber("Take Profit"),
     stopLoss: positiveNumber("Stop Loss"),
     timeoutMs: intField(1, "Timeout (ms)"),
@@ -117,6 +118,7 @@ export default function SettingAdminUser({ type }: TProps) {
             maxTotalOpenPO: "",
             leverage: "",
             inputUSDT: "",
+            sizeIOC: "",
             takeProfit: "",
             stopLoss: "",
             timeoutMs: "",
@@ -144,6 +146,7 @@ export default function SettingAdminUser({ type }: TProps) {
                 maxTotalOpenPO: setting.maxTotalOpenPO ?? "",
                 leverage: setting.leverage ?? "",
                 inputUSDT: setting.inputUSDT ?? "",
+                sizeIOC: setting.sizeIOC ?? "",
                 takeProfit: setting.takeProfit ?? "",
                 stopLoss: setting.stopLoss ?? "",
                 timeoutMs: setting.timeoutMs ?? "",
@@ -175,6 +178,7 @@ export default function SettingAdminUser({ type }: TProps) {
             maxTotalOpenPO: data.maxTotalOpenPO,
             leverage: data.leverage,
             inputUSDT: data.inputUSDT,
+            sizeIOC: data.sizeIOC,
             takeProfit: data.takeProfit,
             stopLoss: data.stopLoss,
             timeoutMs: data.timeoutMs,
@@ -817,6 +821,30 @@ export default function SettingAdminUser({ type }: TProps) {
                             suffix="%"
                             clampBehavior="strict"
                             description={"If 0 OFF"}
+                        />
+                    )}
+                />
+
+                {/* sizeIOC */}
+                <Controller
+                    name="sizeIOC"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Size IOC"
+                            placeholder="Size IOC"
+                            inputWrapperOrder={["label", "input", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.sizeIOC?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            min={0}
+                            step={1}
+                            clampBehavior="strict"
                         />
                     )}
                 />

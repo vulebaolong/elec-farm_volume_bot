@@ -112,7 +112,7 @@ export default function Controll({}: TProps) {
         };
     }, [isRunning, isStart, dispatch]);
 
-    const isEmptyUids = info?.Uids?.length === 0
+    const isEmptyUids = info?.Uids?.length === 0;
 
     return (
         <div className="sticky top-0 z-20">
@@ -175,6 +175,51 @@ export default function Controll({}: TProps) {
                                 }}
                             >
                                 {isChildView ? "Close Web" : "Open Web"}
+                            </Button>
+                        </Group>
+
+                        <Group>
+                            <Button
+                                size={"xs"}
+                                radius={"md"}
+                                variant="default"
+                                onClick={() => {
+                                    window.electron?.ipcRenderer.sendMessage("bot:ioc:hedge");
+                                }}
+                            >
+                                hedge
+                            </Button>
+
+                            <Button
+                                size={"xs"}
+                                radius={"md"}
+                                variant="default"
+                                onClick={() => {
+                                    window.electron?.ipcRenderer.sendMessage("bot:ioc:oneway");
+                                }}
+                            >
+                                oneway
+                            </Button>
+
+                            <Button
+                                size={"xs"}
+                                radius={"md"}
+                                variant="default"
+                                onClick={() => {
+                                    window.electron?.ipcRenderer.sendMessage("bot:ioc:long");
+                                }}
+                            >
+                                ioc long
+                            </Button>
+                            <Button
+                                size={"xs"}
+                                radius={"md"}
+                                variant="default"
+                                onClick={() => {
+                                    window.electron?.ipcRenderer.sendMessage("bot:ioc:short");
+                                }}
+                            >
+                                ioc short
                             </Button>
                         </Group>
                     </Stack>
