@@ -46,15 +46,23 @@ export type TWhitelistEntry = {
     quanto_multiplier: number;
 };
 
-export type TWhitelistUi = {
+export type TWhitelistEntryFarmIoc = {
     symbol: string;
-    sizeStr: string | null;
+    sizeStr: string;
+    side: TSide | null;
+    askBest: number;
+    bidBest: number;
+    order_price_round: number;
+    lastPriceGate: number;
+    quanto_multiplier: number;
+};
+
+export type TWhitelistUi = {
+    core: TCore;
+    symbol: string;
     side: TSide | null;
     isSpread: boolean;
-    isDepth: boolean;
-    isSize: boolean;
     qualified: boolean;
-    core: TCore;
     isLong: boolean;
     isShort: boolean;
     gapPercentBiVsGate: number;

@@ -24,9 +24,24 @@ export type TSettingUsers = {
     ifImbalanceAskPercent: number;
     entrySignalMode: EntrySignalMode;
     delayForPairsMs: number;
-    martingale: MartingaleConfig | null
+    martingale: MartingaleConfig | null;
     maxRoiNextPhase: number;
-    sizeIOC: number
+    sizeIOC: number;
+
+    // ioc ----------------------
+    // farm
+    minSpreadPercentFarm: number;
+    maxSpreadPercentFarm: number;
+    ifImbalanceBidPercentFarm: number;
+    ifImbalanceAskPercentFarm: number;
+    lastPriceGapGateAndBinancePercentFarm: number;
+
+    // scalp
+    minSpreadPercentScalp: number;
+    maxSpreadPercentScalp: number;
+    ifImbalanceBidPercentScalp: number;
+    ifImbalanceAskPercentScalp: number;
+    lastPriceGapGateAndBinancePercentScalp: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

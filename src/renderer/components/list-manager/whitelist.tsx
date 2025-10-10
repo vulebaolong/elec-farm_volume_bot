@@ -6,7 +6,7 @@ import { TSocketRes } from "@/types/base.type";
 import { TWhiteList, TWhitelistUi } from "@/types/white-list.type";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { handleEntryCheckAll } from "src/main/workers/util-bot.worker";
+import { handleEntryCheckAll, handleEntryCheckAll2 } from "src/main/workers/util-bot.worker";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { useGetSideCCC } from "@/api/tanstack/ccc.tanstack";
 
@@ -26,7 +26,7 @@ export default function Whitelist() {
             const resultWhiteList: TWhitelistUi[] = [];
 
             for (const whitelistItem of whiteListArr) {
-                const { errString, qualified, result } = handleEntryCheckAll({ whitelistItem, settingUser, sideCCC: sideCCC || null });
+                const { errString, qualified, result } = handleEntryCheckAll2({ whitelistItem, settingUser, flag: "scalp" });
 
                 if (errString) {
                     toast.error(errString);
@@ -35,15 +35,12 @@ export default function Whitelist() {
                 if (result) {
                     resultWhiteList.push({
                         core: result.core,
-                        isDepth: result.isDepth,
+                        symbol: result.symbol,
+                        side: result.side,
+                        isSpread: result.isSpread,
                         isLong: result.isLong,
                         isShort: result.isShort,
-                        isSize: result.isSize,
-                        isSpread: result.isSpread,
                         qualified,
-                        sizeStr: result.sizeStr,
-                        side: result.side,
-                        symbol: result.symbol,
                         gapPercentBiVsGate: result.gapPercentBiVsGate,
                     });
                 }
@@ -70,7 +67,7 @@ export default function Whitelist() {
 
     // Render 1 item (để tái sử dụng)
     const renderItem = (item: TWhitelistUi) => {
-        const { core, isSpread, isDepth, sizeStr, isSize, qualified, isLong, isShort } = item;
+        const { core, isSpread, qualified, isLong, isShort } = item;
         const sym = core.gate.symbol;
 
         return (
@@ -85,9 +82,6 @@ export default function Whitelist() {
                             <Badge variant={isShort ? "default" : "outline"} className={isShort ? "bg-red-500 text-white" : ""}>
                                 Short
                             </Badge>
-                            <Badge variant={isDepth ? "default" : "outline"}>Depth</Badge>
-                            <Badge variant={isSpread ? "default" : "outline"}>Spread</Badge>
-                            <Badge variant={isSize ? "default" : "outline"}>Size</Badge>
                         </div>
                     </div>
                 </AccordionTrigger>
@@ -110,10 +104,6 @@ export default function Whitelist() {
                         </Badge>
                     </div>
 
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className="text-sm text-muted-foreground">Size:</span>
-                        <Badge variant={isSize ? "default" : "outline"}>{sizeStr}</Badge>
-                    </div>
                     <div className="flex items-center gap-2 text-sm">
                         <span className="text-sm text-muted-foreground">Spread %:</span>
                         <Badge variant={isSpread ? "default" : "outline"}>{core.gate.spreadPercent?.toFixed(2)}%</Badge>

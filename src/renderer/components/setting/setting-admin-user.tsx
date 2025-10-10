@@ -8,7 +8,7 @@ import { EntrySignalMode } from "@/types/enum/entry-signal-mode.enum";
 import { MartingaleConfig, MartingaleOption } from "@/types/martingale.type";
 import { TSettingUsersUpdate } from "@/types/setting-user.type";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Checkbox, Group, NumberInput, Paper, Radio, Stack, Text } from "@mantine/core";
+import { Checkbox, Divider, Group, InputLabel, NumberInput, Paper, Radio, Stack, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash } from "lucide-react";
 import { useEffect } from "react";
@@ -84,6 +84,21 @@ export const FormSchema = z.object({
 
     martingale: ZMartingaleConfig,
     maxRoiNextPhase: positiveNumber("Max ROI Next Phase"),
+
+    // ioc ----------------------
+    // farm
+    minSpreadPercentFarm: numberRange(0, 100, "Min Spread Farm %"),
+    maxSpreadPercentFarm: numberRange(0, 100, "Max Spread Farm %"),
+    ifImbalanceBidPercentFarm: numberRange(0, 100, "Imbalance Farm Bid %"),
+    ifImbalanceAskPercentFarm: numberRange(0, 100, "Imbalance Farm Ask %"),
+    lastPriceGapGateAndBinancePercentFarm: numberRange(0, 100, "Max Farm Gap %"),
+
+    // scalp
+    minSpreadPercentScalp: numberRange(0, 100, "Min Spread Scalp %"),
+    maxSpreadPercentScalp: numberRange(0, 100, "Max Spread Scalp %"),
+    ifImbalanceBidPercentScalp: numberRange(0, 100, "Imbalance Scalp Bid %"),
+    ifImbalanceAskPercentScalp: numberRange(0, 100, "Imbalance Scalp Ask %"),
+    lastPriceGapGateAndBinancePercentScalp: numberRange(0, 100, "Max Scalp Gap %"),
 });
 
 const defaultMartingale: MartingaleConfig = {
@@ -136,6 +151,21 @@ export default function SettingAdminUser({ type }: TProps) {
             // max24hChangeRed: "",
             martingale: defaultMartingale,
             maxRoiNextPhase: "",
+
+            // ioc ----------------------
+            // farm
+            minSpreadPercentFarm: "",
+            maxSpreadPercentFarm: "",
+            ifImbalanceBidPercentFarm: "",
+            ifImbalanceAskPercentFarm: "",
+            lastPriceGapGateAndBinancePercentFarm: "",
+
+            // scalp
+            minSpreadPercentScalp: "",
+            maxSpreadPercentScalp: "",
+            ifImbalanceBidPercentScalp: "",
+            ifImbalanceAskPercentScalp: "",
+            lastPriceGapGateAndBinancePercentScalp: "",
         },
     });
 
@@ -164,6 +194,21 @@ export default function SettingAdminUser({ type }: TProps) {
                 // max24hChangeRed: setting.max24hChangeRed ?? "",
                 martingale: (setting.martingale as MartingaleConfig) ?? defaultMartingale,
                 maxRoiNextPhase: setting.maxRoiNextPhase ?? "",
+
+                // ioc ----------------------
+                // farm
+                minSpreadPercentFarm: setting.minSpreadPercentFarm ?? "",
+                maxSpreadPercentFarm: setting.maxSpreadPercentFarm ?? "",
+                ifImbalanceAskPercentFarm: setting.ifImbalanceAskPercentFarm ?? "",
+                ifImbalanceBidPercentFarm: setting.ifImbalanceBidPercentFarm ?? "",
+                lastPriceGapGateAndBinancePercentFarm: setting.lastPriceGapGateAndBinancePercentFarm ?? "",
+
+                // scalp
+                minSpreadPercentScalp: setting.minSpreadPercentScalp ?? "",
+                maxSpreadPercentScalp: setting.maxSpreadPercentScalp ?? "",
+                ifImbalanceAskPercentScalp: setting.ifImbalanceAskPercentScalp ?? "",
+                ifImbalanceBidPercentScalp: setting.ifImbalanceBidPercentScalp ?? "",
+                lastPriceGapGateAndBinancePercentScalp: setting.lastPriceGapGateAndBinancePercentScalp ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form, type]);
@@ -196,6 +241,21 @@ export default function SettingAdminUser({ type }: TProps) {
             // max24hChangeRed: data.max24hChangeRed,
             martingale: data.martingale,
             maxRoiNextPhase: data.maxRoiNextPhase,
+
+            // ioc ----------------------
+            // farm
+            minSpreadPercentFarm: data.minSpreadPercentFarm,
+            maxSpreadPercentFarm: data.maxSpreadPercentFarm,
+            ifImbalanceBidPercentFarm: data.ifImbalanceBidPercentFarm,
+            ifImbalanceAskPercentFarm: data.ifImbalanceAskPercentFarm,
+            lastPriceGapGateAndBinancePercentFarm: data.lastPriceGapGateAndBinancePercentFarm,
+
+            // scalp
+            minSpreadPercentScalp: data.minSpreadPercentScalp,
+            maxSpreadPercentScalp: data.maxSpreadPercentScalp,
+            ifImbalanceBidPercentScalp: data.ifImbalanceBidPercentScalp,
+            ifImbalanceAskPercentScalp: data.ifImbalanceAskPercentScalp,
+            lastPriceGapGateAndBinancePercentScalp: data.lastPriceGapGateAndBinancePercentScalp,
         };
 
         console.log({ updateSettingUser: payload });
@@ -651,32 +711,6 @@ export default function SettingAdminUser({ type }: TProps) {
                     }}
                 />
 
-                {/* delayForPairsMs */}
-                <Controller
-                    name="delayForPairsMs"
-                    control={form.control}
-                    render={({ field }) => (
-                        <NumberInput
-                            size="xs"
-                            withAsterisk
-                            label="Delay for pairs (ms)"
-                            placeholder="Delay (ms)"
-                            inputWrapperOrder={["label", "input", "description", "error"]}
-                            value={field.value ?? ""}
-                            onChange={(val) => field.onChange(val ?? "")}
-                            onBlur={field.onBlur}
-                            error={form.formState.errors.timeoutMs?.message}
-                            decimalSeparator="."
-                            thousandSeparator=","
-                            suffix="ms"
-                            min={0}
-                            step={1000}
-                            clampBehavior="strict"
-                            description={"If 0 then no delay | 1000ms = 1second"}
-                        />
-                    )}
-                />
-
                 {/* martingale */}
                 <Controller
                     name="martingale"
@@ -845,6 +879,321 @@ export default function SettingAdminUser({ type }: TProps) {
                             min={0}
                             step={1}
                             clampBehavior="strict"
+                        />
+                    )}
+                />
+
+                <Divider my="sm" />
+
+                {/* ioc -------------------- */}
+                {/* farm */}
+                <InputLabel className="font-semibold">Farm</InputLabel>
+                <Paper withBorder radius="md" p="md">
+                    <Stack>
+                        {/* spread */}
+                        <Group>
+                            <InputLabel size="xs" className="font-semibold" w={70}>
+                                Spread
+                            </InputLabel>
+                            {/* minSpreadPercentFarm */}
+                            <Controller
+                                name="minSpreadPercentFarm"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.minSpreadPercentFarm?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="%"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+
+                            <Text>~</Text>
+
+                            {/* maxSpreadPercentFarm */}
+                            <Controller
+                                name="maxSpreadPercentFarm"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.maxSpreadPercentFarm?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="%"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+                        </Group>
+
+                        {/* imblance */}
+                        <Group>
+                            <InputLabel size="xs" className="font-semibold" w={70}>
+                                Imblance
+                            </InputLabel>
+                            {/* ifImbalanceBidPercentFarm */}
+                            <Controller
+                                name="ifImbalanceBidPercentFarm"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.ifImbalanceBidPercentFarm?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="% bid"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+
+                            <Text>~</Text>
+
+                            {/* ifImbalanceAskPercentFarm */}
+                            <Controller
+                                name="ifImbalanceAskPercentFarm"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.ifImbalanceAskPercentFarm?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="% ask"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+                        </Group>
+
+                        {/* gap */}
+                        <Group>
+                            <InputLabel size="xs" className="font-semibold" w={70}>
+                                Price Gap
+                            </InputLabel>
+                            {/* lastPriceGapGateAndBinancePercentFarm */}
+                            <Controller
+                                name="lastPriceGapGateAndBinancePercentFarm"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.lastPriceGapGateAndBinancePercentFarm?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="%"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+                        </Group>
+                    </Stack>
+                </Paper>
+
+                {/* scalp */}
+                <InputLabel className="font-semibold">Scalp</InputLabel>
+                <Paper withBorder radius="md" p="md">
+                    <Stack>
+                        {/* spread */}
+                        <Group>
+                            <InputLabel size="xs" className="font-semibold" w={70}>
+                                Spread
+                            </InputLabel>
+                            {/* minSpreadPercentScalp */}
+                            <Controller
+                                name="minSpreadPercentScalp"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.minSpreadPercentScalp?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="%"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+
+                            <Text>~</Text>
+
+                            {/* maxSpreadPercentScalp */}
+                            <Controller
+                                name="maxSpreadPercentScalp"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.maxSpreadPercentScalp?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="%"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+                        </Group>
+
+                        {/* imblance */}
+                        <Group>
+                            <InputLabel size="xs" className="font-semibold" w={70}>
+                                Imblance
+                            </InputLabel>
+                            {/* ifImbalanceBidPercentScalp */}
+                            <Controller
+                                name="ifImbalanceBidPercentScalp"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.ifImbalanceBidPercentScalp?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="% bid"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+
+                            <Text>~</Text>
+
+                            {/* ifImbalanceAskPercentScalp */}
+                            <Controller
+                                name="ifImbalanceAskPercentScalp"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.ifImbalanceAskPercentScalp?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="% ask"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+                        </Group>
+
+                        {/* gap */}
+                        <Group>
+                            <InputLabel size="xs" className="font-semibold" w={70}>
+                                Price Gap
+                            </InputLabel>
+                            {/* lastPriceGapGateAndBinancePercentScalp */}
+                            <Controller
+                                name="lastPriceGapGateAndBinancePercentScalp"
+                                control={form.control}
+                                render={({ field }) => (
+                                    <NumberInput
+                                        size="xs"
+                                        withAsterisk
+                                        inputWrapperOrder={["input", "error"]}
+                                        value={field.value ?? ""}
+                                        onChange={(val) => field.onChange(val ?? "")}
+                                        onBlur={field.onBlur}
+                                        error={form.formState.errors.lastPriceGapGateAndBinancePercentScalp?.message}
+                                        decimalSeparator="."
+                                        thousandSeparator=","
+                                        suffix="%"
+                                        min={0}
+                                        step={0.1}
+                                        clampBehavior="strict"
+                                    />
+                                )}
+                            />
+                        </Group>
+                    </Stack>
+                </Paper>
+
+                {/* delayForPairsMs */}
+                <Controller
+                    name="delayForPairsMs"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Delay for pairs (ms)"
+                            placeholder="Delay (ms)"
+                            inputWrapperOrder={["label", "input", "description", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.timeoutMs?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix="ms"
+                            min={0}
+                            step={1000}
+                            clampBehavior="strict"
+                            description={"If 0 then no delay | 1000ms = 1second"}
                         />
                     )}
                 />

@@ -285,6 +285,7 @@ export function handleEntryCheckAll({ whitelistItem, settingUser, sideCCC }: THa
 type THandleEntryCheckAll2 = {
     whitelistItem: TWhiteListItem;
     settingUser: TSettingUsers;
+    flag: "farm" | "scalp";
 };
 type THandleEntryCheckAllRes2 = {
     errString: string | null;
@@ -292,8 +293,7 @@ type THandleEntryCheckAllRes2 = {
     result: {
         // cả 2 đều cần
         symbol: string;
-        sizeStr: string;
-        side: TSide | null;
+        side: TSide;
 
         // cho bot worker
         askBest: number;
@@ -304,15 +304,13 @@ type THandleEntryCheckAllRes2 = {
 
         // cho component whitelist
         core: TCore;
-        isDepth: boolean;
         isLong: boolean;
         isShort: boolean;
-        isSize: boolean;
         isSpread: boolean;
         gapPercentBiVsGate: number;
     } | null;
 };
-export function handleEntryCheckAll2({ whitelistItem, settingUser }: THandleEntryCheckAll2): THandleEntryCheckAllRes2 {
+export function handleEntryCheckAll2({ whitelistItem, settingUser, flag }: THandleEntryCheckAll2): THandleEntryCheckAllRes2 {
     const { core, contractInfo } = whitelistItem;
     const {
         askBest,
@@ -352,40 +350,50 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser }: THandleEntr
         return { errString: msg, qualified: false, result: null };
     }
 
-    const isSpread = isSpreadPercent(spreadPercent, settingUser.minSpreadPercent, settingUser.maxSpreadPercent);
-    const isDepth = isDepthCalc(askSumDepth, bidSumDepth, settingUser.maxDepth);
+    let minSpreadPercent = null;
+    let maxSpreadPercent = null;
+    let ifImbalanceBidPercent = null;
+    let ifImbalanceAskPercent = null;
+    let lastPriceGapGateAndBinancePercent = null;
 
-    const sizeStr = handleSize(whitelistItem, settingUser.inputUSDT);
-    const isSize = checkSize(sizeStr);
-
-    // 3) Kết hợp theo mode (mặc định BOTH = AND)
-    const mode = settingUser.entrySignalMode;
-
-    let isLong = false;
-    let isShort = false;
-
-    switch (mode) {
-        case EntrySignalMode.GAP:
-            isLong = handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
-            isShort = handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
-            break;
-        case EntrySignalMode.IMBALANCE:
-            isLong = handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
-            isShort = handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
-            break;
-        case EntrySignalMode.BOTH:
-            const isLongGap = handleGapForLong(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
-            const isLongImb = handleImBalanceBidForLong(imbalanceBidPercent, settingUser.ifImbalanceBidPercent);
-            isLong = isLongGap && isLongImb;
-            const isShortGap = handleGapForShort(lastPriceGate, lastPriceBinance, settingUser.lastPriceGapGateAndBinancePercent);
-            const isShortImb = handleImBalanceAskForShort(imbalanceAskPercent, settingUser.ifImbalanceAskPercent);
-            isShort = isShortGap && isShortImb;
-            break;
+    if (flag === "scalp") {
+        minSpreadPercent = settingUser.minSpreadPercentScalp;
+        maxSpreadPercent = settingUser.maxSpreadPercentScalp;
+        ifImbalanceBidPercent = settingUser.ifImbalanceBidPercentScalp;
+        ifImbalanceAskPercent = settingUser.ifImbalanceAskPercentScalp;
+        lastPriceGapGateAndBinancePercent = settingUser.lastPriceGapGateAndBinancePercentScalp;
+    } else {
+        minSpreadPercent = settingUser.minSpreadPercentFarm;
+        maxSpreadPercent = settingUser.maxSpreadPercentFarm;
+        ifImbalanceBidPercent = settingUser.ifImbalanceBidPercentFarm;
+        ifImbalanceAskPercent = settingUser.ifImbalanceAskPercentFarm;
+        lastPriceGapGateAndBinancePercent = settingUser.lastPriceGapGateAndBinancePercentFarm;
     }
 
-    const side = isLong ? "long" : isShort ? "short" : null;
+    const isSpread = isSpreadPercent(spreadPercent, minSpreadPercent, maxSpreadPercent);
 
-    const qualified = isSpread && isDepth && isSize && !!side;
+    const isLongBid = handleImBalanceBidForLong(imbalanceBidPercent, ifImbalanceBidPercent);
+    const isShortAsk = handleImBalanceAskForShort(imbalanceAskPercent, ifImbalanceAskPercent);
+
+    const isLongGap = handleGapForLong(lastPriceGate, lastPriceBinance, lastPriceGapGateAndBinancePercent);
+    const isShortGap = handleGapForShort(lastPriceGate, lastPriceBinance, lastPriceGapGateAndBinancePercent);
+
+    const isLong = isLongBid && isLongGap;
+    const isShort = isShortAsk && isShortGap;
+
+    // const side = isLong ? "long" : isShort ? "short" : null;
+    let side = null
+    if(isLong && !isShort) {
+        side = "long"
+    } else if(!isLong && isShort) {
+        side = "short"
+    } else if(isLong && isShort) {
+        side = "long"
+    } else {
+        side = "short"
+    }
+
+    const qualified = isSpread && (isLong || isShort);
 
     return {
         errString: null,
@@ -393,8 +401,7 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser }: THandleEntr
         result: {
             // cả 2 đều cần
             symbol,
-            sizeStr,
-            side,
+            side: side as TSide,
 
             // cho bot worker
             askBest,
@@ -405,10 +412,8 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser }: THandleEntr
 
             // cho component whitelist
             core,
-            isDepth,
             isLong,
             isShort,
-            isSize,
             isSpread,
             gapPercentBiVsGate: gapPercentBinanceVsGate(lastPriceGate, lastPriceBinance),
         },

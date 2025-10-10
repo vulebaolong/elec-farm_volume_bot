@@ -45,7 +45,7 @@ import { TUid } from "@/types/uid.type";
 import { TWhiteListFarmIoc } from "@/types/white-list-farm-ioc.type";
 import { TWhiteListMartingale } from "@/types/white-list-martingale.type";
 import { TMaxScapsPosition, TWhiteListScalpIoc } from "@/types/white-list-scalp-ioc.type";
-import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
+import { TWhiteList, TWhitelistEntry, TWhitelistEntryFarmIoc } from "@/types/white-list.type";
 import { TWorkerData, TWorkerHeartbeat, TWorkLog } from "@/types/worker.type";
 import axios from "axios";
 import { LogFunctions } from "electron-log";
@@ -252,7 +252,9 @@ class Bot {
                     // Scalp
                     for (const entry of this.whitelistEntryScalpIoc) {
                         if (this.isCheckDelayForPairsMs("scalp")) {
-                            // this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
+                            if (this.settingUser.delayForPairsMs > 0) {
+                                this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
+                            }
                             break;
                         }
 
@@ -262,7 +264,9 @@ class Bot {
                     // // Farm
                     for (const entry of this.whitelistEntryFarmIoc) {
                         if (this.isCheckDelayForPairsMs("farm")) {
-                            // this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
+                            if (this.settingUser.delayForPairsMs > 0) {
+                                this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("farm")}ms)`);
+                            }
                             break;
                         }
                         await this.handleWhiteListFarmIoc(entry);
@@ -333,26 +337,24 @@ class Bot {
 
         // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 2
         // càng xa càng khó khớp lệnh nên tạm thời để 0 để test
-        // const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][0];
-        const pricesScalps = bidsAsks[entry.side === "long" ? "bids" : "asks"].slice(0, 2);
+        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][0];
+        // const pricesScalps = bidsAsks[entry.side === "long" ? "bids" : "asks"].slice(0, 2);
 
         if (!IS_PRODUCTION) sizeScalpIoc = 1;
 
-        for (const pricesScalp of pricesScalps) {
-            const payloadOpenOrder: TPayloadOrder = {
-                contract: entrySymbol,
-                size: entry.side === "long" ? `${sizeScalpIoc}` : `-${sizeScalpIoc}`,
-                price: pricesScalp.p,
-                reduce_only: false,
-                tif: "ioc",
-            };
+        const payloadOpenOrder: TPayloadOrder = {
+            contract: entrySymbol,
+            size: entry.side === "long" ? `${sizeScalpIoc}` : `-${sizeScalpIoc}`,
+            price: pricesScalp.p,
+            reduce_only: false,
+            tif: "ioc",
+        };
 
-            const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
-            if (!ok) return;
+        const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
+        if (!ok) return;
 
-            const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC | ${payloadOpenOrder.price}`);
+        const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC | ${payloadOpenOrder.price}`);
 
-        }
         this.postponePair("scalp", this.settingUser.delayForPairsMs);
     }
 
@@ -377,31 +379,28 @@ class Bot {
         const bidsAsks = await this.getBidsAsks(entry.symbol);
         const tick = entry.order_price_round;
         const insidePrices = this.computeInsidePrices(entry.side, bidsAsks, tick, this.decimalsFromTick.bind(this));
-        // const price = insidePrices.at(-1);
-        const prices = insidePrices.slice(0, 2);
+        const price = insidePrices.at(-1);
 
         if (!IS_PRODUCTION) sizeFarmIoc = 1;
 
-        for (const price of prices) {
-            if (!price) {
-                this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
-                return;
-            }
-
-            const payloadOpenOrder: TPayloadOrder = {
-                contract: entry.symbol,
-                size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
-                price: price,
-                reduce_only: false,
-                tif: "ioc",
-            };
-
-            const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
-            if (!ok) return;
-
-            await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
-
+        if (!price) {
+            this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
+            return;
         }
+
+        const payloadOpenOrder: TPayloadOrder = {
+            contract: entry.symbol,
+            size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
+            price: price,
+            reduce_only: false,
+            tif: "ioc",
+        };
+
+        const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
+        if (!ok) return;
+
+        await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
+
         this.postponePair("farm", this.settingUser.delayForPairsMs);
     }
 
@@ -578,7 +577,7 @@ class Bot {
         // console.log("whiteListScalpIoc", this.whiteListScalpIoc);
         // console.dir(this.positions, { colors: true, depth: null });
         // console.log(`maxScalpsPosition`, Object(this.maxScalpsPosition).keys());
-        console.log(`maxFarmsPosition`, Object(this.maxFarmsPosition).keys());
+        // console.log(`maxFarmsPosition`, Object(this.maxFarmsPosition).keys());
     }
 
     private heartbeat() {
@@ -1224,6 +1223,8 @@ class Bot {
         const whiteListArr = Object.values(this.whiteList);
         if (whiteListArr.length === 0) {
             this.whitelistEntry = [];
+            this.whitelistEntryFarmIoc = [];
+            this.whitelistEntryScalpIoc = [];
             return;
         }
 
@@ -1232,44 +1233,56 @@ class Bot {
         this.whitelistEntryScalpIoc = []; // cho bot
 
         for (const whitelistItem of whiteListArr) {
-            const { errString, qualified, result } = handleEntryCheckAll2({
-                whitelistItem,
-                settingUser: this.settingUser,
-            });
+            const {
+                errString: farmErrString,
+                qualified: qualifiedFarm,
+                result: resultFarm,
+            } = handleEntryCheckAll2({ flag: "farm", whitelistItem, settingUser: this.settingUser });
 
-            if (errString) {
-                this.logWorker.error(errString);
+            const {
+                errString: scalpErrString,
+                qualified: qualifiedScalp,
+                result: resultScalp,
+            } = handleEntryCheckAll2({ flag: "scalp", whitelistItem, settingUser: this.settingUser });
+
+            if (farmErrString || scalpErrString) {
+                this.logWorker.error(farmErrString ?? scalpErrString);
                 continue;
-            } else if (qualified && result && result.side) {
+            }
+
+            if (resultFarm) {
                 const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
-                    return result.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
+                    return resultFarm.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
                 });
+
                 if (isExitsFarm) {
                     this.whitelistEntryFarmIoc.push({
-                        symbol: result.symbol,
+                        symbol: resultFarm.symbol,
                         sizeStr: `${this.settingUser.sizeIOC}`,
-                        side: result.side,
-                        askBest: result.askBest,
-                        bidBest: result.bidBest,
-                        order_price_round: result.order_price_round,
-                        lastPriceGate: result.lastPriceGate,
-                        quanto_multiplier: result.quanto_multiplier,
+                        side: resultFarm.side,
+                        askBest: resultFarm.askBest,
+                        bidBest: resultFarm.bidBest,
+                        order_price_round: resultFarm.order_price_round,
+                        lastPriceGate: resultFarm.lastPriceGate,
+                        quanto_multiplier: resultFarm.quanto_multiplier,
                     });
                 }
+            }
 
+            if (qualifiedScalp && resultScalp) {
                 const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
-                    return result.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
+                    return resultScalp.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
                 });
                 if (isExitsScalp) {
                     this.whitelistEntryScalpIoc.push({
-                        symbol: result.symbol,
+                        symbol: resultScalp.symbol,
                         sizeStr: `${this.settingUser.sizeIOC}`,
-                        side: result.side,
-                        askBest: result.askBest,
-                        bidBest: result.bidBest,
-                        order_price_round: result.order_price_round,
-                        lastPriceGate: result.lastPriceGate,
-                        quanto_multiplier: result.quanto_multiplier,
+                        side: resultScalp.side,
+                        askBest: resultScalp.askBest,
+                        bidBest: resultScalp.bidBest,
+                        order_price_round: resultScalp.order_price_round,
+                        lastPriceGate: resultScalp.lastPriceGate,
+                        quanto_multiplier: resultScalp.quanto_multiplier,
                     });
                 }
             }
