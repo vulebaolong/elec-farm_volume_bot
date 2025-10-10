@@ -334,7 +334,7 @@ class Bot {
 
         // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 2
         // càng xa càng khó khớp lệnh nên tạm thời để 0 để test
-        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][2];
+        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][0];
 
         if (!IS_PRODUCTION) sizeScalpIoc = 1;
 
