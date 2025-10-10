@@ -252,7 +252,7 @@ class Bot {
                     // Scalp
                     for (const entry of this.whitelistEntryScalpIoc) {
                         if (this.isCheckDelayForPairsMs("scalp")) {
-                            this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
+                            // this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
                             break;
                         }
 
@@ -262,7 +262,7 @@ class Bot {
                     // // Farm
                     for (const entry of this.whitelistEntryFarmIoc) {
                         if (this.isCheckDelayForPairsMs("farm")) {
-                            this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
+                            // this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
                             break;
                         }
                         await this.handleWhiteListFarmIoc(entry);
@@ -332,9 +332,9 @@ class Bot {
         const bidsAsks = await this.getBidsAsks(entrySymbol);
         // console.log(bidsAsks);
 
-        // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 3
+        // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 2
         // càng xa càng khó khớp lệnh nên tạm thời để 0 để test
-        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][0];
+        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][2];
 
         if (!IS_PRODUCTION) sizeScalpIoc = 1;
 
@@ -481,10 +481,10 @@ class Bot {
         const sidePosition = position.size > 0 ? "long" : "short";
         const sideShoudBe = sidePosition === "long" ? "short" : "long";
         if (sideShoudBe !== entrySide) {
-            this.logWorker.info(`${entrySymbol} ${sidePosition} skip by: cần tín hiệu là ${sideShoudBe}`);
+            // this.logWorker.info(`${entrySymbol} ${sidePosition} skip by: cần tín hiệu là ${sideShoudBe}`);
             return false;
         } else {
-            this.logWorker.info(`${entrySymbol} ${sidePosition} đúng side cần ${sideShoudBe} => tiến hành vào lệnh`);
+            // this.logWorker.info(`${entrySymbol} ${sidePosition} đúng side cần ${sideShoudBe} => tiến hành vào lệnh`);
             return true;
         }
     }
