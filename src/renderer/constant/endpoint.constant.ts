@@ -57,6 +57,9 @@ export const ENDPOINT = {
         GET_CONTRACT_SYMBOL: "contract/symbol",
         GET_INFO_CONTRACT: "contract/get-info-cal-contract",
     },
+    SYMBOL_GATE: {
+        GET: "symbol-gate",
+    },
     HELPER: {
         LAST_PRICE: "helper/last-price-by-contract",
     },
@@ -75,18 +78,18 @@ export const ENDPOINT = {
         CLEAR_ALL_WHITE_LIST_MARTINGALE: "white-list-martingale/clear-all",
     },
     WHITE_LIST_FARM_IOC: {
-        GET_WHITE_LIST_FARM_IOC: "white-list-farm-ioc",
-        GET_ALL_WHITE_LIST_FARM_IOC: "white-list-farm-ioc/all",
-        CREATE_WHITE_LIST_FARM_IOC: "white-list-farm-ioc",
-        REMOVE_WHITE_LIST_FARM_IOC: "white-list-farm-ioc",
-        CLEAR_ALL_WHITE_LIST_FARM_IOC: "white-list-farm-ioc/clear-all",
+        GET: "white-list-farm-ioc",
+        CREATE: "white-list-farm-ioc",
+        REMOVE: "white-list-farm-ioc",
+        CLEAR_ALL: "white-list-farm-ioc/clear-all",
+        UPDATE: "white-list-farm-ioc",
     },
     WHITE_LIST_SCALP_IOC: {
-        GET_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc",
-        GET_ALL_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc/all",
-        CREATE_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc",
-        REMOVE_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc",
-        CLEAR_ALL_WHITE_LIST_SCALP_IOC: "white-list-scalp-ioc/clear-all",
+        GET: "white-list-scalp-ioc",
+        CREATE: "white-list-scalp-ioc",
+        REMOVE: "white-list-scalp-ioc",
+        CLEAR_ALL: "white-list-scalp-ioc/clear-all",
+        UPDATE: "white-list-scalp-ioc",
     },
     CCC: {
         GET_SIDE: "https://api-coincraze.feliciastation.com/api/v1/tool/pnl-safe-mode/strong-side",

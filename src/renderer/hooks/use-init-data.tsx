@@ -17,8 +17,8 @@ import { TSettingUsersSocket } from "@/types/setting-user.type";
 import { TWhiteList } from "@/types/white-list.type";
 import { useEffect } from "react";
 import { useSocket } from "./socket.hook";
-import { useGetAllWhiteListFarmIoc } from "@/api/tanstack/white-list-farm-ioc.tanstack";
-import { useGetAllWhiteListScalpIoc } from "@/api/tanstack/white-list-scalp-ioc.tanstack";
+import { useGetWhiteListFarmIoc } from "@/api/tanstack/white-list-farm-ioc.tanstack";
+import { useGetWhiteListScalpIoc } from "@/api/tanstack/white-list-scalp-ioc.tanstack";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
@@ -31,8 +31,17 @@ export const useInitData = () => {
     const getInfoMutation = useGetInfoMutation();
     const getMyBlackList = useGetMyBlackList();
     const getAllWhiteListMartingale = useGetAllWhiteListMartingale();
-    const getAllWhiteListFarmIoc = useGetAllWhiteListFarmIoc();
-    const getAllWhiteListScalpIoc = useGetAllWhiteListScalpIoc();
+
+    const getWhiteListFarmIoc = useGetWhiteListFarmIoc({
+        pagination: { page: 1, pageSize: 99999 },
+        filters: {},
+        sort: { sortBy: `createdAt`, isDesc: true },
+    });
+    const getWhiteListScalpIoc = useGetWhiteListScalpIoc({
+        pagination: { page: 1, pageSize: 99999 },
+        filters: {},
+        sort: { sortBy: `createdAt`, isDesc: true },
+    });
 
     const getFixLiquidation = useGetFixLiquidation({
         pagination: { page: 1, pageSize: 10 },
@@ -102,8 +111,8 @@ export const useInitData = () => {
             getUiSelector: getUiSelector.data,
             getMyBlackList: getMyBlackList.data,
             getAllWhiteListMartingale: getAllWhiteListMartingale.data,
-            getAllWhiteListFarmIoc: getAllWhiteListFarmIoc.data,
-            getAllWhiteListScalpIoc: getAllWhiteListScalpIoc.data,
+            getWhiteListFarmIoc: getWhiteListFarmIoc.data,
+            getWhiteListScalpIoc: getWhiteListScalpIoc.data,
             getFixLiquidation: getFixLiquidation.data,
             getFixStopLoss: getFixStopLoss.data,
             getFixStopLossQueueByUserId: getFixStopLossQueueByUserId.data,
@@ -114,8 +123,8 @@ export const useInitData = () => {
         if (!getUiSelector.data) return;
         if (!getMyBlackList.data) return;
         if (!getAllWhiteListMartingale.data) return;
-        if (!getAllWhiteListFarmIoc.data) return;
-        if (!getAllWhiteListScalpIoc.data) return;
+        if (!getWhiteListFarmIoc.data) return;
+        if (!getWhiteListScalpIoc.data) return;
         if (!getFixLiquidation.data) return;
         if (!getFixStopLoss.data) return;
         if (!getFixStopLossQueueByUserId.data) return;
@@ -127,8 +136,8 @@ export const useInitData = () => {
             uiSelector: getUiSelector.data,
             blackList: getMyBlackList.data.map((item) => item.symbol),
             whiteListMartingale: getAllWhiteListMartingale.data.map((item) => item.symbol),
-            whiteListFarmIoc: getAllWhiteListFarmIoc.data.map((item) => item.symbol),
-            whiteListScalpIoc: getAllWhiteListScalpIoc.data.map((item) => item.symbol),
+            whiteListFarmIoc: getWhiteListFarmIoc.data.items,
+            whiteListScalpIoc: getWhiteListScalpIoc.data.items,
             fixLiquidationInDB: getFixLiquidation.data.items?.[0],
             fixStopLossInDB: getFixStopLoss.data.items?.[0],
             fixStopLossQueueInDB: getFixStopLossQueueByUserId.data,
@@ -141,8 +150,8 @@ export const useInitData = () => {
         getUiSelector.data,
         getMyBlackList.data,
         getAllWhiteListMartingale.data,
-        getAllWhiteListFarmIoc.data,
-        getAllWhiteListScalpIoc.data,
+        getWhiteListFarmIoc.data,
+        getWhiteListScalpIoc.data,
         getFixLiquidation.data,
         getFixStopLoss.data,
         getFixStopLossQueueByUserId.data,

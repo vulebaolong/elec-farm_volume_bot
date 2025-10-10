@@ -21,6 +21,7 @@ export const useGetAllWhiteListMartingale = () => {
             console.log({ useGetAllWhiteListMartingale: data });
             return data.data;
         },
+        enabled: !!info,
     });
 };
 

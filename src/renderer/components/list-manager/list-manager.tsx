@@ -3,8 +3,8 @@ import { PageTitle } from "../title-page/title-page";
 import Whitelist from "./whitelist";
 import BlackList from "./black-list";
 import WhitelistMartingale from "./white-list-martingale";
-import WhitelistFarmIoc from "./white-list-farm-ioc";
-import WhitelistScalpIoc from "./white-list-scalp-ioc";
+import WhitelistFarmIoc from "./white-list-farm-ioc/white-list-farm-ioc";
+import WhitelistScalpIoc from "./white-list-scalp-ioc/white-list-scalp-ioc";
 
 export default function ListManager() {
     return (

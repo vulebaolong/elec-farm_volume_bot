@@ -15,8 +15,8 @@ export type TDataInitBot = {
     uiSelector: TUiSelector[];
     blackList: string[];
     whiteListMartingale: TWhiteListMartingale["symbol"][];
-    whiteListFarmIoc: TWhiteListFarmIoc["symbol"][];
-    whiteListScalpIoc: TWhiteListScalpIoc["symbol"][];
+    whiteListFarmIoc: TWhiteListFarmIoc[];
+    whiteListScalpIoc: TWhiteListScalpIoc[];
     fixLiquidationInDB?: TFixLiquidationInDB;
     fixStopLossInDB?: TFixStopLossInDB;
     fixStopLossQueueInDB?: TFixStopLossQueueInDB;

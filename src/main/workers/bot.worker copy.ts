@@ -44,7 +44,7 @@ import { TUiSelector } from "@/types/ui-selector.type";
 import { TUid } from "@/types/uid.type";
 import { TWhiteListFarmIoc } from "@/types/white-list-farm-ioc.type";
 import { TWhiteListMartingale } from "@/types/white-list-martingale.type";
-import { TMaxScapsPosition, TWhiteListScalpIoc } from "@/types/white-list-scalp-ioc.type";
+import { TWhiteListScalpIoc } from "@/types/white-list-scalp-ioc.type";
 import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
 import { TWorkerData, TWorkerHeartbeat, TWorkLog } from "@/types/worker.type";
 import axios from "axios";
@@ -124,26 +124,19 @@ class Bot {
     private parentPort: import("worker_threads").MessagePort;
     private isStart = false;
     private orderOpens: TOrderOpen[] = [];
-
-    /**
-     * key của map: "BTC_USDT", dữ liệu contract bên trong "BTC/USDT"
-     */
-    private positions = new Map<string, TPosition>();
-
+    private positions = new Map<string, TPosition>(); // "BTC_USDT"
     private changedLaveragelist = new Map<string, TValueChangeLeverage>();
     private changedLaverageCrosslist = new Map<string, TValueChangeLeverage>();
     private settingUser: TSettingUsers;
     private uiSelector: TUiSelector[];
     private whitelistEntry: TWhitelistEntry[] = [];
-    private whitelistEntryFarmIoc: TWhitelistEntry[] = [];
-    private whitelistEntryScalpIoc: TWhitelistEntry[] = [];
     private whiteList: TWhiteList = {};
     private infoContract = new Map<string, TGetInfoContractRes>();
     private blackList: string[] = [];
     private whiteListMartingale: TWhiteListMartingale["symbol"][] = [];
     private whiteListFarmIoc: TWhiteListFarmIoc[] = [];
     private whiteListScalpIoc: TWhiteListScalpIoc[] = [];
-    private nextOpenAt = new Map<string, number>();
+    private nextOpenAt: number = 0;
     private accounts: TAccount[] = [];
     private rateCounter = new SlidingRateCounter();
     private rateMax: Record<WindowKey, number> = {
@@ -167,16 +160,6 @@ class Bot {
     private uidDB: TUid["uid"];
 
     private uidWeb: TUid["uid"] | null | undefined = undefined;
-
-    /**
-     * key của map: "BTC_USDT", dữ liệu contract bên trong "BTC/USDT"
-     */
-    private maxScalpsPosition = new Map<string, TMaxScapsPosition>();
-
-    /**
-     * key của map: "BTC_USDT", dữ liệu contract bên trong "BTC/USDT"
-     */
-    private maxFarmsPosition = new Map<string, TMaxScapsPosition>();
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
@@ -234,6 +217,10 @@ class Bot {
         if (this.running) return;
         this.running = true;
         this.parentPort.postMessage({ type: "bot:init:done", payload: true });
+
+        // const infoGate = await this.getInfoGate();
+        // this.infoGate = infoGate;
+
         for (;;) {
             const iterStart = performance.now();
             try {
@@ -243,29 +230,212 @@ class Bot {
 
                 if (!this.uidWeb) continue;
 
-                if (this.isStart) {
-                    const isOneWay = await this.handleDualMode("oneway");
-                    if (!isOneWay) continue;
+                if (this.settingUser.sizeIOC === 0) {
+                    if (this.isStart) {
+                        const isHedged = await this.handleDualMode("hedged");
+                        if (!isHedged) continue;
 
-                    await this.setWhitelistEntry2();
-
-                    // Scalp
-                    for (const entry of this.whitelistEntryScalpIoc) {
-                        if (this.isCheckDelayForPairsMs("scalp")) {
-                            this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
-                            break;
+                        if (this.isNextPhase()) {
+                            await this.handleNextPhase();
+                            continue;
                         }
 
-                        await this.handleWhiteListScalpIoc(entry);
+                        await this.setWhitelistEntry();
+                        this.syncDataOrderOpenFixStopLoss();
+
+                        // ===== 1) CREATE CLOSE ==============================================
+                        await this.createTPClose();
+
+                        // ===== 2) CLEAR OPEN =================================================
+                        if (this.orderOpens.length > 0) {
+                            const contractsToCancel = this.contractsToCancelWithEarliest();
+                            for (const contract of contractsToCancel) {
+                                if (this.isClearOpen(contract.earliest, contract.contract)) {
+                                    await this.clickCanelAllOpen(contract.contract);
+                                }
+                            }
+
+                            // Cập nhật TP-close xen kẽ
+                            await this.createTPClose();
+
+                            this.log("🟢 ✅ Clear Open: done");
+                        } else {
+                            this.log("🟢 Clear Open: no order open");
+                        }
+                        console.log("\n\n");
+
+                        await this.createLiquidationShouldFix();
+                        this.createStopLossShouldFix();
+
+                        // ===== 3) CREATE OPEN ===============================================
+                        if (this.isHandleCreateOpen()) {
+                            for (const whitelistItem of Object.values(this.whitelistEntry)) {
+                                const { symbol, sizeStr, side, lastPriceGate, quanto_multiplier } = whitelistItem;
+
+                                if (this.isCheckLimit()) {
+                                    this.logWorker.info(`🔵 Create Open: skip rate limit hit`);
+                                    break;
+                                }
+
+                                if (this.isCheckDelayForPairsMs()) {
+                                    this.logWorker.info(`🔵 Create Open: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
+                                    break;
+                                }
+
+                                // nếu symbol đó đã tồn tại trong orderOpens -> bỏ qua
+                                if (this.isOrderExitsByContract(symbol)) {
+                                    this.logWorker.info(`🔵 Create Open: skip ${symbol} (already exists)`);
+                                    continue;
+                                }
+
+                                // nếu symbol tồn tại trong blackList -> bỏ qua
+                                if (this.isExitsBlackList(symbol)) {
+                                    continue;
+                                }
+
+                                const bidsAsks = await this.getBidsAsks(symbol);
+                                const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(0, IS_PRODUCTION ? 3 : 1);
+                                const price = prices[IS_PRODUCTION ? 1 : 0].p;
+
+                                let isCreateOrderOpenFix: boolean;
+
+                                if (this.isFixStopLoss()) {
+                                    isCreateOrderOpenFix = await this.createOrderOpenFixStopLoss(
+                                        symbol,
+                                        price,
+                                        lastPriceGate,
+                                        quanto_multiplier,
+                                        side,
+                                    );
+                                } else {
+                                    isCreateOrderOpenFix = await this.createOrderOpenFixLiquidation(symbol, price, lastPriceGate, quanto_multiplier);
+                                }
+
+                                if (isCreateOrderOpenFix) continue;
+
+                                // nếu đã max thì không vào thoát vòng lặp
+                                if (this.isCheckMaxOpenPO()) {
+                                    this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${this.getLengthOrderInOrderOpensAndPosition()}`);
+                                    break;
+                                }
+
+                                const size = IS_PRODUCTION ? sizeStr : `1`;
+                                // const size = sizeStr;
+
+                                const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
+                                if (!ok) continue;
+
+                                for (const price of prices) {
+                                    const payloadOpenOrder: TPayloadOrder = {
+                                        contract: symbol,
+                                        size: side === "long" ? size : `-${size}`,
+                                        price: price.p,
+                                        reduce_only: false,
+                                        tif: "poc",
+                                    };
+                                    try {
+                                        await this.openEntry(payloadOpenOrder, `Open`);
+                                    } catch (error: any) {
+                                        if (error?.message === INSUFFICIENT_AVAILABLE) {
+                                            throw new Error(error);
+                                        }
+                                        if (this.isTimeoutError(error)) {
+                                            throw new Error(error);
+                                        }
+                                        this.logWorker.error(error?.message);
+                                        continue;
+                                    }
+                                }
+
+                                // cập nhật TP-close
+                                await this.createTPClose();
+
+                                // ✅ đặt cooldown cho symbol này sau khi xử lý xong
+                                this.postponePair(this.settingUser.delayForPairsMs);
+                            }
+                        }
+                        console.log("\n\n");
+
+                        await this.checkDataFixLiquidationIsDone();
+                        await this.checkDataFixStopLossIsDone();
+
+                        // ===== 4) SL / ROI ===================================================
+                        if (this.isHandleSL()) {
+                            for (const [, pos] of this.positions) {
+                                if (this.isExitsBlackList(pos.contract)) {
+                                    continue;
+                                }
+                                await this.handleRoi(pos);
+                            }
+                            await this.createTPClose();
+                        }
+                        console.log("\n\n");
+                    } else {
+                        this.log("isStart=false → skip all work");
                     }
+                } else {
+                    if (this.isStart) {
+                        const isOneWay = await this.handleDualMode("oneway");
+                        if (!isOneWay) continue;
 
-                    // // Farm
-                    for (const entry of this.whitelistEntryFarmIoc) {
-                        if (this.isCheckDelayForPairsMs("farm")) {
-                            this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
-                            break;
+                        await this.setWhitelistEntry2();
+
+                        for (const entry of this.whitelistEntry) {
+                            if (this.isCheckDelayForPairsMs()) {
+                                this.logWorker.info(`🔵 Create IOC: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
+                                break;
+                            }
+
+                            // Scalp
+                            if (this.checkWhiteListScalpIoc(entry.symbol)) {
+                                const bidsAsks = await this.getBidsAsks(entry.symbol);
+
+                                const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"].slice(0, 3);
+
+                                for (const price of pricesScalp) {
+                                    const payloadOpenOrder: TPayloadOrder = {
+                                        contract: entry.symbol,
+                                        size: entry.side === "long" ? `${this.settingUser.sizeIOC}` : `-${this.settingUser.sizeIOC}`,
+                                        // size: entry.side === "long" ? `1` : `-1`,
+                                        price: price.p,
+                                        reduce_only: false,
+                                        tif: "ioc",
+                                    };
+
+                                    const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
+                                    if (!ok) continue;
+
+                                    const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC | ${payloadOpenOrder.price}`);
+                                }
+                            } else {
+                                this.logWorker.info(`Skip Scalp ${entry.symbol}: by whiteListScalpIoc not found`);
+                            }
+
+                            // Farm
+                            if (this.whiteListFarmIoc.map((item) => item.symbol).includes(entry.symbol)) {
+                                const bidsAsks = await this.getBidsAsks(entry.symbol);
+                                const tick = entry.order_price_round;
+                                const insidePrices = this.computeInsidePrices(entry.side, bidsAsks, tick, this.decimalsFromTick.bind(this));
+
+                                for (const priceStr of insidePrices) {
+                                    const payloadOpenOrder: TPayloadOrder = {
+                                        contract: entry.symbol,
+                                        size: entry.side === "long" ? `${this.settingUser.sizeIOC}` : `-${this.settingUser.sizeIOC}`,
+                                        // size: entry.side === "long" ? "1" : "-1",
+                                        price: priceStr,
+                                        reduce_only: false,
+                                        tif: "ioc", // hoặc "poc" nếu bạn muốn maker
+                                    };
+
+                                    const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
+                                    if (!ok) continue;
+
+                                    await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
+                                }
+                            } else {
+                                this.logWorker.info(`Skip Farm ${entry.symbol}: by whiteListFarmIoc not found`);
+                            }
                         }
-                        await this.handleWhiteListFarmIoc(entry);
                     }
                 }
             } catch (err: any) {
@@ -312,181 +482,12 @@ class Bot {
         }
     }
 
-    private async handleWhiteListScalpIoc(entry: TWhitelistEntry) {
-        const entrySymbol = entry.symbol.replace("/", "_");
-
-        const maxSizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
-        if (!maxSizeScalpIoc) {
-            this.logWorker.info(`Skip Scalp ${entrySymbol}: by not found size: ${maxSizeScalpIoc}`);
-            return false;
-        }
-        let sizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
-        if (!sizeScalpIoc) {
-            this.logWorker.info(`Skip Scalp ${entrySymbol}: by not found size: ${sizeScalpIoc}`);
-            return;
-        }
-
-        const isHit = this.handleLogicMaxSide("scalp", entrySymbol, entry.side, maxSizeScalpIoc);
-        if (!isHit) return;
-
-        const bidsAsks = await this.getBidsAsks(entrySymbol);
-        // console.log(bidsAsks);
-
-        // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 3
-        // càng xa càng khó khớp lệnh nên tạm thời để 0 để test
-        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][0];
-
-        if (!IS_PRODUCTION) sizeScalpIoc = 1;
-
-        const payloadOpenOrder: TPayloadOrder = {
-            contract: entrySymbol,
-            size: entry.side === "long" ? `${sizeScalpIoc}` : `-${sizeScalpIoc}`,
-            price: pricesScalp.p,
-            reduce_only: false,
-            tif: "ioc",
-        };
-
-        const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
-        if (!ok) return;
-
-        const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC | ${payloadOpenOrder.price}`);
-
-        // ✅ đặt cooldown cho symbol này sau khi xử lý xong
-        this.postponePair("scalp", this.settingUser.delayForPairsMs);
-    }
-
-    private async handleWhiteListFarmIoc(entry: TWhitelistEntry) {
-        const entrySymbol = entry.symbol.replace("/", "_");
-
-        const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
-        if (!maxSizeFarmIoc) {
-            this.logWorker.info(`Skip Farm ${entrySymbol}: by not found size: ${maxSizeFarmIoc}`);
-            return false;
-        }
-
-        let sizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
-        if (!sizeFarmIoc) {
-            this.logWorker.info(`Skip Farm ${entry.symbol}: by not found size: ${sizeFarmIoc}`);
-            return;
-        }
-
-        const isHit = this.handleLogicMaxSide("farm", entrySymbol, entry.side, maxSizeFarmIoc);
-        if (!isHit) return;
-
-        const bidsAsks = await this.getBidsAsks(entry.symbol);
-        const tick = entry.order_price_round;
-        const insidePrices = this.computeInsidePrices(entry.side, bidsAsks, tick, this.decimalsFromTick.bind(this));
-        const price = insidePrices.at(-1);
-
-        if (!price) {
-            this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
-            return;
-        }
-        if (!IS_PRODUCTION) sizeFarmIoc = 1;
-
-        const payloadOpenOrder: TPayloadOrder = {
-            contract: entry.symbol,
-            size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
-            price: price,
-            reduce_only: false,
-            tif: "ioc",
-        };
-
-        const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
-        if (!ok) return;
-
-        await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
-
-        this.postponePair("farm", this.settingUser.delayForPairsMs);
-    }
-
-    private addMaxScapsPosition(symbol: string) {
-        this.maxScalpsPosition.set(symbol.replace("/", "_"), { symbol: symbol, at: Date.now() });
-    }
-    private addMaxFarmsPosition(symbol: string) {
-        this.maxFarmsPosition.set(symbol.replace("/", "_"), { symbol: symbol, at: Date.now() });
-    }
-
-    private syncMaxScapsPosition(positions: TPosition[]) {
-        // Nếu không có position nào → xóa toàn bộ
-        if (positions.length === 0) {
-            this.maxScalpsPosition.clear();
-            return;
-        }
-
-        // Nếu maxScalpsPosition đang trống → không cần làm gì
-        if (this.maxScalpsPosition.size === 0) return;
-
-        for (const key of this.maxScalpsPosition.keys()) {
-            // Chuẩn hóa tên contract trong positions
-            const exists = positions.some((pos) => pos.contract.replace("/", "_") === key.replace("/", "_"));
-
-            if (!exists) {
-                this.maxScalpsPosition.delete(key);
-            }
-        }
-    }
-
-    private syncMaxFarmsPosition(positions: TPosition[]) {
-        // Nếu không có position nào → xóa toàn bộ
-        if (positions.length === 0) {
-            this.maxFarmsPosition.clear();
-            return;
-        }
-
-        // Nếu maxFarmsPosition đang trống → không cần làm gì
-        if (this.maxFarmsPosition.size === 0) return;
-
-        for (const key of this.maxFarmsPosition.keys()) {
-            // Chuẩn hóa tên contract trong positions
-            const exists = positions.some((pos) => pos.contract.replace("/", "_") === key.replace("/", "_"));
-
-            if (!exists) {
-                this.maxFarmsPosition.delete(key);
-            }
-        }
-    }
-
-    private handleLogicMaxSide(flag: "farm" | "scalp", entrySymbol: string, entrySide: TSide, maxSize: number): boolean {
-        const isMaxSizeExits = flag === "scalp" ? this.maxScalpsPosition.get(entrySymbol) : this.maxFarmsPosition.get(entrySymbol);
-
-        if (isMaxSizeExits) {
-            // nếu đã maxSize thì vào ngược chiều với side của position
-            const position = this.positions.get(entrySymbol);
-            if (position) {
-                return this.checkMaxSize(position, entrySymbol, entrySide);
-            }
-            return true;
-            // nếu không có position là lệnh chưa được fill nên vẫn đi theo side của setting
-        } else {
-            // nếu chưa maxSize thì kiểm tra xem max chưa để lưu vào maxScalpsPosition
-            const position = this.positions.get(entrySymbol);
-            if (position) {
-                if (Math.abs(position.size) >= maxSize) {
-                    if (flag === "scalp") {
-                        this.addMaxScapsPosition(entrySymbol);
-                    } else {
-                        this.addMaxFarmsPosition(entrySymbol);
-                    }
-                    return this.checkMaxSize(position, entrySymbol, entrySide);
-                }
-            }
-            return true;
-        }
-    }
-
-    private checkMaxSize(position: TPosition, entrySymbol: string, entrySide: TSide): boolean {
-        // nếu size của position lớn hơn 0 là long, thì tín hiệu phải là short mới vào
-        // sideShoudBe sẽ là side mong muốn ngược với side position
-        const sidePosition = position.size > 0 ? "long" : "short";
-        const sideShoudBe = sidePosition === "long" ? "short" : "long";
-        if (sideShoudBe !== entrySide) {
-            this.logWorker.info(`${entrySymbol} ${sidePosition} skip by: cần tín hiệu là ${sideShoudBe}`);
-            return false;
-        } else {
-            this.logWorker.info(`${entrySymbol} ${sidePosition} đúng side cần ${sideShoudBe} => tiến hành vào lệnh`);
-            return true;
-        }
+    private checkWhiteListScalpIoc(symbol: string): boolean {
+        const isExits = this.whiteListScalpIoc.map((item) => item.symbol).includes(symbol);
+        const pos = this.positions.get(symbol);
+        if (!pos) return false;
+        const isMaxSizePosition = Math.abs(pos.size) >= pos.size;
+        return isExits && isMaxSizePosition;
     }
 
     private async createTPClose() {
@@ -569,11 +570,9 @@ class Bot {
         // console.log("uidDB", this.uidDB);
         // console.log("whitelistEntry", this.whitelistEntry);
         // console.log("whiteListMartingale", this.whiteListMartingale);
-        // console.log("whiteListFarmIoc", this.whiteListFarmIoc);
-        // console.log("whiteListScalpIoc", this.whiteListScalpIoc);
-        // console.dir(this.positions, { colors: true, depth: null });
-        // console.log(`maxScalpsPosition`, Object(this.maxScalpsPosition).keys());
-        console.log(`maxFarmsPosition`, Object(this.maxFarmsPosition).keys());
+        console.log("whiteListFarmIoc", this.whiteListFarmIoc);
+        console.log("whiteListScalpIoc", this.whiteListScalpIoc);
+        // console.dir(this.whiteList, { colors: true, depth: null });
     }
 
     private heartbeat() {
@@ -948,7 +947,7 @@ class Bot {
             throw new Error(msg);
         }
 
-        const status = `✅ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price} | ${body.data.size - body.data.left}`;
+        const status = `✅ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}`;
         this.logWorker.info(status);
 
         return body.data;
@@ -1223,8 +1222,6 @@ class Bot {
         }
 
         this.whitelistEntry = []; // cho bot
-        this.whitelistEntryFarmIoc = []; // cho bot
-        this.whitelistEntryScalpIoc = []; // cho bot
 
         for (const whitelistItem of whiteListArr) {
             const { errString, qualified, result } = handleEntryCheckAll2({
@@ -1236,37 +1233,16 @@ class Bot {
                 this.logWorker.error(errString);
                 continue;
             } else if (qualified && result && result.side) {
-                const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
-                    return result.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
+                this.whitelistEntry.push({
+                    symbol: result.symbol,
+                    sizeStr: `${this.settingUser.sizeIOC}`,
+                    side: result.side,
+                    askBest: result.askBest,
+                    bidBest: result.bidBest,
+                    order_price_round: result.order_price_round,
+                    lastPriceGate: result.lastPriceGate,
+                    quanto_multiplier: result.quanto_multiplier,
                 });
-                if (isExitsFarm) {
-                    this.whitelistEntryFarmIoc.push({
-                        symbol: result.symbol,
-                        sizeStr: `${this.settingUser.sizeIOC}`,
-                        side: result.side,
-                        askBest: result.askBest,
-                        bidBest: result.bidBest,
-                        order_price_round: result.order_price_round,
-                        lastPriceGate: result.lastPriceGate,
-                        quanto_multiplier: result.quanto_multiplier,
-                    });
-                }
-
-                const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
-                    return result.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
-                });
-                if (isExitsScalp) {
-                    this.whitelistEntryScalpIoc.push({
-                        symbol: result.symbol,
-                        sizeStr: `${this.settingUser.sizeIOC}`,
-                        side: result.side,
-                        askBest: result.askBest,
-                        bidBest: result.bidBest,
-                        order_price_round: result.order_price_round,
-                        lastPriceGate: result.lastPriceGate,
-                        quanto_multiplier: result.quanto_multiplier,
-                    });
-                }
             }
         }
     }
@@ -1844,12 +1820,9 @@ class Bot {
 
                     if (!bodyPositions.data || !Array.isArray(bodyPositions.data)) break;
 
-                    const result = bodyPositions.data.filter((pos) => {
-                        return Number(pos.size) !== 0;
-                    });
+                    const result = bodyPositions.data.filter((pos) => Number(pos.size) !== 0);
+
                     this.replacePositions(result);
-                    this.syncMaxScapsPosition(result);
-                    this.syncMaxFarmsPosition(result);
                     break;
 
                 default:
@@ -1955,17 +1928,20 @@ class Bot {
         return TIMEOUT_PATTERNS.some((re) => re.test(msg));
     }
 
-    private isCheckDelayForPairsMs(key: string) {
-        const nextAt = this.nextOpenAt.get(key) || 0;
-        return Date.now() < nextAt;
+    private isCheckDelayForPairsMs() {
+        if (!this.settingUser.delayForPairsMs) {
+            return false;
+        } else {
+            const result = Date.now() < this.nextOpenAt;
+            return result;
+        }
     }
-    private cooldownLeft(key: string) {
-        return Math.max(0, (this.nextOpenAt.get(key) || 0) - Date.now());
+    private cooldownLeft() {
+        return Math.max(0, this.nextOpenAt - Date.now());
     }
-
-    private postponePair(key: string, delayForPairsMs: number) {
+    private postponePair(delayForPairsMs: number) {
         if (delayForPairsMs) {
-            this.nextOpenAt.set(key, Date.now() + delayForPairsMs);
+            this.nextOpenAt = Date.now() + delayForPairsMs;
         }
     }
 

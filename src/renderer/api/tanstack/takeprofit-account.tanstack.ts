@@ -5,8 +5,11 @@ import { TCreateTakeprofitAccountReq, TTakeprofitAccount, TUpdateTakeprofitAccou
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import api from "../axios/app.axios";
+import { useAppSelector } from "@/redux/store";
 
 export const useGetTakeProfitAccount = (payload: TQuery) => {
+    const info = useAppSelector((state) => state.user.info);
+
     return useQuery({
         queryKey: [`get-takeprofit-account`, payload],
         queryFn: async () => {
@@ -24,6 +27,7 @@ export const useGetTakeProfitAccount = (payload: TQuery) => {
 
             return data.data;
         },
+        enabled: !!info,
     });
 };
 

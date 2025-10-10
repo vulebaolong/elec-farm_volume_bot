@@ -1,5 +1,7 @@
 export type TBaseTimestamps = {
+    deletedBy: number;
     isDeleted: boolean;
+    deletedAt: string;
     createdAt: string;
     updatedAt: string;
 };
