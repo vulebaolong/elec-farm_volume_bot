@@ -330,28 +330,29 @@ class Bot {
         if (!isHit) return;
 
         const bidsAsks = await this.getBidsAsks(entrySymbol);
-        // console.log(bidsAsks);
 
         // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 2
         // càng xa càng khó khớp lệnh nên tạm thời để 0 để test
-        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][0];
+        // const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][0];
+        const pricesScalps = bidsAsks[entry.side === "long" ? "bids" : "asks"].slice(0, 2);
 
         if (!IS_PRODUCTION) sizeScalpIoc = 1;
 
-        const payloadOpenOrder: TPayloadOrder = {
-            contract: entrySymbol,
-            size: entry.side === "long" ? `${sizeScalpIoc}` : `-${sizeScalpIoc}`,
-            price: pricesScalp.p,
-            reduce_only: false,
-            tif: "ioc",
-        };
+        for (const pricesScalp of pricesScalps) {
+            const payloadOpenOrder: TPayloadOrder = {
+                contract: entrySymbol,
+                size: entry.side === "long" ? `${sizeScalpIoc}` : `-${sizeScalpIoc}`,
+                price: pricesScalp.p,
+                reduce_only: false,
+                tif: "ioc",
+            };
 
-        const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
-        if (!ok) return;
+            const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
+            if (!ok) return;
 
-        const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC | ${payloadOpenOrder.price}`);
+            const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC | ${payloadOpenOrder.price}`);
 
-        // ✅ đặt cooldown cho symbol này sau khi xử lý xong
+        }
         this.postponePair("scalp", this.settingUser.delayForPairsMs);
     }
 
@@ -376,27 +377,31 @@ class Bot {
         const bidsAsks = await this.getBidsAsks(entry.symbol);
         const tick = entry.order_price_round;
         const insidePrices = this.computeInsidePrices(entry.side, bidsAsks, tick, this.decimalsFromTick.bind(this));
-        const price = insidePrices.at(-1);
+        // const price = insidePrices.at(-1);
+        const prices = insidePrices.slice(0, 2);
 
-        if (!price) {
-            this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
-            return;
-        }
         if (!IS_PRODUCTION) sizeFarmIoc = 1;
 
-        const payloadOpenOrder: TPayloadOrder = {
-            contract: entry.symbol,
-            size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
-            price: price,
-            reduce_only: false,
-            tif: "ioc",
-        };
+        for (const price of prices) {
+            if (!price) {
+                this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
+                return;
+            }
 
-        const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
-        if (!ok) return;
+            const payloadOpenOrder: TPayloadOrder = {
+                contract: entry.symbol,
+                size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
+                price: price,
+                reduce_only: false,
+                tif: "ioc",
+            };
 
-        await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
+            const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
+            if (!ok) return;
 
+            await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
+
+        }
         this.postponePair("farm", this.settingUser.delayForPairsMs);
     }
 

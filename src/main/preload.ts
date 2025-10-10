@@ -174,4 +174,10 @@ const electronHandler = {
 
 contextBridge.exposeInMainWorld("electron", electronHandler);
 
+contextBridge.exposeInMainWorld("sessions", {
+    list: () => ipcRenderer.invoke("sessions:list"),
+    clear: (name: string) => ipcRenderer.invoke("sessions:clear", name),
+    openPath: (name: string) => ipcRenderer.invoke("sessions:openPath", name),
+});
+
 export type ElectronHandler = typeof electronHandler;

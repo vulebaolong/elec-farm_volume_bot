@@ -1,5 +1,6 @@
+import fs from "fs";
 import { IS_PRODUCTION } from "@/constant/app.constant";
-import { app, BrowserWindow, ipcMain, powerMonitor, shell } from "electron";
+import { app, BrowserWindow, ipcMain, powerMonitor, session, shell } from "electron";
 import { installExtension, REDUX_DEVTOOLS } from "electron-devtools-installer";
 import { autoUpdater } from "electron-updater";
 import path from "path";
@@ -179,4 +180,73 @@ ipcMain.on("ipc-example", async (event, arg) => {
     const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
     console.log(msgTemplate(arg));
     event.reply("ipc-example", msgTemplate("pong"));
+});
+
+type SessionInfo = {
+    name: string; // "default" | "persist:xxx"
+    path: string; // absolute folder path on disk
+    existsOnDisk: boolean;
+};
+
+// Lấy list session persistent (thư mục trong userData/Partitions) + default
+function getAllSessionsInfo(): SessionInfo[] {
+    const userData = app.getPath("userData");
+    const partitionsDir = path.join(userData, "Partitions");
+
+    const list: SessionInfo[] = [
+        {
+            name: "default",
+            path: userData, // default session lưu ngay trong userData
+            existsOnDisk: true,
+        },
+    ];
+
+    if (fs.existsSync(partitionsDir)) {
+        const folders = fs.readdirSync(partitionsDir, { withFileTypes: true });
+        for (const d of folders) {
+            if (!d.isDirectory()) continue;
+            // Thư mục partition persistent chính là tên partition, thường giữ nguyên "persist:..."
+            const partitionName = d.name; // ví dụ: "persist:gate:123"
+            const absPath = path.join(partitionsDir, partitionName);
+            list.push({
+                name: partitionName,
+                path: absPath,
+                existsOnDisk: true,
+            });
+        }
+    }
+
+    return list;
+}
+
+// Clear storage cho một session theo tên
+async function clearOneSessionByName(name: string) {
+    const ses = name === "default" ? session.defaultSession : session.fromPartition(name);
+    // Xóa dữ liệu web storage (cookies/localStorage/IndexedDB/service workers/…)
+    await ses.clearStorageData();
+    // Xóa cache http
+    await ses.clearCache();
+}
+
+// Open folder của session
+async function openSessionFolder(name: string) {
+    const userData = app.getPath("userData");
+    const dir = name === "default" ? userData : path.join(userData, "Partitions", name);
+    // Mở thẳng thư mục trong file manager
+    await shell.openPath(dir);
+}
+
+// IPC handlers
+ipcMain.handle("sessions:list", async () => {
+    return getAllSessionsInfo();
+});
+
+ipcMain.handle("sessions:clear", async (_e, name: string) => {
+    await clearOneSessionByName(name);
+    return { ok: true };
+});
+
+ipcMain.handle("sessions:openPath", async (_e, name: string) => {
+    await openSessionFolder(name);
+    return { ok: true };
 });
