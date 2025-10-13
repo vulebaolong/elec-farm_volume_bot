@@ -380,7 +380,7 @@ class Bot {
             const isHit = this.handleLogicMaxSide("farm", entrySymbol, entry.side, maxSizeFarmIoc);
             if (!isHit) return;
         } else {
-            this.logWorker.info(`Not side -> long, short ${JSON.stringify(sides)}`);
+            this.logWorker.info(`Not side -> long, short`);
             sides = ["long", "short"];
         }
         
