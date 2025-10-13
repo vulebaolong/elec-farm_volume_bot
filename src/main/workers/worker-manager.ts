@@ -83,7 +83,7 @@ export class BotWorkerManager {
 
         // Renderer yêu cầu start nhiều worker
         ipcMain.on("worker:initMany", (_evt, arg: Omit<TDataInitBot, "parentPort">) => {
-            console.log("worker:initMany", arg.uids);
+            // console.log("worker:initMany", arg.uids);
             this.startMany(arg);
         });
 
@@ -668,7 +668,7 @@ export class BotWorkerManager {
 
     private createGateViewForUid(uid: number, isDebug: boolean): WebContentsView {
         // Tạo WebContentsView riêng theo uid với session/partition tách biệt
-        const partition = `persist:gate:${uid}`;
+        const partition = `persist:gate${uid}`;
         const gateView = new WebContentsView({
             webPreferences: {
                 nodeIntegration: false,

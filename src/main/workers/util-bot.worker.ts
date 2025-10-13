@@ -84,9 +84,15 @@ export function gapPercentBinanceVsGate(lastPriceGate: number, lastPriceBinance:
 export function handleImBalanceBidForLong(imbalanceBidPercent: number, ifImbalanceBidPercent: number): boolean {
     return imbalanceBidPercent > ifImbalanceBidPercent;
 }
+export function handleImBalanceBidForLong2(imbalanceBidPercent: number, ifImbalanceBidPercent: number): boolean {
+    return imbalanceBidPercent < ifImbalanceBidPercent;
+}
 
 export function handleImBalanceAskForShort(imbalanceAskPercent: number, ifImbalanceAskPercent: number): boolean {
     return imbalanceAskPercent > ifImbalanceAskPercent;
+}
+export function handleImBalanceAskForShort2(imbalanceAskPercent: number, ifImbalanceAskPercent: number): boolean {
+    return imbalanceAskPercent < ifImbalanceAskPercent;
 }
 
 async function getSideCCC(): Promise<getSideRes["side"] | null> {
@@ -293,7 +299,7 @@ type THandleEntryCheckAllRes2 = {
     result: {
         // cả 2 đều cần
         symbol: string;
-        side: TSide;
+        side: TSide | null;
 
         // cho bot worker
         askBest: number;
@@ -372,8 +378,8 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser, flag }: THand
 
     const isSpread = isSpreadPercent(spreadPercent, minSpreadPercent, maxSpreadPercent);
 
-    const isLongBid = handleImBalanceBidForLong(imbalanceBidPercent, ifImbalanceBidPercent);
-    const isShortAsk = handleImBalanceAskForShort(imbalanceAskPercent, ifImbalanceAskPercent);
+    const isLongBid = handleImBalanceBidForLong2(imbalanceBidPercent, ifImbalanceBidPercent);
+    const isShortAsk = handleImBalanceAskForShort2(imbalanceAskPercent, ifImbalanceAskPercent);
 
     const isLongGap = handleGapForLong(lastPriceGate, lastPriceBinance, lastPriceGapGateAndBinancePercent);
     const isShortGap = handleGapForShort(lastPriceGate, lastPriceBinance, lastPriceGapGateAndBinancePercent);
@@ -381,17 +387,7 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser, flag }: THand
     const isLong = isLongBid && isLongGap;
     const isShort = isShortAsk && isShortGap;
 
-    // const side = isLong ? "long" : isShort ? "short" : null;
-    let side = null
-    if(isLong && !isShort) {
-        side = "long"
-    } else if(!isLong && isShort) {
-        side = "short"
-    } else if(isLong && isShort) {
-        side = "long"
-    } else {
-        side = "short"
-    }
+    const side = isLong ? "long" : isShort ? "short" : null;
 
     const qualified = isSpread && (isLong || isShort);
 
@@ -401,7 +397,7 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser, flag }: THand
         result: {
             // cả 2 đều cần
             symbol,
-            side: side as TSide,
+            side: side,
 
             // cho bot worker
             askBest,

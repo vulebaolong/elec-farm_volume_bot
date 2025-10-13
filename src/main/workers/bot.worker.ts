@@ -135,7 +135,7 @@ class Bot {
     private settingUser: TSettingUsers;
     private uiSelector: TUiSelector[];
     private whitelistEntry: TWhitelistEntry[] = [];
-    private whitelistEntryFarmIoc: TWhitelistEntry[] = [];
+    private whitelistEntryFarmIoc: TWhitelistEntryFarmIoc[] = [];
     private whitelistEntryScalpIoc: TWhitelistEntry[] = [];
     private whiteList: TWhiteList = {};
     private infoContract = new Map<string, TGetInfoContractRes>();
@@ -358,7 +358,7 @@ class Bot {
         this.postponePair("scalp", this.settingUser.delayForPairsMs);
     }
 
-    private async handleWhiteListFarmIoc(entry: TWhitelistEntry) {
+    private async handleWhiteListFarmIoc(entry: TWhitelistEntryFarmIoc) {
         const entrySymbol = entry.symbol.replace("/", "_");
 
         const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
@@ -373,34 +373,42 @@ class Bot {
             return;
         }
 
-        const isHit = this.handleLogicMaxSide("farm", entrySymbol, entry.side, maxSizeFarmIoc);
-        if (!isHit) return;
+        let sides: TSide[] = [];
 
-        const bidsAsks = await this.getBidsAsks(entry.symbol);
-        const tick = entry.order_price_round;
-        const insidePrices = this.computeInsidePrices(entry.side, bidsAsks, tick, this.decimalsFromTick.bind(this));
-        const price = insidePrices.at(-1);
-
-        if (!IS_PRODUCTION) sizeFarmIoc = 1;
-
-        if (!price) {
-            this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
-            return;
+        if (entry.side) {
+            sides = [entry.side];
+            const isHit = this.handleLogicMaxSide("farm", entrySymbol, entry.side, maxSizeFarmIoc);
+            if (!isHit) return;
+        } else {
+            sides = ["long", "short"];
         }
 
-        const payloadOpenOrder: TPayloadOrder = {
-            contract: entry.symbol,
-            size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
-            price: price,
-            reduce_only: false,
-            tif: "ioc",
-        };
+        for (const side of sides) {
+            const bidsAsks = await this.getBidsAsks(entry.symbol);
+            const tick = entry.order_price_round;
+            const insidePrices = this.computeInsidePrices(side, bidsAsks, tick, this.decimalsFromTick.bind(this));
+            const price = insidePrices.at(-1);
 
-        const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
-        if (!ok) return;
+            if (!IS_PRODUCTION) sizeFarmIoc = 1;
 
-        await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
+            if (!price) {
+                this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
+                return;
+            }
 
+            const payloadOpenOrder: TPayloadOrder = {
+                contract: entry.symbol,
+                size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
+                price: price,
+                reduce_only: false,
+                tif: "ioc",
+            };
+
+            const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
+            if (!ok) return;
+
+            await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
+        }
         this.postponePair("farm", this.settingUser.delayForPairsMs);
     }
 
@@ -1269,7 +1277,7 @@ class Bot {
                 }
             }
 
-            if (qualifiedScalp && resultScalp) {
+            if (qualifiedScalp && resultScalp && resultScalp.side) {
                 const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
                     return resultScalp.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
                 });

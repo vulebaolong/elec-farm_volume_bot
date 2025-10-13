@@ -1,6 +1,5 @@
 import { useUpsertAccount } from "@/api/tanstack/account.tanstack";
 import { useCreateTakeProfitAccount, useUpdateTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { accountEquity } from "@/helpers/function.helper";
 import { ADD_RIPPLE, SET_IS_RUNNING, SET_IS_START } from "@/redux/slices/bot.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
@@ -178,7 +177,7 @@ export default function Controll({}: TProps) {
                             </Button>
                         </Group>
 
-                        <Group>
+                        {/* <Group>
                             <Button
                                 size={"xs"}
                                 radius={"md"}
@@ -221,7 +220,7 @@ export default function Controll({}: TProps) {
                             >
                                 ioc short
                             </Button>
-                        </Group>
+                        </Group> */}
                     </Stack>
                 </Stack>
             </Paper>
