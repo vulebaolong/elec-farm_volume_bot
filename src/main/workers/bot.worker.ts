@@ -380,8 +380,10 @@ class Bot {
             const isHit = this.handleLogicMaxSide("farm", entrySymbol, entry.side, maxSizeFarmIoc);
             if (!isHit) return;
         } else {
+            this.logWorker.info(`Not side -> long, short ${JSON.stringify(sides)}`);
             sides = ["long", "short"];
         }
+        
 
         for (const side of sides) {
             const bidsAsks = await this.getBidsAsks(entry.symbol);
@@ -398,7 +400,7 @@ class Bot {
 
             const payloadOpenOrder: TPayloadOrder = {
                 contract: entry.symbol,
-                size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
+                size: side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
                 price: price,
                 reduce_only: false,
                 tif: "ioc",
