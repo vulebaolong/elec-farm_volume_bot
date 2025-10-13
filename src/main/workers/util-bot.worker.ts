@@ -398,18 +398,18 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser, flag }: THand
         side = "short";
     }
 
-    if (flag === "scalp") {
-        console.log({
-            symbol: symbol,
-            isSpread: `${isSpread} | ${spreadPercent} | ${minSpreadPercent} | ${maxSpreadPercent}`,
-            isLongBid: `${isLongBid} | ${imbalanceBidPercent} | ${ifImbalanceBidPercent}`,
-            isShortAsk: `${isShortAsk} | ${imbalanceAskPercent} | ${ifImbalanceAskPercent}`,
-            isLongGap: `${isLongGap} | ${lastPriceGate} | ${lastPriceBinance} | ${lastPriceGapGateAndBinancePercent}`,
-            isShortGap: `${isShortGap} | ${lastPriceGate} | ${lastPriceBinance} | ${lastPriceGapGateAndBinancePercent}`,
-            isLong: isLong,
-            isShort: isShort,
-        });
-    }
+    // if (flag === "scalp") {
+    //     console.log({
+    //         symbol: symbol,
+    //         isSpread: `${isSpread} | ${spreadPercent} | ${minSpreadPercent} | ${maxSpreadPercent}`,
+    //         isLongBid: `${isLongBid} | ${imbalanceBidPercent} | ${ifImbalanceBidPercent}`,
+    //         isShortAsk: `${isShortAsk} | ${imbalanceAskPercent} | ${ifImbalanceAskPercent}`,
+    //         isLongGap: `${isLongGap} | ${lastPriceGate} | ${lastPriceBinance} | ${lastPriceGapGateAndBinancePercent}`,
+    //         isShortGap: `${isShortGap} | ${lastPriceGate} | ${lastPriceBinance} | ${lastPriceGapGateAndBinancePercent}`,
+    //         isLong: isLong,
+    //         isShort: isShort,
+    //     });
+    // }
 
     const qualified = isSpread && (isLong || isShort);
 
