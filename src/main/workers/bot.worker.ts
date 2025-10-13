@@ -373,44 +373,34 @@ class Bot {
             return;
         }
 
-        let sides: TSide[] = [];
+        const isHit = this.handleLogicMaxSide("farm", entrySymbol, entry.side, maxSizeFarmIoc);
+        if (!isHit) return;
 
-        if (entry.side) {
-            sides = [entry.side];
-            const isHit = this.handleLogicMaxSide("farm", entrySymbol, entry.side, maxSizeFarmIoc);
-            if (!isHit) return;
-        } else {
-            this.logWorker.info(`Not side -> long, short`);
-            sides = ["long", "short"];
-        }
-        
+        const bidsAsks = await this.getBidsAsks(entry.symbol);
+        // const tick = entry.order_price_round;
+        // const insidePrices = this.computeInsidePrices(side, bidsAsks, tick, this.decimalsFromTick.bind(this));
+        // const price = insidePrices.at(-1);
+        const price = bidsAsks[entry.side === "long" ? "bids" : "asks"][1].p;
 
-        for (const side of sides) {
-            const bidsAsks = await this.getBidsAsks(entry.symbol);
-            const tick = entry.order_price_round;
-            const insidePrices = this.computeInsidePrices(side, bidsAsks, tick, this.decimalsFromTick.bind(this));
-            const price = insidePrices.at(-1);
+        if (!IS_PRODUCTION) sizeFarmIoc = 1;
 
-            if (!IS_PRODUCTION) sizeFarmIoc = 1;
+        // if (!price) {
+        //     this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
+        //     return;
+        // }
 
-            if (!price) {
-                this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
-                return;
-            }
+        const payloadOpenOrder: TPayloadOrder = {
+            contract: entry.symbol,
+            size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
+            price: price,
+            reduce_only: false,
+            tif: "ioc",
+        };
 
-            const payloadOpenOrder: TPayloadOrder = {
-                contract: entry.symbol,
-                size: side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
-                price: price,
-                reduce_only: false,
-                tif: "ioc",
-            };
+        const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
+        if (!ok) return;
 
-            const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
-            if (!ok) return;
-
-            await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
-        }
+        await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
         this.postponePair("farm", this.settingUser.delayForPairsMs);
     }
 
