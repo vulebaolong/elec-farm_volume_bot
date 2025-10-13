@@ -115,8 +115,6 @@ export default function WhiteListDetail() {
 
                         {/* Imbalance bar */}
                         <ImbalanceBar bidPercent={gate.imbalanceBidPercent} askPercent={gate.imbalanceAskPercent} />
-
-                        {/* Spread & Depth */}
                     </Card>
                 );
             })}

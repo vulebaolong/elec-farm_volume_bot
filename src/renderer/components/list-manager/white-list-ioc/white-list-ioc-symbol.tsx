@@ -1,6 +1,5 @@
 "use client";
 
-import { useGetSymbolGate } from "@/api/tanstack/symbol-gate.tanstack";
 import { useGetWhiteListIoc } from "@/api/tanstack/white-list-ioc.tanstack";
 import { AppendLoading } from "@/components/append-state/append-state";
 import NodataOverlay from "@/components/no-data/NodataOverlay";

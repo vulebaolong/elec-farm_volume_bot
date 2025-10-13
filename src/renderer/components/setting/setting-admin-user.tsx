@@ -81,10 +81,10 @@ export const FormSchema = z.object({
     delayForPairsMs: intField(0, "Delay For Pairs (ms)"),
     // max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
     // max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
-
+    
     martingale: ZMartingaleConfig,
     maxRoiNextPhase: positiveNumber("Max ROI Next Phase"),
-
+    
     // ioc ----------------------
     // farm
     minSpreadPercentFarm: numberRange(0, 100, "Min Spread Farm %"),
@@ -92,13 +92,15 @@ export const FormSchema = z.object({
     ifImbalanceBidPercentFarm: numberRange(0, 100, "Imbalance Farm Bid %"),
     ifImbalanceAskPercentFarm: numberRange(0, 100, "Imbalance Farm Ask %"),
     lastPriceGapGateAndBinancePercentFarm: numberRange(0, 100, "Max Farm Gap %"),
-
+    
     // scalp
     minSpreadPercentScalp: numberRange(0, 100, "Min Spread Scalp %"),
     maxSpreadPercentScalp: numberRange(0, 100, "Max Spread Scalp %"),
     ifImbalanceBidPercentScalp: numberRange(0, 100, "Imbalance Scalp Bid %"),
     ifImbalanceAskPercentScalp: numberRange(0, 100, "Imbalance Scalp Ask %"),
     lastPriceGapGateAndBinancePercentScalp: numberRange(0, 100, "Max Scalp Gap %"),
+
+    indexBidAsk: intField(1, "Index Bid/Ask"),
 });
 
 const defaultMartingale: MartingaleConfig = {
@@ -166,6 +168,8 @@ export default function SettingAdminUser({ type }: TProps) {
             ifImbalanceBidPercentScalp: "",
             ifImbalanceAskPercentScalp: "",
             lastPriceGapGateAndBinancePercentScalp: "",
+
+            indexBidAsk: "",
         },
     });
 
@@ -209,6 +213,8 @@ export default function SettingAdminUser({ type }: TProps) {
                 ifImbalanceAskPercentScalp: setting.ifImbalanceAskPercentScalp ?? "",
                 ifImbalanceBidPercentScalp: setting.ifImbalanceBidPercentScalp ?? "",
                 lastPriceGapGateAndBinancePercentScalp: setting.lastPriceGapGateAndBinancePercentScalp ?? "",
+
+                indexBidAsk: setting.indexBidAsk ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form, type]);
@@ -256,6 +262,8 @@ export default function SettingAdminUser({ type }: TProps) {
             ifImbalanceBidPercentScalp: data.ifImbalanceBidPercentScalp,
             ifImbalanceAskPercentScalp: data.ifImbalanceAskPercentScalp,
             lastPriceGapGateAndBinancePercentScalp: data.lastPriceGapGateAndBinancePercentScalp,
+
+            indexBidAsk: data.indexBidAsk,
         };
 
         console.log({ updateSettingUser: payload });
@@ -1194,6 +1202,30 @@ export default function SettingAdminUser({ type }: TProps) {
                             step={1000}
                             clampBehavior="strict"
                             description={"If 0 then no delay | 1000ms = 1second"}
+                        />
+                    )}
+                />
+
+                {/* indexBidAsk */}
+                <Controller
+                    name="indexBidAsk"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Index Bid/Ask"
+                            placeholder="Index Bid/Ask"
+                            inputWrapperOrder={["label", "input", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.indexBidAsk?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            min={0}
+                            step={1}
+                            clampBehavior="strict"
                         />
                     )}
                 />

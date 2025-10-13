@@ -335,9 +335,10 @@ class Bot {
 
         const bidsAsks = await this.getBidsAsks(entrySymbol);
 
+        const indexBidAsk = Math.max(0, Math.min(4, this.settingUser.indexBidAsk - 1));
         // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 2
         // càng xa càng khó khớp lệnh nên tạm thời để 0 để test
-        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][0];
+        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][indexBidAsk];
         // const pricesScalps = bidsAsks[entry.side === "long" ? "bids" : "asks"].slice(0, 2);
 
         if (!IS_PRODUCTION) sizeScalpIoc = 1;

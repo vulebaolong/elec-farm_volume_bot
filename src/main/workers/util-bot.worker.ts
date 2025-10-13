@@ -378,8 +378,8 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser, flag }: THand
 
     const isSpread = isSpreadPercent(spreadPercent, minSpreadPercent, maxSpreadPercent);
 
-    const isLongBid = handleImBalanceBidForLong2(imbalanceBidPercent, ifImbalanceBidPercent);
-    const isShortAsk = handleImBalanceAskForShort2(imbalanceAskPercent, ifImbalanceAskPercent);
+    const isLongBid = handleImBalanceBidForLong(imbalanceBidPercent, ifImbalanceBidPercent);
+    const isShortAsk = handleImBalanceAskForShort(imbalanceAskPercent, ifImbalanceAskPercent);
 
     const isLongGap = handleGapForLong(lastPriceGate, lastPriceBinance, lastPriceGapGateAndBinancePercent);
     const isShortGap = handleGapForShort(lastPriceGate, lastPriceBinance, lastPriceGapGateAndBinancePercent);

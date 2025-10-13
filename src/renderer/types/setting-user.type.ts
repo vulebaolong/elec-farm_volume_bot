@@ -42,6 +42,8 @@ export type TSettingUsers = {
     ifImbalanceBidPercentScalp: number;
     ifImbalanceAskPercentScalp: number;
     lastPriceGapGateAndBinancePercentScalp: number;
+
+    indexBidAsk: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;
