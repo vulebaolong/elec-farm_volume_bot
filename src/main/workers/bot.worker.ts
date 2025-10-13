@@ -45,7 +45,7 @@ import { TUid } from "@/types/uid.type";
 import { TWhiteListFarmIoc } from "@/types/white-list-farm-ioc.type";
 import { TWhiteListMartingale } from "@/types/white-list-martingale.type";
 import { TMaxScapsPosition, TWhiteListScalpIoc } from "@/types/white-list-scalp-ioc.type";
-import { TWhiteList, TWhitelistEntry, TWhitelistEntryFarmIoc } from "@/types/white-list.type";
+import { TWhiteList, TWhitelistEntry, TWhitelistEntryFarmIoc, TWhitelistEntryNew } from "@/types/white-list.type";
 import { TWorkerData, TWorkerHeartbeat, TWorkLog } from "@/types/worker.type";
 import axios from "axios";
 import { LogFunctions } from "electron-log";
@@ -137,6 +137,8 @@ class Bot {
     private whitelistEntry: TWhitelistEntry[] = [];
     private whitelistEntryFarmIoc: TWhitelistEntry[] = [];
     private whitelistEntryScalpIoc: TWhitelistEntry[] = [];
+    private whitelistEntryFarmIocNew: TWhitelistEntryNew[] = [];
+    private whitelistEntryScalpIocNew: TWhitelistEntryNew[] = [];
     private whiteList: TWhiteList = {};
     private infoContract = new Map<string, TGetInfoContractRes>();
     private blackList: string[] = [];
@@ -249,27 +251,52 @@ class Bot {
 
                     await this.setWhitelistEntry2();
 
-                    // Scalp
-                    for (const entry of this.whitelistEntryScalpIoc) {
-                        if (this.isCheckDelayForPairsMs("scalp")) {
-                            if (this.settingUser.delayForPairsMs > 0) {
-                                this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
+                    if (this.settingUser.sizeIOC > 0) {
+                        // Scalp
+                        for (const entry of this.whitelistEntryScalpIocNew) {
+                            if (this.isCheckDelayForPairsMs("scalp")) {
+                                if (this.settingUser.delayForPairsMs > 0) {
+                                    this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
+                                }
+                                break;
                             }
-                            break;
+
+                            await this.handleWhiteListScalpIocNew(entry);
                         }
 
-                        await this.handleWhiteListScalpIoc(entry);
-                    }
-
-                    // // Farm
-                    for (const entry of this.whitelistEntryFarmIoc) {
-                        if (this.isCheckDelayForPairsMs("farm")) {
-                            if (this.settingUser.delayForPairsMs > 0) {
-                                this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("farm")}ms)`);
+                        // // Farm
+                        for (const entry of this.whitelistEntryFarmIocNew) {
+                            if (this.isCheckDelayForPairsMs("farm")) {
+                                if (this.settingUser.delayForPairsMs > 0) {
+                                    this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("farm")}ms)`);
+                                }
+                                break;
                             }
-                            break;
+                            await this.handleWhiteListFarmIocNew(entry);
                         }
-                        await this.handleWhiteListFarmIoc(entry);
+                    } else {
+                        // Scalp
+                        for (const entry of this.whitelistEntryScalpIoc) {
+                            if (this.isCheckDelayForPairsMs("scalp")) {
+                                if (this.settingUser.delayForPairsMs > 0) {
+                                    this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
+                                }
+                                break;
+                            }
+
+                            await this.handleWhiteListScalpIoc(entry);
+                        }
+
+                        // // Farm
+                        for (const entry of this.whitelistEntryFarmIoc) {
+                            if (this.isCheckDelayForPairsMs("farm")) {
+                                if (this.settingUser.delayForPairsMs > 0) {
+                                    this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("farm")}ms)`);
+                                }
+                                break;
+                            }
+                            await this.handleWhiteListFarmIoc(entry);
+                        }
                     }
                 }
             } catch (err: any) {
@@ -360,6 +387,95 @@ class Bot {
     }
 
     private async handleWhiteListFarmIoc(entry: TWhitelistEntry) {
+        const entrySymbol = entry.symbol.replace("/", "_");
+
+        const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
+        if (!maxSizeFarmIoc) {
+            this.logWorker.info(`Skip Farm ${entrySymbol}: by not found size: ${maxSizeFarmIoc}`);
+            return false;
+        }
+
+        let sizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
+        if (!sizeFarmIoc) {
+            this.logWorker.info(`Skip Farm ${entry.symbol}: by not found size: ${sizeFarmIoc}`);
+            return;
+        }
+
+        const isHit = this.handleLogicMaxSide("farm", entrySymbol, entry.side, maxSizeFarmIoc);
+        if (!isHit) return;
+
+        const bidsAsks = await this.getBidsAsks(entry.symbol);
+        // const tick = entry.order_price_round;
+        // const insidePrices = this.computeInsidePrices(side, bidsAsks, tick, this.decimalsFromTick.bind(this));
+        // const price = insidePrices.at(-1);
+        const price = bidsAsks[entry.side === "long" ? "bids" : "asks"][2].p;
+
+        if (!IS_PRODUCTION) sizeFarmIoc = 1;
+
+        // if (!price) {
+        //     this.logWorker.info(`Skip Farm ${entry.symbol}: by not found price: ${price}`);
+        //     return;
+        // }
+
+        const payloadOpenOrder: TPayloadOrder = {
+            contract: entry.symbol,
+            size: entry.side === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
+            price: price,
+            reduce_only: false,
+            tif: "ioc",
+        };
+
+        const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
+        if (!ok) return;
+
+        await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
+        this.postponePair("farm", this.settingUser.delayForPairsMs);
+    }
+
+    private async handleWhiteListScalpIocNew(entry: TWhitelistEntryNew) {
+        const entrySymbol = entry.symbol.replace("/", "_");
+
+        const maxSizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
+        if (!maxSizeScalpIoc) {
+            this.logWorker.info(`Skip Scalp ${entrySymbol}: by not found size: ${maxSizeScalpIoc}`);
+            return false;
+        }
+        let sizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
+        if (!sizeScalpIoc) {
+            this.logWorker.info(`Skip Scalp ${entrySymbol}: by not found size: ${sizeScalpIoc}`);
+            return;
+        }
+
+        const isHit = this.handleLogicMaxSide("scalp", entrySymbol, entry.side, maxSizeScalpIoc);
+        if (!isHit) return;
+
+        const bidsAsks = await this.getBidsAsks(entrySymbol);
+
+        const indexBidAsk = Math.max(0, Math.min(4, this.settingUser.indexBidAsk - 1));
+        // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 2
+        // càng xa càng khó khớp lệnh nên tạm thời để 0 để test
+        const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"][indexBidAsk];
+        // const pricesScalps = bidsAsks[entry.side === "long" ? "bids" : "asks"].slice(0, 2);
+
+        if (!IS_PRODUCTION) sizeScalpIoc = 1;
+
+        const payloadOpenOrder: TPayloadOrder = {
+            contract: entrySymbol,
+            size: entry.side === "long" ? `${sizeScalpIoc}` : `-${sizeScalpIoc}`,
+            price: pricesScalp.p,
+            reduce_only: false,
+            tif: "ioc",
+        };
+
+        const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
+        if (!ok) return;
+
+        const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC | ${payloadOpenOrder.price}`);
+
+        this.postponePair("scalp", this.settingUser.delayForPairsMs);
+    }
+
+    private async handleWhiteListFarmIocNew(entry: TWhitelistEntryNew) {
         const entrySymbol = entry.symbol.replace("/", "_");
 
         const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
@@ -1226,14 +1342,38 @@ class Bot {
             this.whitelistEntry = [];
             this.whitelistEntryFarmIoc = [];
             this.whitelistEntryScalpIoc = [];
+            this.whitelistEntryFarmIocNew = [];
+            this.whitelistEntryScalpIocNew = [];
             return;
         }
 
-        this.whitelistEntry = []; // cho bot
-        this.whitelistEntryFarmIoc = []; // cho bot
-        this.whitelistEntryScalpIoc = []; // cho bot
+        this.whitelistEntry = [];
+        this.whitelistEntryFarmIoc = [];
+        this.whitelistEntryScalpIoc = [];
+        this.whitelistEntryFarmIocNew = [];
+        this.whitelistEntryScalpIocNew = [];
 
         for (const whitelistItem of whiteListArr) {
+            // new
+            const sideFarm = this.handleSideNew(whitelistItem.core.gate.sFarm);
+            if (sideFarm) {
+                this.whitelistEntryFarmIocNew.push({
+                    order_price_round: whitelistItem.contractInfo.order_price_round,
+                    side: sideFarm,
+                    symbol: whitelistItem.core.gate.symbol,
+                });
+            }
+
+            const sideScalp = this.handleSideNew(whitelistItem.core.gate.sScalp);
+            if (sideScalp) {
+                this.whitelistEntryScalpIocNew.push({
+                    order_price_round: whitelistItem.contractInfo.order_price_round,
+                    side: sideScalp,
+                    symbol: whitelistItem.core.gate.symbol,
+                });
+            }
+
+            // old
             const {
                 errString: farmErrString,
                 qualified: qualifiedFarm,
@@ -1287,6 +1427,16 @@ class Bot {
                     });
                 }
             }
+        }
+    }
+
+    private handleSideNew(s: number): TSide | null {
+        if (s > 0.1) {
+            return "long";
+        } else if (s < -0.1) {
+            return "short";
+        } else {
+            return null;
         }
     }
 
@@ -1811,6 +1961,7 @@ class Bot {
     }
 
     private setWhitelist(whiteList: TWhiteList) {
+        console.dir(whiteList, { colors: true, depth: null });
         this.whiteList = whiteList;
     }
 

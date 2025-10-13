@@ -21,6 +21,11 @@ export type TCore = {
         bidBest: number;
         askBest: number;
         lastPrice: number;
+        OBI: number;
+        AGG: number;
+        TMM: number;
+        sScalp: number;
+        sFarm: number;
     };
      binance: {
         symbol: string;
@@ -44,6 +49,12 @@ export type TWhitelistEntry = {
     order_price_round: number;
     lastPriceGate: number;
     quanto_multiplier: number;
+};
+
+export type TWhitelistEntryNew = {
+    symbol: string;
+    side: TSide;
+    order_price_round: number;
 };
 
 export type TWhitelistEntryFarmIoc = {
