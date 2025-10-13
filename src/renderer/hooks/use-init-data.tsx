@@ -7,7 +7,7 @@ import { useGetUiSelector } from "@/api/tanstack/selector.tanstack";
 import { useSocketEmit } from "@/api/tanstack/socket.tanstack";
 import { useGetAllWhiteListMartingale } from "@/api/tanstack/white-list-martingale.tanstack";
 import { SOCKET_ENVENT } from "@/constant/socket.constant";
-import { SET_SETTING_SYSTEM, SET_WHITELIST_RESET_IN_PROGRESS } from "@/redux/slices/bot.slice";
+import { SET_SETTING_SYSTEM, SET_WHITELIST_DETAIL, SET_WHITELIST_RESET_IN_PROGRESS } from "@/redux/slices/bot.slice";
 import { SET_IS_INIT_WORKER } from "@/redux/slices/user.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TSocketRes } from "@/types/base.type";
@@ -87,6 +87,7 @@ export const useInitData = () => {
         const handleEntry = ({ data }: TSocketRes<TWhiteList>) => {
             // console.log({ handleEntry: data });
             window.electron?.ipcRenderer.sendMessage("bot:setWhiteList", data);
+            dispatch(SET_WHITELIST_DETAIL(data));
         };
         socket.on("entry", handleEntry);
 

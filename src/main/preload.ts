@@ -17,6 +17,7 @@ export type Channels =
     | "bot:settingUser"
     | "bot:blackList"
     | "bot:whiteListMartingale"
+    | "bot:whiteListIoc"
     | "bot:whiteListFarmIoc"
     | "bot:whiteListScalpIoc"
     | "bot:uiSelector"

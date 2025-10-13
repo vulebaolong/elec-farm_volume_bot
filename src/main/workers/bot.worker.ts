@@ -135,7 +135,7 @@ class Bot {
     private settingUser: TSettingUsers;
     private uiSelector: TUiSelector[];
     private whitelistEntry: TWhitelistEntry[] = [];
-    private whitelistEntryFarmIoc: TWhitelistEntryFarmIoc[] = [];
+    private whitelistEntryFarmIoc: TWhitelistEntry[] = [];
     private whitelistEntryScalpIoc: TWhitelistEntry[] = [];
     private whiteList: TWhiteList = {};
     private infoContract = new Map<string, TGetInfoContractRes>();
@@ -358,7 +358,7 @@ class Bot {
         this.postponePair("scalp", this.settingUser.delayForPairsMs);
     }
 
-    private async handleWhiteListFarmIoc(entry: TWhitelistEntryFarmIoc) {
+    private async handleWhiteListFarmIoc(entry: TWhitelistEntry) {
         const entrySymbol = entry.symbol.replace("/", "_");
 
         const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
@@ -380,7 +380,7 @@ class Bot {
         // const tick = entry.order_price_round;
         // const insidePrices = this.computeInsidePrices(side, bidsAsks, tick, this.decimalsFromTick.bind(this));
         // const price = insidePrices.at(-1);
-        const price = bidsAsks[entry.side === "long" ? "bids" : "asks"][1].p;
+        const price = bidsAsks[entry.side === "long" ? "bids" : "asks"][2].p;
 
         if (!IS_PRODUCTION) sizeFarmIoc = 1;
 
@@ -1250,7 +1250,7 @@ class Bot {
                 continue;
             }
 
-            if (resultFarm) {
+            if (resultFarm && resultFarm.side) {
                 const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
                     return resultFarm.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
                 });

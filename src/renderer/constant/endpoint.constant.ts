@@ -77,6 +77,14 @@ export const ENDPOINT = {
         REMOVE_WHITE_LIST_MARTINGALE: "white-list-martingale",
         CLEAR_ALL_WHITE_LIST_MARTINGALE: "white-list-martingale/clear-all",
     },
+    WHITE_LIST_IOC: {
+        GET: "white-list-ioc",
+        CREATE: "white-list-ioc",
+        REMOVE: "white-list-ioc",
+        CLEAR_ALL: "white-list-ioc/clear-all",
+        UPDATE: "white-list-ioc",
+        RESET_WHITELIST_SOCKET: "white-list-ioc/reset-socket-whitelist",
+    },
     WHITE_LIST_FARM_IOC: {
         GET: "white-list-farm-ioc",
         CREATE: "white-list-farm-ioc",

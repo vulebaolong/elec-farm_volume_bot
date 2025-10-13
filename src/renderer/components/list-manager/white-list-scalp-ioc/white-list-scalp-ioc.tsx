@@ -11,7 +11,7 @@ import { TWhiteListScalpIoc } from "@/types/white-list-scalp-ioc.type";
 import { ActionIcon, Badge, Button, Card, Divider, Group, Input, Paper, ScrollArea, Stack, Text, Title } from "@mantine/core";
 import { IconTrash, IconX } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
-import ListContract from "../list-symbol-gate/list-symbol-gate";
+import WhitelistIOCSymbol from "../white-list-ioc/white-list-ioc-symbol";
 
 export default function WhitelistScalpIoc() {
     const [page, setPage] = useState(1);
@@ -52,7 +52,7 @@ export default function WhitelistScalpIoc() {
             </Title>
 
             {/* Search & Add Section */}
-            <ListContract onAdd={add} listIgnore={getWhiteListScalpIoc.data?.items} />
+            <WhitelistIOCSymbol onAdd={add} listIgnore={getWhiteListScalpIoc.data?.items} />
 
             {/* Main Whitelist Card */}
             <Card withBorder radius="md" shadow="xs" p="sm" h={250}>

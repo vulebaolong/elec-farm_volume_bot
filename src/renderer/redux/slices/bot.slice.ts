@@ -2,6 +2,7 @@ import { TPriority } from "@/types/priority-change.type";
 import { TSettingSystem } from "@/types/setting-system.type";
 import { TUiSelector } from "@/types/ui-selector.type";
 import { TVersions } from "@/types/version.type";
+import { TWhiteList } from "@/types/white-list.type";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
 export type TInitialState = {
@@ -15,6 +16,7 @@ export type TInitialState = {
     priority: TPriority;
     uiSelector: TUiSelector[] | null;
     isChildView: boolean;
+    whitelistDetail: TWhiteList | null;
 };
 
 const initialState: TInitialState = {
@@ -28,6 +30,7 @@ const initialState: TInitialState = {
     priority: "normal",
     uiSelector: null,
     isChildView: false,
+    whitelistDetail: null,
 };
 
 const genRippleId = () => (Date.now() << 8) | (Math.random() * 256) | 0;
@@ -73,6 +76,9 @@ const botSlice = createSlice({
         SET_IS_CHILD_VIEW: (state, { payload }) => {
             state.isChildView = payload;
         },
+        SET_WHITELIST_DETAIL: (state, { payload }) => {
+            state.whitelistDetail = payload;
+        },
     },
 });
 
@@ -88,6 +94,7 @@ export const {
     SET_PRIORITY,
     SET_UI_SELECTOR,
     SET_IS_CHILD_VIEW,
+    SET_WHITELIST_DETAIL,
 } = botSlice.actions;
 
 export default botSlice.reducer;

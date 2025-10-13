@@ -299,7 +299,7 @@ type THandleEntryCheckAllRes2 = {
     result: {
         // cả 2 đều cần
         symbol: string;
-        side: TSide | null;
+        side: TSide;
 
         // cho bot worker
         askBest: number;
@@ -387,7 +387,29 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser, flag }: THand
     const isLong = isLongBid && isLongGap;
     const isShort = isShortAsk && isShortGap;
 
-    const side = isLong ? "long" : isShort ? "short" : null;
+    let side = null;
+    if (isLong && !isShort) {
+        side = "long";
+    } else if (!isLong && isShort) {
+        side = "short";
+    } else if (isLong && isShort) {
+        side = "long";
+    } else {
+        side = "short";
+    }
+
+    if (flag === "scalp") {
+        console.log({
+            symbol: symbol,
+            isSpread: `${isSpread} | ${spreadPercent} | ${minSpreadPercent} | ${maxSpreadPercent}`,
+            isLongBid: `${isLongBid} | ${imbalanceBidPercent} | ${ifImbalanceBidPercent}`,
+            isShortAsk: `${isShortAsk} | ${imbalanceAskPercent} | ${ifImbalanceAskPercent}`,
+            isLongGap: `${isLongGap} | ${lastPriceGate} | ${lastPriceBinance} | ${lastPriceGapGateAndBinancePercent}`,
+            isShortGap: `${isShortGap} | ${lastPriceGate} | ${lastPriceBinance} | ${lastPriceGapGateAndBinancePercent}`,
+            isLong: isLong,
+            isShort: isShort,
+        });
+    }
 
     const qualified = isSpread && (isLong || isShort);
 
@@ -397,7 +419,7 @@ export function handleEntryCheckAll2({ whitelistItem, settingUser, flag }: THand
         result: {
             // cả 2 đều cần
             symbol,
-            side: side,
+            side: side as TSide,
 
             // cho bot worker
             askBest,

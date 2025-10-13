@@ -7,7 +7,7 @@ import { TWhiteList, TWhitelistUi } from "@/types/white-list.type";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { handleEntryCheckAll, handleEntryCheckAll2 } from "src/main/workers/util-bot.worker";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../ui/accordion";
 import { useGetSideCCC } from "@/api/tanstack/ccc.tanstack";
 
 export default function Whitelist() {

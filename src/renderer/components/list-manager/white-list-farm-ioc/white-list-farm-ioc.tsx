@@ -12,6 +12,7 @@ import { ActionIcon, Badge, Button, Card, Divider, Group, Input, Paper, ScrollAr
 import { IconTrash, IconX } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 import ListContract from "../list-symbol-gate/list-symbol-gate";
+import WhitelistIOCSymbol from "../white-list-ioc/white-list-ioc-symbol";
 
 export default function WhitelistFarmIoc() {
     const [page, setPage] = useState(1);
@@ -52,7 +53,7 @@ export default function WhitelistFarmIoc() {
             </Title>
 
             {/* Search & Add Section */}
-            <ListContract onAdd={add} listIgnore={getWhiteListFarmIoc.data?.items} />
+            <WhitelistIOCSymbol onAdd={add} listIgnore={getWhiteListFarmIoc.data?.items} />
 
             {/* Main Whitelist Card */}
             <Card withBorder radius="md" shadow="xs" p="sm" h={250}>
