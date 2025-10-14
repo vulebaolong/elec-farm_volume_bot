@@ -107,19 +107,19 @@ export const useInitData = () => {
     }, [socket]);
 
     useEffect(() => {
-        console.log(456, {
-            settingUser,
-            getUiSelector: getUiSelector.data,
-            getMyBlackList: getMyBlackList.data,
-            getAllWhiteListMartingale: getAllWhiteListMartingale.data,
-            getWhiteListFarmIoc: getWhiteListFarmIoc.data,
-            getWhiteListScalpIoc: getWhiteListScalpIoc.data,
-            getFixLiquidation: getFixLiquidation.data,
-            getFixStopLoss: getFixStopLoss.data,
-            getFixStopLossQueueByUserId: getFixStopLossQueueByUserId.data,
-            uids: uids,
-            isInitWorker: isInitWorker,
-        });
+        // console.log(456, {
+        //     settingUser,
+        //     getUiSelector: getUiSelector.data,
+        //     getMyBlackList: getMyBlackList.data,
+        //     getAllWhiteListMartingale: getAllWhiteListMartingale.data,
+        //     getWhiteListFarmIoc: getWhiteListFarmIoc.data,
+        //     getWhiteListScalpIoc: getWhiteListScalpIoc.data,
+        //     getFixLiquidation: getFixLiquidation.data,
+        //     getFixStopLoss: getFixStopLoss.data,
+        //     getFixStopLossQueueByUserId: getFixStopLossQueueByUserId.data,
+        //     uids: uids,
+        //     isInitWorker: isInitWorker,
+        // });
         if (!settingUser) return;
         if (!getUiSelector.data) return;
         if (!getMyBlackList.data) return;

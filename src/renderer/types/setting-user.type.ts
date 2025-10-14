@@ -44,6 +44,9 @@ export type TSettingUsers = {
     lastPriceGapGateAndBinancePercentScalp: number;
 
     indexBidAsk: number;
+
+    delayFarm: number;
+    delayScalp: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

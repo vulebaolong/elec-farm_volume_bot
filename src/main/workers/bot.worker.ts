@@ -134,12 +134,14 @@ class Bot {
     private changedLaverageCrosslist = new Map<string, TValueChangeLeverage>();
     private settingUser: TSettingUsers;
     private uiSelector: TUiSelector[];
+
     private whitelistEntry: TWhitelistEntry[] = [];
     private whitelistEntryFarmIoc: TWhitelistEntry[] = [];
     private whitelistEntryScalpIoc: TWhitelistEntry[] = [];
     private whitelistEntryFarmIocNew: TWhitelistEntryNew[] = [];
     private whitelistEntryScalpIocNew: TWhitelistEntryNew[] = [];
     private whiteList: TWhiteList = {};
+
     private infoContract = new Map<string, TGetInfoContractRes>();
     private blackList: string[] = [];
     private whiteListMartingale: TWhiteListMartingale["symbol"][] = [];
@@ -251,52 +253,27 @@ class Bot {
 
                     await this.setWhitelistEntry2();
 
-                    if (this.settingUser.sizeIOC > 0) {
-                        // Scalp
-                        for (const entry of this.whitelistEntryScalpIocNew) {
-                            if (this.isCheckDelayForPairsMs("scalp")) {
-                                if (this.settingUser.delayForPairsMs > 0) {
-                                    this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
-                                }
-                                break;
+                    // Scalp
+                    for (const entry of this.whitelistEntryScalpIocNew) {
+                        if (this.settingUser.delayScalp > 0) {
+                            if (this.isCheckDelayForPairsMs(`scalp:${entry.symbol}`)) {
+                                this.logWorker.info(`🔵 Delay Scalp ${entry.symbol} ${this.cooldownLeft(`scalp:${entry.symbol}`)}ms`);
+                                continue;
                             }
-
-                            await this.handleWhiteListScalpIocNew(entry);
                         }
 
-                        // // Farm
-                        for (const entry of this.whitelistEntryFarmIocNew) {
-                            if (this.isCheckDelayForPairsMs("farm")) {
-                                if (this.settingUser.delayForPairsMs > 0) {
-                                    this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("farm")}ms)`);
-                                }
-                                break;
-                            }
-                            await this.handleWhiteListFarmIocNew(entry);
-                        }
-                    } else {
-                        // Scalp
-                        for (const entry of this.whitelistEntryScalpIoc) {
-                            if (this.isCheckDelayForPairsMs("scalp")) {
-                                if (this.settingUser.delayForPairsMs > 0) {
-                                    this.logWorker.info(`🔵 Skip scalp (delayForPairsMs ${this.cooldownLeft("scalp")}ms)`);
-                                }
-                                break;
-                            }
+                        await this.handleWhiteListScalpIocNew(entry);
+                    }
 
-                            await this.handleWhiteListScalpIoc(entry);
-                        }
-
-                        // // Farm
-                        for (const entry of this.whitelistEntryFarmIoc) {
-                            if (this.isCheckDelayForPairsMs("farm")) {
-                                if (this.settingUser.delayForPairsMs > 0) {
-                                    this.logWorker.info(`🔵 Skip farm (delayForPairsMs ${this.cooldownLeft("farm")}ms)`);
-                                }
-                                break;
+                    // // Farm
+                    for (const entry of this.whitelistEntryFarmIocNew) {
+                        if (this.settingUser.delayFarm > 0) {
+                            if (this.isCheckDelayForPairsMs(`farm:${entry.symbol}`)) {
+                                this.logWorker.info(`🔵 Delay Farm ${entry.symbol} ${this.cooldownLeft(`farm:${entry.symbol}`)}ms`);
+                                continue;
                             }
-                            await this.handleWhiteListFarmIoc(entry);
                         }
+                        await this.handleWhiteListFarmIocNew(entry);
                     }
                 }
             } catch (err: any) {
@@ -437,12 +414,12 @@ class Bot {
 
         const maxSizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
         if (!maxSizeScalpIoc) {
-            this.logWorker.info(`Skip Scalp ${entrySymbol}: by not found size: ${maxSizeScalpIoc}`);
+            this.logWorker.info(`Skip Scalp ${entrySymbol}: By Not Found Max Size: ${maxSizeScalpIoc}`);
             return false;
         }
         let sizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
         if (!sizeScalpIoc) {
-            this.logWorker.info(`Skip Scalp ${entrySymbol}: by not found size: ${sizeScalpIoc}`);
+            this.logWorker.info(`Skip Scalp ${entrySymbol}: By Not Found size: ${sizeScalpIoc}`);
             return;
         }
 
@@ -471,8 +448,11 @@ class Bot {
         if (!ok) return;
 
         const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC | ${payloadOpenOrder.price}`);
+        // this.logWorker.info(`🧨 ${entry.symbol} | ${entry.side} | ${payloadOpenOrder.price}`);
 
-        this.postponePair("scalp", this.settingUser.delayForPairsMs);
+        if (this.settingUser.delayScalp) {
+            this.postponePair(`scalp:${entry.symbol}`, this.settingUser.delayScalp);
+        }
     }
 
     private async handleWhiteListFarmIocNew(entry: TWhitelistEntryNew) {
@@ -480,13 +460,13 @@ class Bot {
 
         const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
         if (!maxSizeFarmIoc) {
-            this.logWorker.info(`Skip Farm ${entrySymbol}: by not found size: ${maxSizeFarmIoc}`);
+            this.logWorker.info(`Skip Farm ${entrySymbol}: By Not Found Max Size: ${maxSizeFarmIoc}`);
             return false;
         }
 
         let sizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
         if (!sizeFarmIoc) {
-            this.logWorker.info(`Skip Farm ${entry.symbol}: by not found size: ${sizeFarmIoc}`);
+            this.logWorker.info(`Skip Farm ${entrySymbol}: By Not Found size: ${sizeFarmIoc}`);
             return;
         }
 
@@ -518,7 +498,11 @@ class Bot {
         if (!ok) return;
 
         await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
-        this.postponePair("farm", this.settingUser.delayForPairsMs);
+        // this.logWorker.info(`🧨 ${entry.symbol} | ${entry.side} | ${payloadOpenOrder.price}`);
+
+        if (this.settingUser.delayFarm) {
+            this.postponePair(`farm:${entry.symbol}`, this.settingUser.delayFarm);
+        }
     }
 
     private addMaxScapsPosition(symbol: string) {
@@ -695,6 +679,9 @@ class Bot {
         // console.dir(this.positions, { colors: true, depth: null });
         // console.log(`maxScalpsPosition`, Object(this.maxScalpsPosition).keys());
         // console.log(`maxFarmsPosition`, Object(this.maxFarmsPosition).keys());
+        // console.log("whitelistEntryFarmIocNew", this.whitelistEntryFarmIocNew);
+        // console.log("whitelistEntryScalpIocNew", this.whitelistEntryScalpIocNew);
+        // console.log("nextOpenAt", this.nextOpenAt);
     }
 
     private heartbeat() {
@@ -1355,78 +1342,88 @@ class Bot {
 
         for (const whitelistItem of whiteListArr) {
             // new
-            const sideFarm = this.handleSideNew(whitelistItem.core.gate.sFarm);
-            if (sideFarm) {
-                this.whitelistEntryFarmIocNew.push({
-                    order_price_round: whitelistItem.contractInfo.order_price_round,
-                    side: sideFarm,
-                    symbol: whitelistItem.core.gate.symbol,
+            if (whitelistItem.core.gate.sFarm) {
+                const sideFarm = this.handleSideNew(whitelistItem.core.gate.sFarm);
+                const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
+                    return whitelistItem.core.gate.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
                 });
+                if (sideFarm && isExitsFarm) {
+                    this.whitelistEntryFarmIocNew.push({
+                        order_price_round: whitelistItem.contractInfo.order_price_round,
+                        side: sideFarm,
+                        symbol: whitelistItem.core.gate.symbol,
+                    });
+                }
             }
 
-            const sideScalp = this.handleSideNew(whitelistItem.core.gate.sScalp);
-            if (sideScalp) {
-                this.whitelistEntryScalpIocNew.push({
-                    order_price_round: whitelistItem.contractInfo.order_price_round,
-                    side: sideScalp,
-                    symbol: whitelistItem.core.gate.symbol,
+            if (whitelistItem.core.gate.sScalp) {
+                const sideScalp = this.handleSideNew(whitelistItem.core.gate.sScalp);
+                const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
+                    return whitelistItem.core.gate.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
                 });
+                if (sideScalp && isExitsScalp) {
+                    this.whitelistEntryScalpIocNew.push({
+                        order_price_round: whitelistItem.contractInfo.order_price_round,
+                        side: sideScalp,
+                        symbol: whitelistItem.core.gate.symbol,
+                    });
+                }
             }
 
             // old
-            const {
-                errString: farmErrString,
-                qualified: qualifiedFarm,
-                result: resultFarm,
-            } = handleEntryCheckAll2({ flag: "farm", whitelistItem, settingUser: this.settingUser });
+            // const {
+            //     errString: farmErrString,
+            //     qualified: qualifiedFarm,
+            //     result: resultFarm,
+            // } = handleEntryCheckAll2({ flag: "farm", whitelistItem, settingUser: this.settingUser });
 
-            const {
-                errString: scalpErrString,
-                qualified: qualifiedScalp,
-                result: resultScalp,
-            } = handleEntryCheckAll2({ flag: "scalp", whitelistItem, settingUser: this.settingUser });
+            // const {
+            //     errString: scalpErrString,
+            //     qualified: qualifiedScalp,
+            //     result: resultScalp,
+            // } = handleEntryCheckAll2({ flag: "scalp", whitelistItem, settingUser: this.settingUser });
 
-            if (farmErrString || scalpErrString) {
-                this.logWorker.error(farmErrString ?? scalpErrString);
-                continue;
-            }
+            // if (farmErrString || scalpErrString) {
+            //     this.logWorker.error(farmErrString ?? scalpErrString);
+            //     continue;
+            // }
 
-            if (resultFarm && resultFarm.side) {
-                const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
-                    return resultFarm.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
-                });
+            // if (resultFarm && resultFarm.side) {
+            //     const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
+            //         return resultFarm.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
+            //     });
 
-                if (isExitsFarm) {
-                    this.whitelistEntryFarmIoc.push({
-                        symbol: resultFarm.symbol,
-                        sizeStr: `${this.settingUser.sizeIOC}`,
-                        side: resultFarm.side,
-                        askBest: resultFarm.askBest,
-                        bidBest: resultFarm.bidBest,
-                        order_price_round: resultFarm.order_price_round,
-                        lastPriceGate: resultFarm.lastPriceGate,
-                        quanto_multiplier: resultFarm.quanto_multiplier,
-                    });
-                }
-            }
+            //     if (isExitsFarm) {
+            //         this.whitelistEntryFarmIoc.push({
+            //             symbol: resultFarm.symbol,
+            //             sizeStr: `${this.settingUser.sizeIOC}`,
+            //             side: resultFarm.side,
+            //             askBest: resultFarm.askBest,
+            //             bidBest: resultFarm.bidBest,
+            //             order_price_round: resultFarm.order_price_round,
+            //             lastPriceGate: resultFarm.lastPriceGate,
+            //             quanto_multiplier: resultFarm.quanto_multiplier,
+            //         });
+            //     }
+            // }
 
-            if (qualifiedScalp && resultScalp && resultScalp.side) {
-                const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
-                    return resultScalp.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
-                });
-                if (isExitsScalp) {
-                    this.whitelistEntryScalpIoc.push({
-                        symbol: resultScalp.symbol,
-                        sizeStr: `${this.settingUser.sizeIOC}`,
-                        side: resultScalp.side,
-                        askBest: resultScalp.askBest,
-                        bidBest: resultScalp.bidBest,
-                        order_price_round: resultScalp.order_price_round,
-                        lastPriceGate: resultScalp.lastPriceGate,
-                        quanto_multiplier: resultScalp.quanto_multiplier,
-                    });
-                }
-            }
+            // if (qualifiedScalp && resultScalp && resultScalp.side) {
+            //     const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
+            //         return resultScalp.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
+            //     });
+            //     if (isExitsScalp) {
+            //         this.whitelistEntryScalpIoc.push({
+            //             symbol: resultScalp.symbol,
+            //             sizeStr: `${this.settingUser.sizeIOC}`,
+            //             side: resultScalp.side,
+            //             askBest: resultScalp.askBest,
+            //             bidBest: resultScalp.bidBest,
+            //             order_price_round: resultScalp.order_price_round,
+            //             lastPriceGate: resultScalp.lastPriceGate,
+            //             quanto_multiplier: resultScalp.quanto_multiplier,
+            //         });
+            //     }
+            // }
         }
     }
 
@@ -1961,7 +1958,7 @@ class Bot {
     }
 
     private setWhitelist(whiteList: TWhiteList) {
-        console.dir(whiteList, { colors: true, depth: null });
+        // console.dir(whiteList, { colors: true, depth: null });
         this.whiteList = whiteList;
     }
 
@@ -2132,7 +2129,6 @@ class Bot {
     private cooldownLeft(key: string) {
         return Math.max(0, (this.nextOpenAt.get(key) || 0) - Date.now());
     }
-
     private postponePair(key: string, delayForPairsMs: number) {
         if (delayForPairsMs) {
             this.nextOpenAt.set(key, Date.now() + delayForPairsMs);

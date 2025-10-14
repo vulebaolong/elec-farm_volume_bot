@@ -10,20 +10,6 @@ export default function ListManager() {
         <div>
             <PageTitle title="List Manager" icon={ClipboardList} size="md" />
 
-            {/* <div className="flex gap-5 w-full p-5">
-                <div className="flex-1">
-                    <Whitelist />
-                </div>
-                <div className="flex-1">
-                    <BlackList />
-                </div>
-            </div>
-            <div className="flex gap-5 w-full p-5">
-                <div className="flex-1">
-                    <WhitelistMartingale />
-                </div>
-                <div className="flex-1"></div>
-            </div> */}
             <div className="flex gap-5 w-full p-5">
                 <div className="flex-1">
                     <WhitelistIoc />

@@ -1,4 +1,5 @@
 import { TSide } from "./base.type";
+import { TAskFuturesOrderBook, TBidFuturesOrderBook } from "./order-book.type";
 
 export type TContractInfo = {
     symbol: string;
@@ -13,23 +14,38 @@ export type TContractInfo = {
 export type TCore = {
     gate: {
         symbol: string;
-        spreadPercent: number;
-        imbalanceBidPercent: number;
-        imbalanceAskPercent: number;
-        bidSumDepth: number;
-        askSumDepth: number;
-        bidBest: number;
-        askBest: number;
-        lastPrice: number;
-        OBI: number;
-        AGG: number;
-        TMM: number;
-        sScalp: number;
-        sFarm: number;
+        spreadPercent?: number;
+        imbalanceBidPercent?: number;
+        imbalanceAskPercent?: number;
+        lastPrice?: number;
+        infoOBI: {
+            OBI: number;
+            tota5lBid: number;
+            total5Ask: number;
+        };
+        infoAgg: {
+            AGG: number;
+            agg: number | null;
+            sampleCount: number;
+            sumAsk: number;
+            sumBid: number;
+        };
+        infoTMM: {
+            TMM: number;
+            tickMoment: number;
+            count: number;
+            mid: number | null;
+        };
+        sScalp?: number;
+        sFarm?: number;
+        sScalpString: string;
+        sFarmString: string;
+        bids: TBidFuturesOrderBook[];
+        asks: TAskFuturesOrderBook[];
     };
-     binance: {
+    binance: {
         symbol: string;
-        lastPrice: number;
+        lastPrice?: number;
     };
 };
 

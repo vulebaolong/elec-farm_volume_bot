@@ -81,10 +81,10 @@ export const FormSchema = z.object({
     delayForPairsMs: intField(0, "Delay For Pairs (ms)"),
     // max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
     // max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
-    
+
     martingale: ZMartingaleConfig,
     maxRoiNextPhase: positiveNumber("Max ROI Next Phase"),
-    
+
     // ioc ----------------------
     // farm
     minSpreadPercentFarm: numberRange(0, 100, "Min Spread Farm %"),
@@ -92,7 +92,7 @@ export const FormSchema = z.object({
     ifImbalanceBidPercentFarm: numberRange(0, 100, "Imbalance Farm Bid %"),
     ifImbalanceAskPercentFarm: numberRange(0, 100, "Imbalance Farm Ask %"),
     lastPriceGapGateAndBinancePercentFarm: numberRange(0, 100, "Max Farm Gap %"),
-    
+
     // scalp
     minSpreadPercentScalp: numberRange(0, 100, "Min Spread Scalp %"),
     maxSpreadPercentScalp: numberRange(0, 100, "Max Spread Scalp %"),
@@ -101,6 +101,9 @@ export const FormSchema = z.object({
     lastPriceGapGateAndBinancePercentScalp: numberRange(0, 100, "Max Scalp Gap %"),
 
     indexBidAsk: intField(1, "Index Bid/Ask"),
+
+    delayFarm: intField(0, "Delay Farm (ms)"),
+    delayScalp: intField(0, "Delay Scalp (ms)"),
 });
 
 const defaultMartingale: MartingaleConfig = {
@@ -170,6 +173,8 @@ export default function SettingAdminUser({ type }: TProps) {
             lastPriceGapGateAndBinancePercentScalp: "",
 
             indexBidAsk: "",
+            delayFarm: "",
+            delayScalp: "",
         },
     });
 
@@ -215,6 +220,9 @@ export default function SettingAdminUser({ type }: TProps) {
                 lastPriceGapGateAndBinancePercentScalp: setting.lastPriceGapGateAndBinancePercentScalp ?? "",
 
                 indexBidAsk: setting.indexBidAsk ?? "",
+
+                delayFarm: setting.delayFarm ?? "",
+                delayScalp: setting.delayScalp ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form, type]);
@@ -264,6 +272,9 @@ export default function SettingAdminUser({ type }: TProps) {
             lastPriceGapGateAndBinancePercentScalp: data.lastPriceGapGateAndBinancePercentScalp,
 
             indexBidAsk: data.indexBidAsk,
+
+            delayFarm: data.delayFarm,
+            delayScalp: data.delayScalp,
         };
 
         console.log({ updateSettingUser: payload });
@@ -550,6 +561,32 @@ export default function SettingAdminUser({ type }: TProps) {
                             min={0}
                             step={1}
                             clampBehavior="strict"
+                        />
+                    )}
+                />
+
+                {/* delayForPairsMs */}
+                <Controller
+                    name="delayForPairsMs"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Delay for pairs (ms)"
+                            placeholder="Delay (ms)"
+                            inputWrapperOrder={["label", "input", "description", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.timeoutMs?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix="ms"
+                            min={0}
+                            step={1000}
+                            clampBehavior="strict"
+                            description={"If 0 then no delay | 1000ms = 1second"}
                         />
                     )}
                 />
@@ -1180,21 +1217,47 @@ export default function SettingAdminUser({ type }: TProps) {
                     </Stack>
                 </Paper>
 
-                {/* delayForPairsMs */}
+                {/* delayFarm */}
                 <Controller
-                    name="delayForPairsMs"
+                    name="delayFarm"
                     control={form.control}
                     render={({ field }) => (
                         <NumberInput
                             size="xs"
                             withAsterisk
-                            label="Delay for pairs (ms)"
-                            placeholder="Delay (ms)"
+                            label="Delay Farm (ms)"
+                            placeholder="Delay Farm (ms)"
                             inputWrapperOrder={["label", "input", "description", "error"]}
                             value={field.value ?? ""}
                             onChange={(val) => field.onChange(val ?? "")}
                             onBlur={field.onBlur}
-                            error={form.formState.errors.timeoutMs?.message}
+                            error={form.formState.errors.delayFarm?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix="ms"
+                            min={0}
+                            step={1000}
+                            clampBehavior="strict"
+                            description={"If 0 then no delay | 1000ms = 1second"}
+                        />
+                    )}
+                />
+
+                {/* delayScalp */}
+                <Controller
+                    name="delayScalp"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Delay Scalp (ms)"
+                            placeholder="Delay Scalp (ms)"
+                            inputWrapperOrder={["label", "input", "description", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.delayScalp?.message}
                             decimalSeparator="."
                             thousandSeparator=","
                             suffix="ms"
@@ -1223,8 +1286,8 @@ export default function SettingAdminUser({ type }: TProps) {
                             error={form.formState.errors.indexBidAsk?.message}
                             decimalSeparator="."
                             thousandSeparator=","
-                            min={0}
-                            step={1}
+                            min={1}
+                            step={5}
                             clampBehavior="strict"
                         />
                     )}

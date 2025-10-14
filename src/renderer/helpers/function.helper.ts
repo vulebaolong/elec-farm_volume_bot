@@ -107,3 +107,13 @@ export function roleAllowed(roleId: TRole["id"] | undefined): boolean {
         return false;
     }
 }
+
+export function handleSideNew(s: number): TSide | null {
+    if (s > 0.1) {
+        return "long";
+    } else if (s < -0.1) {
+        return "short";
+    } else {
+        return null;
+    }
+}
