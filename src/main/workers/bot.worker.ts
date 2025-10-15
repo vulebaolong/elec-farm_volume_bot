@@ -334,13 +334,13 @@ class Bot {
             return;
         }
 
-        const prevSide = this.prevSides.get(keyPrevSide);
-        const sideScalp = this.handleSideNew(entry.core.gate.sScalp, prevSide);
+        // const prevSide = this.prevSides.get(keyPrevSide);
+        const sideScalp = this.handleSideNew(entry.core.gate.sScalp);
         if (sideScalp === null) {
-            this.prevSides.delete(keyPrevSide);
+            // this.prevSides.delete(keyPrevSide);
             return;
         }
-        this.prevSides.set(keyPrevSide, sideScalp);
+        // this.prevSides.set(keyPrevSide, sideScalp);
 
         const maxSizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
         if (!maxSizeScalpIoc) {
@@ -410,13 +410,13 @@ class Bot {
             return;
         }
 
-        const prevSide = this.prevSides.get(keyPrevSide);
-        const sideFarm = this.handleSideNew(entry.core.gate.sFarm, prevSide);
+        // const prevSide = this.prevSides.get(keyPrevSide);
+        const sideFarm = this.handleSideNew(entry.core.gate.sFarm);
         if (sideFarm === null) {
-            this.prevSides.delete(keyPrevSide);
+            // this.prevSides.delete(keyPrevSide);
             return;
         }
-        this.prevSides.set(keyPrevSide, sideFarm);
+        // this.prevSides.set(keyPrevSide, sideFarm);
 
         const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
         if (!maxSizeFarmIoc) {
@@ -1422,8 +1422,8 @@ class Bot {
     }
 
     private handleSideNew(s: number, prevSide?: TSide, tauExit = 0.05): TSide | null {
-        if (prevSide === "long" && s > -tauExit) return "long";
-        if (prevSide === "short" && s < +tauExit) return "short";
+        // if (prevSide === "long" && s > -tauExit) return "long";
+        // if (prevSide === "short" && s < +tauExit) return "short";
 
         if (s > 0.1) {
             return "long";

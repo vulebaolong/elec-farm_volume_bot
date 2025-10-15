@@ -1,6 +1,6 @@
 // main/worker-manager.ts
 import { IS_PRODUCTION } from "@/constant/app.constant";
-import { codeStringKillMantineToasts, createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
+import { codeStringCloseAnnouncements, codeStringKillMantineToasts, createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
 import {
     TDataInitBot,
     TFectMainRes,
@@ -717,6 +717,7 @@ export class BotWorkerManager {
         gateView.webContents.loadURL("https://www.gate.com/futures/USDT/BTC_USDT").then(() => {
             gateView.webContents.executeJavaScript(setLocalStorageScript, true);
             gateView.webContents.executeJavaScript(codeStringKillMantineToasts, true);
+            gateView.webContents.executeJavaScript(codeStringCloseAnnouncements, true);
         });
 
         if (!IS_PRODUCTION) {

@@ -608,7 +608,6 @@ export const createCodeStringClickClearAll = (payload: TClickClearAll) => {
 `;
 };
 
-
 export type TCheckLogin = {
     checkLogin: string;
 };
@@ -658,3 +657,14 @@ export const createCodeStringGetUid = (payload: TGetUid) => {
 })();
 `;
 };
+
+export const codeStringCloseAnnouncements = `
+(function () {
+  try {
+    setTimeout(() => {
+        const el = document.querySelector("svg[data-icon-id='icon-a-v31-16px-line-guanbi1'")?.parentElement
+        el?.click()
+    }, 2000);
+  } catch (e) {}
+})();
+`;
