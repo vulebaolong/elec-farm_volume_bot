@@ -346,7 +346,7 @@ class Bot {
         if (!maxSizeScalpIoc) {
             const mes = `Skip Scalp ${entrySymbol}: By Not Found Max Size: ${maxSizeScalpIoc}`;
             // this.logUnique("info", "all", mes);
-            this.logWorker.info(mes);
+            if (this.settingUser.sizeIOC === 6) this.logWorker.info(mes);
             return;
         }
 
@@ -396,7 +396,8 @@ class Bot {
 
         if (this.settingUser.delayFarm > 0) {
             if (this.isCheckDelayForPairsMs(keyDelay)) {
-                // const mes = `🔵 Delay Farm ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
+                const mes = `🔵 Delay Farm ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
+                if (this.settingUser.sizeIOC === 6) this.logWorker.info(mes);
                 // this.logUnique("info", "all", mes);
                 // this.logWorker.info(mes);
                 return;
@@ -575,12 +576,12 @@ class Bot {
             const sideShoudBe = sidePosition === "long" ? "short" : "long";
             if (sideShoudBe !== entrySide) {
                 const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): cần tín hiệu là ${sideShoudBe}`;
-                this.logWorker.info(mes);
+                if (this.settingUser.sizeIOC === 5) this.logWorker.info(mes);
                 // this.logUnique("info", "all", mes);
                 return false;
             } else {
                 const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): đúng side cần ${sideShoudBe} => tiến hành vào lệnh`;
-                this.logWorker.info(mes);
+                if (this.settingUser.sizeIOC === 5) this.logWorker.info(mes);
                 // this.logUnique("info", "all", mes);
                 return true;
             }
