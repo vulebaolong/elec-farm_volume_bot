@@ -184,6 +184,8 @@ class Bot {
 
     private lastLogs = new Map<string, string>();
 
+    private prevSides = new Map<string, TSide>();
+
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
         this.settingUser = dataInitBot.settingUser;
@@ -247,7 +249,7 @@ class Bot {
                 this.log(`✅✅✅✅✅ ITER START ${this.count} | ${this.isStart} | ${this.running} =====`);
                 await this.beforeEach();
 
-                if (!this.uidWeb) continue;
+                // if (!this.uidWeb) continue;
 
                 if (this.isStart) {
                     const isOneWay = await this.handleDualMode("oneway");
@@ -282,9 +284,10 @@ class Bot {
     }
 
     private async handleDualMode(dualModeExpected: "oneway" | "hedged"): Promise<boolean> {
-        const account = this.accounts.find((item) => {
-            return item.user === this.uidWeb;
-        });
+        // const account = this.accounts.find((item) => {
+        //     return item.user === this.uidWeb;
+        // });
+        const account = this.accounts[0];
         if (!account) {
             this.logWorker.info("account not found");
             return false;
@@ -313,12 +316,13 @@ class Bot {
 
     private async handleWhiteListScalpIocNew(entrySymbol: string, entry: TWhiteListItem) {
         const keyDelay = `scalp:${entrySymbol}`;
+        const keyPrevSide = `scalp:${entrySymbol}`;
 
         if (this.settingUser.delayScalp > 0) {
             if (this.isCheckDelayForPairsMs(keyDelay)) {
-                const mes = `🔵 Delay Scalp ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
+                // const mes = `🔵 Delay Scalp ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
                 // this.logUnique("info", "all", mes);
-                this.logWorker.info(mes);
+                // this.logWorker.info(mes);
                 return;
             }
         }
@@ -330,12 +334,13 @@ class Bot {
             return;
         }
 
-        const sideScalp = this.handleSideNew(entry.core.gate.sScalp);
+        const prevSide = this.prevSides.get(keyPrevSide);
+        const sideScalp = this.handleSideNew(entry.core.gate.sScalp, prevSide);
         if (sideScalp === null) {
-            // const mes = `Skip Scalp ${entrySymbol}: By Hold`;
-            // this.logUnique("info", "all", mes);
+            this.prevSides.delete(keyPrevSide);
             return;
         }
+        this.prevSides.set(keyPrevSide, sideScalp);
 
         const maxSizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
         if (!maxSizeScalpIoc) {
@@ -356,12 +361,12 @@ class Bot {
         const isNextByMaxSize = this.checkMaxSize2(entrySymbol, sideScalp, maxSizeScalpIoc);
         if (!isNextByMaxSize) return;
 
-        const bidsAsks = await this.getBidsAsks(entrySymbol);
+        // const bidsAsks = await this.getBidsAsks(entrySymbol);
 
         const indexBidAsk = Math.max(0, Math.min(4, this.settingUser.indexBidAsk - 1));
         // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 2
         // càng xa càng khó khớp lệnh nên tạm thời để 0 để test
-        const pricesScalp = bidsAsks[sideScalp === "long" ? "bids" : "asks"][indexBidAsk];
+        const pricesScalp = entry.core.gate[sideScalp === "long" ? "bids" : "asks"][indexBidAsk];
         // const pricesScalps = bidsAsks[sideScalp === "long" ? "bids" : "asks"].slice(0, 2);
 
         if (!IS_PRODUCTION) sizeScalpIoc = 1;
@@ -387,12 +392,13 @@ class Bot {
 
     private async handleWhiteListFarmIocNew(entrySymbol: string, entry: TWhiteListItem) {
         const keyDelay = `farm:${entrySymbol}`;
+        const keyPrevSide = `farm:${entrySymbol}`;
 
         if (this.settingUser.delayFarm > 0) {
             if (this.isCheckDelayForPairsMs(keyDelay)) {
-                const mes = `🔵 Delay Farm ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
+                // const mes = `🔵 Delay Farm ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
                 // this.logUnique("info", "all", mes);
-                this.logWorker.info(mes);
+                // this.logWorker.info(mes);
                 return;
             }
         }
@@ -404,13 +410,13 @@ class Bot {
             return;
         }
 
-        const sideFarm = this.handleSideNew(entry.core.gate.sFarm);
+        const prevSide = this.prevSides.get(keyPrevSide);
+        const sideFarm = this.handleSideNew(entry.core.gate.sFarm, prevSide);
         if (sideFarm === null) {
-            const mes = `Skip Farm ${entrySymbol}: By Hold`;
-            // this.logUnique("info", "all", mes);
-            // this.logWorker.info(mes);
+            this.prevSides.delete(keyPrevSide);
             return;
         }
+        this.prevSides.set(keyPrevSide, sideFarm);
 
         const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
         if (!maxSizeFarmIoc) {
@@ -431,20 +437,21 @@ class Bot {
         const isNextByMaxSize = this.checkMaxSize2(entrySymbol, sideFarm, maxSizeFarmIoc);
         if (!isNextByMaxSize) return;
 
-        const bidsAsks = await this.getBidsAsks(entrySymbol);
+        // const bidsAsks = await this.getBidsAsks(entrySymbol);
 
-        // const tick = entry.contractInfo.order_price_round;
-        // const insidePrices = this.computeInsidePrices(sideFarm, bidsAsks, tick, this.decimalsFromTick.bind(this));
-        // const price = insidePrices.at(-1);
-        // if (!price) {
-        //     const mes = `Skip Farm ${entrySymbol}: by not found price: ${price}`;
-        //     this.logUnique("info", "all", mes);
-        //     return;
-        // }
+        let price: any = entry.core.gate[sideFarm === "long" ? "bids" : "asks"][2].p;
 
-        const price = bidsAsks[sideFarm === "long" ? "bids" : "asks"][2].p;
-
-        if (!IS_PRODUCTION) sizeFarmIoc = 1;
+        if (!IS_PRODUCTION) {
+            sizeFarmIoc = 1;
+            const tick = entry.contractInfo.order_price_round;
+            const insidePrices = this.computeInsidePrices(sideFarm, entry.core.gate, tick, this.decimalsFromTick.bind(this));
+            price = insidePrices.at(-1);
+            if (!price) {
+                const mes = `Skip Farm ${entrySymbol}: by not found price: ${price}`;
+                this.logUnique("info", "all", mes);
+                return;
+            }
+        }
 
         const payloadOpenOrder: TPayloadOrder = {
             contract: entrySymbol,
@@ -643,8 +650,8 @@ class Bot {
     private async beforeEach() {
         this.heartbeat();
         this.rateCounterSendRenderer();
-        await this.getUid();
-        this.checkUid();
+        // await this.getUid();
+        // this.checkUid();
         // await this.checkLoginGate();
         // await this.handleGetInfoGate();
         // await this.checkUid();
@@ -1414,7 +1421,10 @@ class Bot {
         }
     }
 
-    private handleSideNew(s: number): TSide | null {
+    private handleSideNew(s: number, prevSide?: TSide, tauExit = 0.05): TSide | null {
+        if (prevSide === "long" && s > -tauExit) return "long";
+        if (prevSide === "short" && s < +tauExit) return "short";
+
         if (s > 0.1) {
             return "long";
         } else if (s < -0.1) {

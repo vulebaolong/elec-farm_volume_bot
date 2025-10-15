@@ -270,11 +270,11 @@ export default function WhiteListDetailAccordion() {
 
                                             <Stack gap={0}>
                                                 <Text size="xs" c="dimmed" ta={"center"}>
-                                                    <NumberFormatter value={item.core.gate.infoTMM.mid || 0} decimalScale={2} />
+                                                    <NumberFormatter value={item.core.gate.infoTMM.mid || 0} />
                                                 </Text>
                                                 <Divider />
                                                 <Text size="xs" c="dimmed" ta={"center"}>
-                                                    <NumberFormatter value={item.core.gate.infoTMM.count || 0} decimalScale={2} />
+                                                    <NumberFormatter value={item.core.gate.infoTMM.count || 0} />
                                                 </Text>
                                             </Stack>
 
