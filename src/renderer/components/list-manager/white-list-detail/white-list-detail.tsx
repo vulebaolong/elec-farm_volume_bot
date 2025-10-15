@@ -260,7 +260,7 @@ export default function WhiteListDetailAccordion() {
                                         <Group>
                                             <Stack gap={0}>
                                                 <Text size="xs" c="dimmed" ta={"center"}>
-                                                    Total mid price
+                                                    Total tick
                                                 </Text>
                                                 <Divider />
                                                 <Text size="xs" c="dimmed" ta={"center"}>
@@ -270,7 +270,7 @@ export default function WhiteListDetailAccordion() {
 
                                             <Stack gap={0}>
                                                 <Text size="xs" c="dimmed" ta={"center"}>
-                                                    <NumberFormatter value={item.core.gate.infoTMM.mid || 0} />
+                                                    <NumberFormatter value={item.core.gate.infoTMM.sum || 0} />
                                                 </Text>
                                                 <Divider />
                                                 <Text size="xs" c="dimmed" ta={"center"}>

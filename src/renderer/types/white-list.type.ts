@@ -35,6 +35,7 @@ export type TCore = {
             tickMoment: number;
             count: number;
             mid: number | null;
+            sum: number;
         };
         sScalp?: number;
         sFarm?: number;
