@@ -574,11 +574,13 @@ class Bot {
             const sidePosition = position.size > 0 ? "long" : "short";
             const sideShoudBe = sidePosition === "long" ? "short" : "long";
             if (sideShoudBe !== entrySide) {
-                // const mes = `${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): cần tín hiệu là ${sideShoudBe}`;
+                const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): cần tín hiệu là ${sideShoudBe}`;
+                this.logWorker.info(mes);
                 // this.logUnique("info", "all", mes);
                 return false;
             } else {
-                // const mes = `${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): đúng side cần ${sideShoudBe} => tiến hành vào lệnh`;
+                const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): đúng side cần ${sideShoudBe} => tiến hành vào lệnh`;
+                this.logWorker.info(mes);
                 // this.logUnique("info", "all", mes);
                 return true;
             }
