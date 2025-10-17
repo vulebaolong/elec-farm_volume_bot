@@ -60,7 +60,8 @@ export type Channels =
     | "bot:ioc:long"
     | "bot:ioc:short"
     | "bot:ioc:hedge"
-    | "bot:ioc:oneway";
+    | "bot:ioc:oneway"
+    | "bot:ioc:sideCount";
 
 const electronHandler = {
     ipcRenderer: {

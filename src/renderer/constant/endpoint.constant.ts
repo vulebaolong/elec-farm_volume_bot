@@ -26,6 +26,11 @@ export const ENDPOINT = {
         LOGIN_TRUE: "user/login-true",
         LOGIN_FALSE: "user/login-false",
     },
+    UID: {
+        CREATE: "uid",
+        DELETE: "uid",
+        UPDATE: "uid",
+    },
     TOTP: {
         GENERATE: "totp/generate",
         VERIFY: "totp/verify",

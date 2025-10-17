@@ -33,3 +33,5 @@ export type TEditProfileReq = {
 export type TLoginTrueOrFalseReq = {
     userId: TUser["id"];
 };
+
+

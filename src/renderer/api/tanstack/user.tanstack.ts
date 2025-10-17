@@ -1,11 +1,11 @@
 import { ENDPOINT } from "@/constant/endpoint.constant";
-import { TPaginationRes, TQuery, TRes } from "@/types/app.type";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api from "../axios/app.axios";
 import { buildQueryString } from "@/helpers/build-query";
-import { TLoginTrueOrFalseReq, TUserManager } from "@/types/user.type";
-import { toast } from "sonner";
 import { resError } from "@/helpers/function.helper";
+import { TPaginationRes, TQuery, TRes } from "@/types/app.type";
+import { TLoginTrueOrFalseReq, TUserManager } from "@/types/user.type";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import api from "../axios/app.axios";
 
 export const useGetListUser = (query: TQuery) => {
     return useQuery({

@@ -12,6 +12,7 @@ import { roleAllowed } from "@/helpers/function.helper";
 import FixLiquidationForUser from "../fix-liquidation/fix-liquidation-for-user";
 import FixStoplossForUser from "../fix-stoploss/fix-stoploss-for-user";
 import SessionsManager from "../session/sessions-manager";
+import SideCountIoc from "../side-count-ioc/side-count-ioc";
 
 export default function Bot() {
     const info = useAppSelector((state) => state.user.info);
@@ -27,6 +28,7 @@ export default function Bot() {
                         <RateCounter />
                         <FixLiquidation />
                         <FixStopLoss />
+                        <SideCountIoc />
                         <Log />
                         <PassiveSticky />
                         <TakeprofitAccount />

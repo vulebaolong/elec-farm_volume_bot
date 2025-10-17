@@ -52,6 +52,7 @@ import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { calcSize, handleEntryCheckAll, handleEntryCheckAll2 } from "./util-bot.worker";
+import { TSideCountsIOC, TSideCountsIOCitem } from "@/types/side-count-ioc.type";
 
 const FLOWS_API = {
     acounts: {
@@ -184,7 +185,7 @@ class Bot {
 
     private lastLogs = new Map<string, string>();
 
-    private prevSides = new Map<string, TSide>();
+    private sideCountsIOC: TSideCountsIOC = new Map();
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
@@ -316,7 +317,7 @@ class Bot {
 
     private async handleWhiteListScalpIocNew(entrySymbol: string, entry: TWhiteListItem) {
         const keyDelay = `scalp:${entrySymbol}`;
-        const keyPrevSide = `scalp:${entrySymbol}`;
+        const keyPrevSidesCount = `scalp:${entrySymbol}`;
 
         if (this.settingUser.delayScalp > 0) {
             if (this.isCheckDelayForPairsMs(keyDelay)) {
@@ -334,13 +335,8 @@ class Bot {
             return;
         }
 
-        // const prevSide = this.prevSides.get(keyPrevSide);
-        const sideScalp = this.handleSideNew(entry.core.gate.sScalp);
-        if (sideScalp === null) {
-            // this.prevSides.delete(keyPrevSide);
-            return;
-        }
-        // this.prevSides.set(keyPrevSide, sideScalp);
+        const sideScalp = this.handleSideIOC(entry.core.gate.sScalp, keyPrevSidesCount);
+        if (sideScalp === null) return;
 
         const maxSizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
         if (!maxSizeScalpIoc) {
@@ -385,6 +381,9 @@ class Bot {
         const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC`);
         // this.logWorker.info(`🧨 ${entrySymbol} | ${sideScalp} | ${payloadOpenOrder.price}`);
 
+        this.sideCountsIOC.set(keyPrevSidesCount, { keyPrevSidesCount, longHits: 0, shortHits: 0 });
+        this.sendSideCountsIOC();
+
         if (this.settingUser.delayScalp > 0) {
             this.postponePair(keyDelay, this.settingUser.delayScalp);
         }
@@ -392,7 +391,7 @@ class Bot {
 
     private async handleWhiteListFarmIocNew(entrySymbol: string, entry: TWhiteListItem) {
         const keyDelay = `farm:${entrySymbol}`;
-        const keyPrevSide = `farm:${entrySymbol}`;
+        const keyPrevSidesCount = `farm:${entrySymbol}`;
 
         if (this.settingUser.delayFarm > 0) {
             if (this.isCheckDelayForPairsMs(keyDelay)) {
@@ -412,7 +411,7 @@ class Bot {
         }
 
         // const prevSide = this.prevSides.get(keyPrevSide);
-        const sideFarm = this.handleSideNew(entry.core.gate.sFarm);
+        const sideFarm = this.handleSideIOC(entry.core.gate.sFarm, keyPrevSidesCount);
         if (sideFarm === null) {
             // this.prevSides.delete(keyPrevSide);
             return;
@@ -467,6 +466,8 @@ class Bot {
 
         await this.openEntry(payloadOpenOrder, `🧨 Farm IOC`);
         // this.logWorker.info(`🧨 ${entrySymbol} | ${sideFarm} | ${payloadOpenOrder.price}`);
+        this.sideCountsIOC.set(keyPrevSidesCount, { keyPrevSidesCount, longHits: 0, shortHits: 0 });
+        this.sendSideCountsIOC();
 
         if (this.settingUser.delayFarm > 0) {
             this.postponePair(keyDelay, this.settingUser.delayFarm);
@@ -679,6 +680,7 @@ class Bot {
         // console.log("whitelistEntryFarmIocNew", this.whitelistEntryFarmIocNew);
         // console.log("whitelistEntryScalpIocNew", this.whitelistEntryScalpIocNew);
         // console.log("nextOpenAt", this.nextOpenAt);
+        // console.dir(this.sideCountsIOC, { colors: true, depth: null });
     }
 
     private heartbeat() {
@@ -1321,120 +1323,153 @@ class Bot {
     }
 
     private async setWhitelistEntry2() {
-        const whiteListArr = Object.values(this.whiteList);
-        if (whiteListArr.length === 0) {
-            this.whitelistEntry = [];
-            this.whitelistEntryFarmIoc = [];
-            this.whitelistEntryScalpIoc = [];
-            this.whitelistEntryFarmIocNew = [];
-            this.whitelistEntryScalpIocNew = [];
-            return;
-        }
-
-        this.whitelistEntry = [];
-        this.whitelistEntryFarmIoc = [];
-        this.whitelistEntryScalpIoc = [];
-        this.whitelistEntryFarmIocNew = [];
-        this.whitelistEntryScalpIocNew = [];
-
-        for (const whitelistItem of whiteListArr) {
-            // new
-            if (whitelistItem.core.gate.sFarm) {
-                const sideFarm = this.handleSideNew(whitelistItem.core.gate.sFarm);
-                const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
-                    return whitelistItem.core.gate.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
-                });
-                if (sideFarm && isExitsFarm) {
-                    this.whitelistEntryFarmIocNew.push({
-                        order_price_round: whitelistItem.contractInfo.order_price_round,
-                        side: sideFarm,
-                        symbol: whitelistItem.core.gate.symbol,
-                    });
-                }
-            }
-
-            if (whitelistItem.core.gate.sScalp) {
-                const sideScalp = this.handleSideNew(whitelistItem.core.gate.sScalp);
-                const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
-                    return whitelistItem.core.gate.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
-                });
-                if (sideScalp && isExitsScalp) {
-                    this.whitelistEntryScalpIocNew.push({
-                        order_price_round: whitelistItem.contractInfo.order_price_round,
-                        side: sideScalp,
-                        symbol: whitelistItem.core.gate.symbol,
-                    });
-                }
-            }
-
-            // old
-            // const {
-            //     errString: farmErrString,
-            //     qualified: qualifiedFarm,
-            //     result: resultFarm,
-            // } = handleEntryCheckAll2({ flag: "farm", whitelistItem, settingUser: this.settingUser });
-
-            // const {
-            //     errString: scalpErrString,
-            //     qualified: qualifiedScalp,
-            //     result: resultScalp,
-            // } = handleEntryCheckAll2({ flag: "scalp", whitelistItem, settingUser: this.settingUser });
-
-            // if (farmErrString || scalpErrString) {
-            //     this.logWorker.error(farmErrString ?? scalpErrString);
-            //     continue;
-            // }
-
-            // if (resultFarm && resultFarm.side) {
-            //     const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
-            //         return resultFarm.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
-            //     });
-
-            //     if (isExitsFarm) {
-            //         this.whitelistEntryFarmIoc.push({
-            //             symbol: resultFarm.symbol,
-            //             sizeStr: `${this.settingUser.sizeIOC}`,
-            //             side: resultFarm.side,
-            //             askBest: resultFarm.askBest,
-            //             bidBest: resultFarm.bidBest,
-            //             order_price_round: resultFarm.order_price_round,
-            //             lastPriceGate: resultFarm.lastPriceGate,
-            //             quanto_multiplier: resultFarm.quanto_multiplier,
-            //         });
-            //     }
-            // }
-
-            // if (qualifiedScalp && resultScalp && resultScalp.side) {
-            //     const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
-            //         return resultScalp.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
-            //     });
-            //     if (isExitsScalp) {
-            //         this.whitelistEntryScalpIoc.push({
-            //             symbol: resultScalp.symbol,
-            //             sizeStr: `${this.settingUser.sizeIOC}`,
-            //             side: resultScalp.side,
-            //             askBest: resultScalp.askBest,
-            //             bidBest: resultScalp.bidBest,
-            //             order_price_round: resultScalp.order_price_round,
-            //             lastPriceGate: resultScalp.lastPriceGate,
-            //             quanto_multiplier: resultScalp.quanto_multiplier,
-            //         });
-            //     }
-            // }
-        }
+        // const whiteListArr = Object.values(this.whiteList);
+        // if (whiteListArr.length === 0) {
+        //     this.whitelistEntry = [];
+        //     this.whitelistEntryFarmIoc = [];
+        //     this.whitelistEntryScalpIoc = [];
+        //     this.whitelistEntryFarmIocNew = [];
+        //     this.whitelistEntryScalpIocNew = [];
+        //     return;
+        // }
+        // this.whitelistEntry = [];
+        // this.whitelistEntryFarmIoc = [];
+        // this.whitelistEntryScalpIoc = [];
+        // this.whitelistEntryFarmIocNew = [];
+        // this.whitelistEntryScalpIocNew = [];
+        // for (const whitelistItem of whiteListArr) {
+        //     // new
+        //     if (whitelistItem.core.gate.sFarm) {
+        //         const sideFarm = this.handleSideIOC(whitelistItem.core.gate.sFarm);
+        //         const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
+        //             return whitelistItem.core.gate.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
+        //         });
+        //         if (sideFarm && isExitsFarm) {
+        //             this.whitelistEntryFarmIocNew.push({
+        //                 order_price_round: whitelistItem.contractInfo.order_price_round,
+        //                 side: sideFarm,
+        //                 symbol: whitelistItem.core.gate.symbol,
+        //             });
+        //         }
+        //     }
+        //     if (whitelistItem.core.gate.sScalp) {
+        //         const sideScalp = this.handleSideIOC(whitelistItem.core.gate.sScalp);
+        //         const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
+        //             return whitelistItem.core.gate.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
+        //         });
+        //         if (sideScalp && isExitsScalp) {
+        //             this.whitelistEntryScalpIocNew.push({
+        //                 order_price_round: whitelistItem.contractInfo.order_price_round,
+        //                 side: sideScalp,
+        //                 symbol: whitelistItem.core.gate.symbol,
+        //             });
+        //         }
+        //     }
+        //     // old
+        //     // const {
+        //     //     errString: farmErrString,
+        //     //     qualified: qualifiedFarm,
+        //     //     result: resultFarm,
+        //     // } = handleEntryCheckAll2({ flag: "farm", whitelistItem, settingUser: this.settingUser });
+        //     // const {
+        //     //     errString: scalpErrString,
+        //     //     qualified: qualifiedScalp,
+        //     //     result: resultScalp,
+        //     // } = handleEntryCheckAll2({ flag: "scalp", whitelistItem, settingUser: this.settingUser });
+        //     // if (farmErrString || scalpErrString) {
+        //     //     this.logWorker.error(farmErrString ?? scalpErrString);
+        //     //     continue;
+        //     // }
+        //     // if (resultFarm && resultFarm.side) {
+        //     //     const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
+        //     //         return resultFarm.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
+        //     //     });
+        //     //     if (isExitsFarm) {
+        //     //         this.whitelistEntryFarmIoc.push({
+        //     //             symbol: resultFarm.symbol,
+        //     //             sizeStr: `${this.settingUser.sizeIOC}`,
+        //     //             side: resultFarm.side,
+        //     //             askBest: resultFarm.askBest,
+        //     //             bidBest: resultFarm.bidBest,
+        //     //             order_price_round: resultFarm.order_price_round,
+        //     //             lastPriceGate: resultFarm.lastPriceGate,
+        //     //             quanto_multiplier: resultFarm.quanto_multiplier,
+        //     //         });
+        //     //     }
+        //     // }
+        //     // if (qualifiedScalp && resultScalp && resultScalp.side) {
+        //     //     const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
+        //     //         return resultScalp.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
+        //     //     });
+        //     //     if (isExitsScalp) {
+        //     //         this.whitelistEntryScalpIoc.push({
+        //     //             symbol: resultScalp.symbol,
+        //     //             sizeStr: `${this.settingUser.sizeIOC}`,
+        //     //             side: resultScalp.side,
+        //     //             askBest: resultScalp.askBest,
+        //     //             bidBest: resultScalp.bidBest,
+        //     //             order_price_round: resultScalp.order_price_round,
+        //     //             lastPriceGate: resultScalp.lastPriceGate,
+        //     //             quanto_multiplier: resultScalp.quanto_multiplier,
+        //     //         });
+        //     //     }
+        //     // }
+        // }
     }
 
-    private handleSideNew(s: number, prevSide?: TSide, tauExit = 0.05): TSide | null {
-        // if (prevSide === "long" && s > -tauExit) return "long";
-        // if (prevSide === "short" && s < +tauExit) return "short";
+    private handleSideIOC(s: number, keyPrevSidesCount: string, consecutiveN = 3): TSide | null {
+        // lấy / khởi tạo bộ đếm
+        const rec = this.sideCountsIOC.get(keyPrevSidesCount) ?? {
+            keyPrevSidesCount,
+            longHits: 0,
+            shortHits: 0,
+        };
+
+        let out: TSide | null = null;
 
         if (s > 0.1) {
-            return "long";
+            rec.longHits += 1;
+            rec.shortHits = 0;
+
+            if (rec.longHits >= consecutiveN) {
+                this.sideCountsIOC.set(keyPrevSidesCount, rec);
+                this.sendSideCountsIOC();
+
+                rec.longHits = 0; // reset để tránh bắn liên tục mỗi tick
+                this.sideCountsIOC.set(keyPrevSidesCount, rec);
+                out = "long"; // đủ N lần liên tiếp → bật tín hiệu long
+                return out;
+            }
         } else if (s < -0.1) {
-            return "short";
+            rec.shortHits += 1;
+            rec.longHits = 0;
+
+            if (rec.shortHits >= consecutiveN) {
+                this.sideCountsIOC.set(keyPrevSidesCount, rec);
+                this.sendSideCountsIOC();
+
+                rec.shortHits = 0; // reset để tránh bắn liên tục mỗi tick
+                this.sideCountsIOC.set(keyPrevSidesCount, rec);
+                out = "short"; // đủ N lần liên tiếp → bật tín hiệu short
+                return out;
+            }
         } else {
-            return null;
+            // rơi vào dead-band → reset cả hai phía (đếm LIÊN TIẾP đúng nghĩa)
+            rec.longHits = 0;
+            rec.shortHits = 0;
         }
+
+        this.sideCountsIOC.set(keyPrevSidesCount, rec);
+        this.sendSideCountsIOC();
+        return out; // "long" | "short" | null
+    }
+
+    private sendSideCountsIOC() {
+        const payload: TWorkerData<TSideCountsIOCitem[]> = {
+            type: "bot:ioc:sideCount",
+            payload: Array.from(this.sideCountsIOC.values()),
+        };
+        this.parentPort?.postMessage(payload);
     }
 
     private async getCloseOrderPayloads(): Promise<TPayloadOrder[]> {

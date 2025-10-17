@@ -1,6 +1,11 @@
 // main/worker-manager.ts
 import { IS_PRODUCTION } from "@/constant/app.constant";
-import { codeStringCloseAnnouncements, codeStringKillMantineToasts, createCodeStringClickOrder, setLocalStorageScript } from "@/javascript-string/logic-farm";
+import {
+    codeStringCloseAnnouncements,
+    codeStringKillMantineToasts,
+    createCodeStringClickOrder,
+    setLocalStorageScript,
+} from "@/javascript-string/logic-farm";
 import {
     TDataInitBot,
     TFectMainRes,
@@ -175,6 +180,7 @@ export class BotWorkerManager {
                 case "bot:createFixStopLossHistories":
                 case "bot:sticky:set":
                 case "bot:sticky:remove":
+                case "bot:ioc:sideCount":
                 case "bot:sticky:clear": {
                     this.mainWindow.webContents.send(msg.type, withUid);
                     break;
