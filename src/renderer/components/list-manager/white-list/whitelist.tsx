@@ -1,3 +1,4 @@
+import { useGetSideCCC } from "@/api/tanstack/ccc.tanstack";
 import { Badge } from "@/components/ui/badge";
 import { useSocket } from "@/hooks/socket.hook";
 import { cn } from "@/lib/utils";
@@ -6,9 +7,8 @@ import { TSocketRes } from "@/types/base.type";
 import { TWhiteList, TWhitelistUi } from "@/types/white-list.type";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { handleEntryCheckAll, handleEntryCheckAll2 } from "src/main/workers/util-bot.worker";
+import { handleEntryCheckAll2 } from "src/main/workers/util-bot.worker";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../ui/accordion";
-import { useGetSideCCC } from "@/api/tanstack/ccc.tanstack";
 
 export default function Whitelist() {
     const socket = useSocket();
@@ -108,14 +108,14 @@ export default function Whitelist() {
                         <span className="text-sm text-muted-foreground">Spread %:</span>
                         <Badge variant={isSpread ? "default" : "outline"}>{core.gate.spreadPercent?.toFixed(2)}%</Badge>
                     </div>
-                    <div className="flex items-center gap-2 text-sm">
+                    {/* <div className="flex items-center gap-2 text-sm">
                         <span className="text-sm text-muted-foreground">Bid USD:</span>
                         <Badge variant={"outline"}>{core.gate.bidSumDepth}</Badge>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                         <span className="text-sm text-muted-foreground">Ask USD:</span>
                         <Badge variant={"outline"}>{core.gate.askSumDepth}</Badge>
-                    </div>
+                    </div> */}
                     <div className="flex items-center gap-2 text-sm">
                         <span className="text-sm text-muted-foreground">Imbalance Bid:</span>
                         <Badge variant={"outline"}>{core.gate.imbalanceBidPercent?.toFixed(2)}%</Badge>

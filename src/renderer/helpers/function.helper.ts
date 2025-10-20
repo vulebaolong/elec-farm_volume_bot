@@ -108,10 +108,12 @@ export function roleAllowed(roleId: TRole["id"] | undefined): boolean {
     }
 }
 
-export function handleSideNew(s: number): TSide | null {
-    if (s > 0.1) {
+export function handleSideNew(s: number, tauS?: number): TSide | null {
+    if (tauS === undefined || tauS === null) return null;
+
+    if (s > tauS) {
         return "long";
-    } else if (s < -0.1) {
+    } else if (s < -tauS) {
         return "short";
     } else {
         return null;

@@ -1427,7 +1427,7 @@ class Bot {
 
         let out: TSide | null = null;
 
-        if (s > 0.17) {
+        if (s > this.settingUser.tauS) {
             rec.longHits += 1;
             rec.shortHits = 0;
 
@@ -1440,7 +1440,7 @@ class Bot {
                 out = "long"; // đủ N lần liên tiếp → bật tín hiệu long
                 return out;
             }
-        } else if (s < -0.17) {
+        } else if (s < -this.settingUser.tauS) {
             rec.shortHits += 1;
             rec.longHits = 0;
 
@@ -1457,6 +1457,12 @@ class Bot {
             // rơi vào dead-band → reset cả hai phía (đếm LIÊN TIẾP đúng nghĩa)
             rec.longHits = 0;
             rec.shortHits = 0;
+        }
+
+        if (this.settingUser.tauS === undefined && this.settingUser.tauS === null) {
+            rec.longHits = 0;
+            rec.shortHits = 0;
+            out = null;
         }
 
         this.sideCountsIOC.set(keyPrevSidesCount, rec);

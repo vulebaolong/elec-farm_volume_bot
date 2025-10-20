@@ -104,6 +104,8 @@ export const FormSchema = z.object({
 
     delayFarm: intField(0, "Delay Farm (ms)"),
     delayScalp: intField(0, "Delay Scalp (ms)"),
+
+    tauS: numberRange(0, 100, "Tau S"),
 });
 
 const defaultMartingale: MartingaleConfig = {
@@ -175,6 +177,8 @@ export default function SettingAdminUser({ type }: TProps) {
             indexBidAsk: "",
             delayFarm: "",
             delayScalp: "",
+
+            tauS: "",
         },
     });
 
@@ -223,6 +227,8 @@ export default function SettingAdminUser({ type }: TProps) {
 
                 delayFarm: setting.delayFarm ?? "",
                 delayScalp: setting.delayScalp ?? "",
+
+                tauS: setting.tauS ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form, type]);
@@ -275,6 +281,8 @@ export default function SettingAdminUser({ type }: TProps) {
 
             delayFarm: data.delayFarm,
             delayScalp: data.delayScalp,
+
+            tauS: data.tauS,
         };
 
         console.log({ updateSettingUser: payload });
@@ -1289,6 +1297,31 @@ export default function SettingAdminUser({ type }: TProps) {
                             min={1}
                             step={5}
                             clampBehavior="strict"
+                        />
+                    )}
+                />
+
+                {/* tauS */}
+                <Controller
+                    name="tauS"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Tau S"
+                            placeholder="Tau S"
+                            inputWrapperOrder={["label", "input", "description", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.tauS?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            min={0}
+                            step={0.1}
+                            clampBehavior="strict"
+                            description={`<--- Short -${settingUser?.tauS ?? "?"} ..... Hold 0 ..... ${settingUser?.tauS ?? "?"} Long --->`}
                         />
                     )}
                 />

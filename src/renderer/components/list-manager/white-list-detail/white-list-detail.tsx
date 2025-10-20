@@ -116,6 +116,7 @@ export function OrderBook({ asks = [], bids = [], lastPrice, step }: { asks?: Le
 export default function WhiteListDetailAccordion() {
     const whitelistDetail = useAppSelector((state) => state.bot.whitelistDetail) as TWhiteList | undefined;
     const entries = useMemo(() => Object.entries(whitelistDetail ?? {}), [whitelistDetail]);
+    const tauS = useAppSelector((state) => state.user.info?.SettingUsers.tauS);
 
     if (!entries.length)
         return (
@@ -128,8 +129,8 @@ export default function WhiteListDetailAccordion() {
         <div className="max-h-[544px] overflow-y-auto">
             <Accordion multiple={true} chevronPosition="left" radius="md" variant="separated">
                 {entries.map(([symbol, item]) => {
-                    const sideScalp = handleSideNew(item.core.gate.sScalp || 0);
-                    const sideFarm = handleSideNew(item.core.gate.sFarm || 0);
+                    const sideScalp = handleSideNew(item.core.gate.sScalp || 0, tauS);
+                    const sideFarm = handleSideNew(item.core.gate.sFarm || 0, tauS);
 
                     return (
                         <Accordion.Item key={symbol} value={symbol}>
@@ -325,7 +326,7 @@ export default function WhiteListDetailAccordion() {
                                                     <NumberFormatter value={item.core.gate.sScalp || 0} />
                                                 </Text>
                                                 <Text size="xs" c="dimmed">
-                                                    {sideScalp === null ? "#" : sideScalp === "long" ? ">" : "<"} 0.1
+                                                    {sideScalp === null ? "#" : sideScalp === "long" ? ">" : "<"} {tauS}
                                                 </Text>
                                             </Group>
                                             <Badge
@@ -372,7 +373,7 @@ export default function WhiteListDetailAccordion() {
                                                     <NumberFormatter value={item.core.gate.sFarm || 0} />
                                                 </Text>
                                                 <Text size="xs" c="dimmed">
-                                                    {sideFarm === null ? "#" : sideFarm === "long" ? ">" : "<"} 0.1
+                                                    {sideFarm === null ? "#" : sideFarm === "long" ? ">" : "<"} ${tauS}
                                                 </Text>
                                             </Group>
                                             <Badge
