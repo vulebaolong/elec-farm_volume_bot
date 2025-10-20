@@ -1427,7 +1427,7 @@ class Bot {
 
         let out: TSide | null = null;
 
-        if (s > 0.1) {
+        if (s > 0.17) {
             rec.longHits += 1;
             rec.shortHits = 0;
 
@@ -1440,7 +1440,7 @@ class Bot {
                 out = "long"; // đủ N lần liên tiếp → bật tín hiệu long
                 return out;
             }
-        } else if (s < -0.1) {
+        } else if (s < -0.17) {
             rec.shortHits += 1;
             rec.longHits = 0;
 
