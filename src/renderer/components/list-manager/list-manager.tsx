@@ -15,7 +15,7 @@ export default function ListManager() {
                     <WhitelistIoc />
                 </div>
                 <div className="flex-1">
-                    <WhiteListDetail />
+                    {/* <WhiteListDetail /> */}
                 </div>
             </div>
             <div className="flex gap-5 w-full p-5">

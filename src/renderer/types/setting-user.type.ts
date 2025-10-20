@@ -49,6 +49,8 @@ export type TSettingUsers = {
     delayScalp: number;
 
     tauS: number;
+
+    logType: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

@@ -8,7 +8,7 @@ import { EntrySignalMode } from "@/types/enum/entry-signal-mode.enum";
 import { MartingaleConfig, MartingaleOption } from "@/types/martingale.type";
 import { TSettingUsersUpdate } from "@/types/setting-user.type";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Checkbox, Divider, Group, InputLabel, NumberInput, Paper, Radio, Stack, Text } from "@mantine/core";
+import { Checkbox, Divider, Group, InputLabel, NumberInput, Paper, Radio, Select, Stack, Text } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash } from "lucide-react";
 import { useEffect } from "react";
@@ -18,6 +18,7 @@ import { z } from "zod";
 import { Button } from "../ui/button";
 import { ButtonLoading } from "../ui/button-loading";
 import { Form } from "../ui/form";
+import { ELogType, logTypeOptions } from "@/types/enum/log-type.enum";
 
 const numberFromStringOrNumber = z.union([
     z.number(),
@@ -106,6 +107,8 @@ export const FormSchema = z.object({
     delayScalp: intField(0, "Delay Scalp (ms)"),
 
     tauS: numberRange(0, 100, "Tau S"),
+
+    logType: z.enum(ELogType).default(ELogType.Silent),
 });
 
 const defaultMartingale: MartingaleConfig = {
@@ -179,6 +182,8 @@ export default function SettingAdminUser({ type }: TProps) {
             delayScalp: "",
 
             tauS: "",
+
+            logType: ELogType.Silent,
         },
     });
 
@@ -229,6 +234,8 @@ export default function SettingAdminUser({ type }: TProps) {
                 delayScalp: setting.delayScalp ?? "",
 
                 tauS: setting.tauS ?? "",
+
+                logType: setting.logType ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form, type]);
@@ -283,6 +290,8 @@ export default function SettingAdminUser({ type }: TProps) {
             delayScalp: data.delayScalp,
 
             tauS: data.tauS,
+
+            logType: data.logType,
         };
 
         console.log({ updateSettingUser: payload });
@@ -1322,6 +1331,26 @@ export default function SettingAdminUser({ type }: TProps) {
                             step={0.1}
                             clampBehavior="strict"
                             description={`<--- Short -${settingUser?.tauS ?? "?"} ..... Hold 0 ..... ${settingUser?.tauS ?? "?"} Long --->`}
+                        />
+                    )}
+                />
+
+                {/* logType */}
+                <Controller
+                    name="logType"
+                    control={form.control}
+                    render={({ field }) => (
+                        <Select
+                            size="xs"
+                            withAsterisk
+                            label="Log type"
+                            placeholder="Log type"
+                            inputWrapperOrder={["label", "input", "error"]}
+                            data={logTypeOptions}
+                            value={String(field.value) ?? ""}
+                            onChange={(val) => field.onChange(Number(val) ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.logType?.message}
                         />
                     )}
                 />

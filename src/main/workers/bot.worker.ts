@@ -53,6 +53,7 @@ import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
 import { calcSize, handleEntryCheckAll, handleEntryCheckAll2 } from "./util-bot.worker";
 import { TSideCountsIOC, TSideCountsIOCitem } from "@/types/side-count-ioc.type";
+import { ELogType } from "@/types/enum/log-type.enum";
 
 const FLOWS_API = {
     acounts: {
@@ -269,9 +270,16 @@ class Bot {
                             await this.handleWhiteListFarmIocNew(symbol, entry);
                         }
                     }
+
+                    // ===== 4) SL / ROI ===================================================
+                    if (this.isHandleSL()) {
+                        for (const [, pos] of this.positions) {
+                            await this.handleRoi(pos);
+                        }
+                    }
                 }
             } catch (err: any) {
-                this.logWorker.error(err?.message);
+                this.logWorker().error(err?.message);
                 if (this.isTimeoutError(err)) {
                     this.reloadWebContentsViewRequest();
                 }
@@ -290,7 +298,7 @@ class Bot {
         // });
         const account = this.accounts[0];
         if (!account) {
-            this.logWorker.info("account not found");
+            this.logWorker().info("account not found");
             return false;
         }
 
@@ -299,7 +307,7 @@ class Bot {
         if (dualModeExpected === "oneway") {
             if (account.in_dual_mode === true) {
                 await this.handleChangePositionMode({ mode: "oneway" });
-                this.logWorker.info("hedged => oneway");
+                this.logWorker().info("hedged => oneway");
                 return true;
             } else {
                 return true;
@@ -307,7 +315,7 @@ class Bot {
         } else {
             if (account.in_dual_mode === false) {
                 await this.handleChangePositionMode({ mode: "hedged" });
-                this.logWorker.info("oneway => hedged");
+                this.logWorker().info("oneway => hedged");
                 return true;
             } else {
                 return true;
@@ -323,7 +331,7 @@ class Bot {
             if (this.isCheckDelayForPairsMs(keyDelay)) {
                 // const mes = `🔵 Delay Scalp ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
                 // this.logUnique("info", "all", mes);
-                // this.logWorker.info(mes);
+                // this.logWorker().info(mes);
                 return;
             }
         }
@@ -331,7 +339,7 @@ class Bot {
         if (!entry.core.gate.sScalp) {
             const mes = `Skip Scalp ${entrySymbol}: By Not Found sScalp: ${entry.core.gate.sScalp}`;
             // this.logUnique("info", "all", mes);
-            this.logWorker.info(mes);
+            this.logWorker().info(mes);
             return;
         }
 
@@ -342,7 +350,7 @@ class Bot {
         if (!maxSizeScalpIoc) {
             const mes = `Skip Scalp ${entrySymbol}: By Not Found Max Size: ${maxSizeScalpIoc}`;
             // this.logUnique("info", "all", mes);
-            if (this.settingUser.sizeIOC === 6) this.logWorker.info(mes);
+            if (this.settingUser.sizeIOC === 6) this.logWorker().info(mes);
             return;
         }
 
@@ -350,7 +358,7 @@ class Bot {
         if (!sizeScalpIoc) {
             const mes = `Skip Scalp ${entrySymbol}: By Not Found size: ${sizeScalpIoc}`;
             // this.logUnique("info", "all", mes);
-            this.logWorker.info(mes);
+            this.logWorker().info(mes);
             return;
         }
 
@@ -379,7 +387,7 @@ class Bot {
         if (!ok) return;
 
         const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC`);
-        // this.logWorker.info(`🧨 ${entrySymbol} | ${sideScalp} | ${payloadOpenOrder.price}`);
+        // this.logWorker().info(`🧨 ${entrySymbol} | ${sideScalp} | ${payloadOpenOrder.price}`);
 
         this.sideCountsIOC.set(keyPrevSidesCount, { keyPrevSidesCount, longHits: 0, shortHits: 0 });
         this.sendSideCountsIOC();
@@ -396,9 +404,9 @@ class Bot {
         if (this.settingUser.delayFarm > 0) {
             if (this.isCheckDelayForPairsMs(keyDelay)) {
                 const mes = `🔵 Delay Farm ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
-                if (this.settingUser.sizeIOC === 6) this.logWorker.info(mes);
+                if (this.settingUser.sizeIOC === 6) this.logWorker().info(mes);
                 // this.logUnique("info", "all", mes);
-                // this.logWorker.info(mes);
+                // this.logWorker().info(mes);
                 return;
             }
         }
@@ -406,7 +414,7 @@ class Bot {
         if (!entry.core.gate.sFarm) {
             const mes = `Skip Farm ${entrySymbol}: By Not Found sFarm: ${entry.core.gate.sFarm}`;
             // this.logUnique("info", "all", mes);
-            this.logWorker.info(mes);
+            this.logWorker().info(mes);
             return;
         }
 
@@ -422,7 +430,7 @@ class Bot {
         if (!maxSizeFarmIoc) {
             const mes = `Skip Farm ${entrySymbol}: By Not Found Max Size: ${maxSizeFarmIoc}`;
             // this.logUnique("info", "all", mes);
-            this.logWorker.info(mes);
+            this.logWorker().info(mes);
             return;
         }
 
@@ -430,7 +438,7 @@ class Bot {
         if (!sizeFarmIoc) {
             const mes = `Skip Farm ${entrySymbol}: By Not Found size: ${sizeFarmIoc}`;
             // this.logUnique("info", "all", mes);
-            this.logWorker.info(mes);
+            this.logWorker().info(mes);
             return;
         }
 
@@ -465,7 +473,7 @@ class Bot {
         if (!ok) return;
 
         await this.openEntry(payloadOpenOrder, `🧨 Farm IOC`);
-        // this.logWorker.info(`🧨 ${entrySymbol} | ${sideFarm} | ${payloadOpenOrder.price}`);
+        // this.logWorker().info(`🧨 ${entrySymbol} | ${sideFarm} | ${payloadOpenOrder.price}`);
         this.sideCountsIOC.set(keyPrevSidesCount, { keyPrevSidesCount, longHits: 0, shortHits: 0 });
         this.sendSideCountsIOC();
 
@@ -555,10 +563,10 @@ class Bot {
         const sidePosition = position.size > 0 ? "long" : "short";
         const sideShoudBe = sidePosition === "long" ? "short" : "long";
         if (sideShoudBe !== entrySide) {
-            // this.logWorker.info(`${entrySymbol} ${sidePosition} skip by: cần tín hiệu là ${sideShoudBe}`);
+            // this.logWorker().info(`${entrySymbol} ${sidePosition} skip by: cần tín hiệu là ${sideShoudBe}`);
             return false;
         } else {
-            // this.logWorker.info(`${entrySymbol} ${sidePosition} đúng side cần ${sideShoudBe} => tiến hành vào lệnh`);
+            // this.logWorker().info(`${entrySymbol} ${sidePosition} đúng side cần ${sideShoudBe} => tiến hành vào lệnh`);
             return true;
         }
     }
@@ -577,12 +585,12 @@ class Bot {
             const sideShoudBe = sidePosition === "long" ? "short" : "long";
             if (sideShoudBe !== entrySide) {
                 const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): cần tín hiệu là ${sideShoudBe}`;
-                if (this.settingUser.sizeIOC === 5) this.logWorker.info(mes);
+                if (this.settingUser.sizeIOC === 5) this.logWorker().info(mes);
                 // this.logUnique("info", "all", mes);
                 return false;
             } else {
                 const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): đúng side cần ${sideShoudBe} => tiến hành vào lệnh`;
-                if (this.settingUser.sizeIOC === 5) this.logWorker.info(mes);
+                if (this.settingUser.sizeIOC === 5) this.logWorker().info(mes);
                 // this.logUnique("info", "all", mes);
                 return true;
             }
@@ -641,7 +649,7 @@ class Bot {
                     if (this.isTimeoutError(error)) {
                         throw new Error(error);
                     }
-                    this.logWorker.error(error?.message);
+                    this.logWorker().error(error?.message);
                     continue;
                 }
             }
@@ -660,7 +668,7 @@ class Bot {
         // await this.handleGetInfoGate();
         // await this.checkUid();
         // this.getSideCCC();
-        // this.logWorker.log(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
+        // this.logWorker().log(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
         // console.log(`positions`, Object(this.positions).keys());
         // console.log(`orderOpens`, this.orderOpens);
         // console.log(`settingUser`, this.settingUser);
@@ -789,13 +797,13 @@ class Bot {
     private start(isNextPhase = true) {
         this.isStart = true;
         this.parentPort?.postMessage({ type: "bot:start", payload: { isStart: this.isStart, isNextPhase } });
-        this.logWorker.info("🟢 Start");
+        this.logWorker().info("🟢 Start");
     }
 
     private stop() {
         this.isStart = false;
         this.parentPort?.postMessage({ type: "bot:stop", payload: { isStart: this.isStart } });
-        this.logWorker.info("🔴 Stop");
+        this.logWorker().info("🔴 Stop");
     }
 
     private sleep(ms: number) {
@@ -806,7 +814,7 @@ class Bot {
         // return false;
         const isWhiteListEntryEmpty = this.isCheckWhitelistEntryEmty();
         if (isWhiteListEntryEmpty) {
-            this.logWorker.info(`🔵 Create Open: skip White list entry empty: ${this.whitelistEntry.length}`);
+            this.logWorker().info(`🔵 Create Open: skip White list entry empty: ${this.whitelistEntry.length}`);
             return false;
         }
 
@@ -931,7 +939,7 @@ class Bot {
 
         if (code >= 400 || code < 0) {
             const msg = `❌ Change Leverage: ${symbol} | code:${code} | ${message}`;
-            this.logWorker.error(msg);
+            this.logWorker().error(msg);
             return false;
         }
 
@@ -942,14 +950,14 @@ class Bot {
 
         if (data?.[0]?.leverage !== leverageString || data?.[1]?.leverage !== leverageString) {
             const msg = `❌ Change Leverage: ${symbol} | mismatched leverage`;
-            this.logWorker.error(msg);
+            this.logWorker().error(msg);
             return false;
         }
 
         this.changedLaveragelist.delete(symbol);
         this.changedLaveragelist.set(symbol, { symbol, leverage: leverageNumber });
         const msg = `✅ Change Leverage: ${symbol} | ${leverageString}`;
-        this.logWorker.info(msg);
+        this.logWorker().info(msg);
 
         return true;
     }
@@ -980,7 +988,7 @@ class Bot {
 
         if (code >= 400 || code < 0) {
             const msg = `❌ Change Leverage Cross: ${symbol} | code:${code} | ${message}`;
-            this.logWorker.error(msg);
+            this.logWorker().error(msg);
             return false;
         }
 
@@ -991,14 +999,14 @@ class Bot {
 
         if (data?.cross_leverage_limit !== leverageString) {
             const msg = `❌ Change Leverage: ${symbol} | mismatched leverage`;
-            this.logWorker.error(msg);
+            this.logWorker().error(msg);
             return false;
         }
 
         this.changedLaverageCrosslist.delete(symbol);
         this.changedLaverageCrosslist.set(symbol, { symbol, leverage: leverageNumber });
         const msg = `✅ Change Leverage Cross: ${symbol} | ${leverageString}`;
-        this.logWorker.info(msg);
+        this.logWorker().info(msg);
 
         return true;
     }
@@ -1006,7 +1014,7 @@ class Bot {
     private async openEntry(payload: TPayloadOrder, label: string) {
         if (Number(this.accounts[0].available || 0) <= 0) {
             const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${INSUFFICIENT_AVAILABLE}`;
-            this.logWorker.error(msg);
+            this.logWorker().error(msg);
             throw new Error(INSUFFICIENT_AVAILABLE);
         }
 
@@ -1033,9 +1041,9 @@ class Bot {
             // this.rateCounter.stop(); // từ giờ ngừng đếm
 
             const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${body?.message || TOO_MANY_REQUEST}`;
-            this.logWorker.error(msg);
+            this.logWorker().error(msg);
 
-            this.logWorker.warn(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
+            this.logWorker().warn(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
 
             throw new Error(msg);
         }
@@ -1056,7 +1064,7 @@ class Bot {
         }
 
         const status = `✅ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price} | ${body.data.size - body.data.left}`;
-        this.logWorker.info(status);
+        this.logWorker(ELogType.Trade).info(status);
 
         return body.data;
     }
@@ -1198,7 +1206,7 @@ class Bot {
             throw new Error(`🟢 ❌ Click Cancel All Order error: ${error ?? "unknown"} ${body} ${ok}`);
         }
 
-        this.logWorker.info(`✅ ${contract} Cancel All Open: ${body.clicked}`);
+        this.logWorker().info(`✅ ${contract} Cancel All Open: ${body.clicked}`);
         this.removeSticky(`timeout:${contract}`);
 
         return body;
@@ -1238,7 +1246,7 @@ class Bot {
             throw new Error(`🟢 ❌ Click Market Position error: ${error ?? "unknown"} ${body} ${ok}`);
         }
 
-        this.logWorker.info(`✅ 🤷 ${symbol} Click StopLoss Market Position`);
+        this.logWorker().info(`✅ 🤷 ${symbol} Click StopLoss Market Position`);
         return body;
     }
 
@@ -1250,7 +1258,7 @@ class Bot {
         const selectorButtonCloseAllOpenOrder = this.uiSelector?.find((item) => item.code === "buttonCloseAllOpenOrder")?.selectorValue;
 
         if (!selectorButtonTabPosition || !selectorButtonCloseAllPosition || !selectorButtonTabOpenOrder || !selectorButtonCloseAllOpenOrder) {
-            this.logWorker.info(`❌ Not found selector clickClearAll`);
+            this.logWorker().info(`❌ Not found selector clickClearAll`);
             throw new Error(`Not found selector`);
         }
 
@@ -1277,7 +1285,7 @@ class Bot {
             throw new Error(`❌ Click Clear All error: ${error ?? "unknown"} ${body} ${ok}`);
         }
 
-        this.logWorker.info(`✅ Click Clear All`);
+        this.logWorker().info(`✅ Click Clear All`);
 
         return body;
     }
@@ -1305,7 +1313,7 @@ class Bot {
             });
 
             if (errString) {
-                this.logWorker.error(errString);
+                this.logWorker().error(errString);
                 continue;
             } else if (qualified && result && result.side) {
                 this.whitelistEntry.push({
@@ -1377,7 +1385,7 @@ class Bot {
         //     //     result: resultScalp,
         //     // } = handleEntryCheckAll2({ flag: "scalp", whitelistItem, settingUser: this.settingUser });
         //     // if (farmErrString || scalpErrString) {
-        //     //     this.logWorker.error(farmErrString ?? scalpErrString);
+        //     //     this.logWorker().error(farmErrString ?? scalpErrString);
         //     //     continue;
         //     // }
         //     // if (resultFarm && resultFarm.side) {
@@ -1493,7 +1501,7 @@ class Bot {
 
             const infoContract = await this.getInfoContract(contract);
             if (!infoContract) {
-                this.logWorker.error(`❌ getCloseOrderPayloads: infoContract not found: ${contract}`);
+                this.logWorker().error(`❌ getCloseOrderPayloads: infoContract not found: ${contract}`);
                 continue;
             }
             const tickSize = infoContract.order_price_round;
@@ -1505,7 +1513,7 @@ class Bot {
 
             const lastPrice = await this.getLastPrice(contract);
             if (!lastPrice) {
-                this.logWorker.error(`❌ getLastPrice: lastPrice not found: ${contract}`);
+                this.logWorker().error(`❌ getLastPrice: lastPrice not found: ${contract}`);
                 continue;
             }
             this.log(`✅ getLastPrice: lastPrice: ${lastPrice}`);
@@ -1717,7 +1725,7 @@ class Bot {
         const elapsed = Math.max(0, nowSec - createdSec);
 
         // log rõ ràng + đơn vị giây
-        // this.logWorker.info(`⏰ ${contract}: ${elapsed}s / ${timeoutLimit}s`);
+        // this.logWorker().info(`⏰ ${contract}: ${elapsed}s / ${timeoutLimit}s`);
         this.setSticky(`timeout:${contract}`, `${contract}: ${elapsed}s / ${timeoutLimit}s`);
 
         return elapsed >= timeoutLimit;
@@ -1783,7 +1791,7 @@ class Bot {
     private isExitsBlackList(contract: string): boolean {
         // console.log({ blacklist: this.blackList });
         const isExits = this.blackList.includes(contract.replace("/", "_"));
-        // if (isExits) this.logWorker.info(`🔵 ${contract} Exits In BlackList => continue`);
+        // if (isExits) this.logWorker().info(`🔵 ${contract} Exits In BlackList => continue`);
         return isExits;
     }
 
@@ -1843,7 +1851,7 @@ class Bot {
         // 1) lấy info & orderbook
         const info = await this.getInfoContract(symbol);
         if (!info) {
-            this.logWorker.error(`❌ buildClosePayloadsFromExistingTP: infoContract not found: ${symbol}`);
+            this.logWorker().error(`❌ buildClosePayloadsFromExistingTP: infoContract not found: ${symbol}`);
             return [];
         }
 
@@ -1852,7 +1860,7 @@ class Bot {
         const takeProfitArr = all.filter((o) => !this.isSLCloseOrderForPosition(pos, o));
 
         if (takeProfitArr.length === 0) {
-            this.logWorker.info(`${symbol} haved SL orders, skip...`);
+            this.logWorker().info(`${symbol} haved SL orders, skip...`);
             return [];
         }
         // console.log("takeProfitArr: ", takeProfitArr);
@@ -1862,7 +1870,7 @@ class Bot {
         const bestBidL2 = Number(book?.bids?.[1]?.p ?? book?.bids?.[0]?.p);
         const bestAskL2 = Number(book?.asks?.[1]?.p ?? book?.asks?.[0]?.p);
         if (!Number.isFinite(bestBidL2) || !Number.isFinite(bestAskL2)) {
-            this.logWorker.error(`❌ buildClosePayloadsFromExistingTP: invalid L2 book for ${symbol}`);
+            this.logWorker().error(`❌ buildClosePayloadsFromExistingTP: invalid L2 book for ${symbol}`);
             return [];
         }
 
@@ -1890,13 +1898,13 @@ class Bot {
 
         const info = await this.getInfoContract(symbol);
         if (!info) {
-            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get info contract fail`);
+            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get info contract fail`);
             return;
         }
 
         const size = Number(pos.size);
         const entryPrice = Number(pos.entry_price);
-        const leverage = Number(pos.leverage);
+        const initial_margin = Number(pos.initial_margin);
         const quanto = Number(info.quanto_multiplier);
         const lastPrice = Number(await this.getLastPrice(symbol));
         const openTimeSec = Number(pos.open_time); // giây
@@ -1904,47 +1912,41 @@ class Bot {
 
         // Bỏ qua nếu dữ liệu không hợp lệ
         if (!Number.isFinite(size) || size === 0) {
-            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get size ${size} contract fail`);
+            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get size ${size} contract fail`);
             return;
         }
         if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
-            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get entryPrice ${entryPrice} contract fail`);
+            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get entryPrice ${entryPrice} contract fail`);
             return;
         }
-        if (!Number.isFinite(leverage) || leverage <= 0) {
-            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get leverage ${leverage} contract fail`);
+        if (!Number.isFinite(initial_margin) || initial_margin <= 0) {
+            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get initial_margin ${initial_margin} contract fail`);
             return;
         }
         if (!Number.isFinite(quanto) || quanto <= 0) {
-            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get quanto ${quanto} contract fail`);
+            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get quanto ${quanto} contract fail`);
             return;
         }
         if (!Number.isFinite(lastPrice) || lastPrice <= 0) {
-            this.logWorker.error(`🟣 ❌ SL ${symbol}: Get lastPrice ${lastPrice} contract fail`);
+            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get lastPrice ${lastPrice} contract fail`);
             return;
         }
 
-        // let countSLROI = this.listSLROIFailed.get(symbol);
-        // if (!countSLROI) {
-        //     this.listSLROIFailed.set(symbol, { symbol: symbol, count: 0, side: size > 0 ? "long" : "short" });
-        // }
-
-        const initialMargin = (entryPrice * Math.abs(size) * quanto) / leverage;
         const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
-        const returnPercent = (unrealizedPnL / initialMargin) * 100;
+        const returnPercent = (unrealizedPnL / initial_margin) * 100;
 
         const { stopLoss, timeoutEnabled, timeoutMs } = this.settingUser;
         const createdAtMs = openTimeSec > 0 ? openTimeSec * 1000 : nowMs;
         const isSL = returnPercent <= -stopLoss;
         const isTimedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
 
-        this.logWorker.info(`🟣 SL ${symbol}: ${returnPercent.toFixed(2)}%/-${stopLoss}% | isSL=${isSL} && isTimedOut=${isTimedOut}`);
+        this.logWorker().info(`🟣 SL ${symbol}: ${returnPercent.toFixed(2)}%/-${stopLoss}% | isSL=${isSL} && isTimedOut=${isTimedOut}`);
 
         if (!isSL && !isTimedOut) {
             return;
         }
 
-        // this.logWorker.info(
+        // this.logWorker().info(
         //     [
         //         `🟣 ${symbol}`,
         //         `sl: ${returnPercent.toFixed(2)}%/-${stopLoss}%  → ${isSL}`,
@@ -1959,10 +1961,10 @@ class Bot {
         this.handlePushFixStopLossQueue(pos);
 
         // const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
-        // // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
+        // // this.logWorker().info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
 
         // for (const payload of payloads) {
-        //     // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
+        //     // this.logWorker().info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
         //     try {
         //         const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
         //         if (!ok) continue;
@@ -1976,14 +1978,14 @@ class Bot {
         //             throw new Error(error);
         //         }
 
-        //         this.logWorker.error(`🟣 ${error.message}`);
+        //         this.logWorker().error(`🟣 ${error.message}`);
 
         //     }
         // }
 
         // for (const [key, value] of this.listSLROIFailed) {
         //     if (value.count >= 3) {
-        //         this.logWorker.info(`🟣 SL Close Failed: ${key} | ${value.count} | ${value.side}`);
+        //         this.logWorker().info(`🟣 SL Close Failed: ${key} | ${value.count} | ${value.side}`);
         //     }
         // }
 
@@ -2012,7 +2014,7 @@ class Bot {
     }
 
     private reloadWebContentsViewRequest() {
-        this.logWorker.info("🔄 Reload WebContentsView Request");
+        this.logWorker().info("🔄 Reload WebContentsView Request");
         let isStop = false;
         if (this.isStart) {
             this.stop();
@@ -2022,7 +2024,7 @@ class Bot {
     }
 
     private async reloadWebContentsViewResponse({ isStop }: { isStop: boolean }) {
-        this.logWorker.info("🔄 Reload WebContentsView Response");
+        this.logWorker().info("🔄 Reload WebContentsView Response");
         await this.sleep(1000);
         if (isStop) this.start(false);
         this.parentPort?.postMessage({ type: "bot:reloadWebContentsView", payload: true });
@@ -2064,82 +2066,47 @@ class Bot {
                     break;
             }
         } catch (error) {
-            this.logWorker.error(`❌ handleFollowApi: ${String(error)}`);
+            this.logWorker().error(`❌ handleFollowApi: ${String(error)}`);
         }
     }
 
-    private logWorker: LogFunctions = {
-        info: (...params: any[]) => {
+    private shouldEmit(category: ELogType): boolean {
+        const mode = this.settingUser?.logType;
+        switch (mode) {
+            case ELogType.Silent:
+                return false; // tắt hết
+            case ELogType.All:
+                return true; // bật hết
+            case ELogType.Trade:
+                return category === ELogType.Trade; // chỉ log kênh Trade
+            default:
+                return false;
+        }
+    }
+
+    private logWorker(category: ELogType = ELogType.All): LogFunctions {
+        const send = (level: TWorkLog["level"], parts: any[]) => {
+            if (!this.shouldEmit(category)) return;
             const payload: TWorkerData<TWorkLog> = {
                 type: "bot:log",
                 payload: {
-                    level: "info",
-                    text: params.map(String).join(" "),
+                    level,
+                    text: parts.map(String).join(" "),
                 },
             };
             parentPort?.postMessage(payload);
-        },
-        error: (...params: any[]) => {
-            const payload: TWorkerData<TWorkLog> = {
-                type: "bot:log",
-                payload: {
-                    level: "error",
-                    text: params.map(String).join(" "),
-                },
-            };
-            parentPort?.postMessage(payload);
-        },
-        warn: (...params: any[]) => {
-            const payload: TWorkerData<TWorkLog> = {
-                type: "bot:log",
-                payload: {
-                    level: "warn",
-                    text: params.map(String).join(" "),
-                },
-            };
-            parentPort?.postMessage(payload);
-        },
-        debug: (...params: any[]) => {
-            const payload: TWorkerData<TWorkLog> = {
-                type: "bot:log",
-                payload: {
-                    level: "debug",
-                    text: params.map(String).join(" "),
-                },
-            };
-            parentPort?.postMessage(payload);
-        },
-        log: (...params: any[]) => {
-            const payload: TWorkerData<TWorkLog> = {
-                type: "bot:log",
-                payload: {
-                    level: "info",
-                    text: params.map(String).join(" "),
-                },
-            };
-            parentPort?.postMessage(payload);
-        },
-        silly: (...params: any[]) => {
-            const payload: TWorkerData<TWorkLog> = {
-                type: "bot:log",
-                payload: {
-                    level: "silly",
-                    text: params.map(String).join(" "),
-                },
-            };
-            parentPort?.postMessage(payload);
-        },
-        verbose: (...params: any[]) => {
-            const payload: TWorkerData<TWorkLog> = {
-                type: "bot:log",
-                payload: {
-                    level: "verbose",
-                    text: params.map(String).join(" "),
-                },
-            };
-            parentPort?.postMessage(payload);
-        },
-    };
+        };
+
+        return {
+            info: (...p: any[]) => send("info", p),
+            error: (...p: any[]) => send("error", p),
+            warn: (...p: any[]) => send("warn", p),
+            debug: (...p: any[]) => send("debug", p),
+            log: (...p: any[]) => send("info", p),
+            silly: (...p: any[]) => send("silly", p),
+            verbose: (...p: any[]) => send("verbose", p),
+        };
+    }
 
     private logUnique(level: keyof LogFunctions, key: string, ...params: any[]) {
         const text = params.map(String).join(" ");
@@ -2154,7 +2121,7 @@ class Bot {
         this.lastLogs.set(key, text);
 
         // Gọi hàm log chuẩn
-        this.logWorker[level](...params);
+        this.logWorker()[level](...params);
     }
 
     private isTimeoutError(err: any): boolean {
@@ -2198,14 +2165,14 @@ class Bot {
 
         // 1) Không có position -> không cần check SL
         if (this.positions.size === 0) {
-            // this.logWorker.info("🟣 SL: skip — no positions");
+            this.logWorker().info("🟣 SL: skip — no positions");
             console.log("🟣 SL: skip — no positions");
             return false;
         }
 
         // 2) 100 hoặc hơn = tắt SL
         if (sl >= 100) {
-            // this.logWorker.info(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
+            // this.logWorker().info(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
             console.log(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
             return false;
         }
@@ -2254,7 +2221,7 @@ class Bot {
             console.log("getSideCCC: ", data);
             return data.side;
         } catch (error) {
-            this.logWorker.error(`getSideCCC: ${error}`);
+            this.logWorker().error(`getSideCCC: ${error}`);
             return null;
         }
     }
@@ -2418,7 +2385,7 @@ class Bot {
         const historysOrderClose = await this.getHistoryOrderClose(this.dataFixLiquidation.startTimeSec || this.startOfTodayUtcSec(), this.nowSec());
 
         if (!historysOrderClose) {
-            this.logWorker.error(`❌ historyOrderClose is null`);
+            this.logWorker().error(`❌ historyOrderClose is null`);
             return;
         }
 
@@ -2450,13 +2417,13 @@ class Bot {
         }
 
         if (this.dataFixLiquidation.dataLiquidationShouldFix === null) {
-            // this.logWorker.info(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
+            // this.logWorker().info(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
             console.log(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
             return false;
         }
 
         if (this.dataFixLiquidation.dataOrderOpenFixLiquidation) {
-            // this.logWorker.info(`🧨 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
+            // this.logWorker().info(`🧨 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
             console.log(`🧨 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
             return false;
         }
@@ -2502,7 +2469,7 @@ class Bot {
             if (this.isTimeoutError(error)) {
                 throw new Error(error);
             }
-            this.logWorker.error(error?.message);
+            this.logWorker().error(error?.message);
             return false;
         }
     }
@@ -2514,17 +2481,17 @@ class Bot {
         }
 
         if (this.dataFixLiquidation.dataLiquidationShouldFix === null) {
-            // this.logWorker.info(`Skip by listLiquidationShouldFix is null`);
+            // this.logWorker().info(`Skip by listLiquidationShouldFix is null`);
             return;
         }
 
         if (this.dataFixLiquidation.startTimeSec === null) {
-            // this.logWorker.info(`Skip by startTimeSec is null`);
+            // this.logWorker().info(`Skip by startTimeSec is null`);
             return;
         }
 
         if (this.dataFixLiquidation.dataCloseTP === null) {
-            // this.logWorker.info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
+            // this.logWorker().info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
             // console.log(`🧨 Check Liquidation Is Done: Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
             return;
         }
@@ -2535,14 +2502,14 @@ class Bot {
         const historysOrderClose = await this.getHistoryOrderClose(this.dataFixLiquidation.startTimeSec, this.nowSec(), contractCloseTP);
 
         if (!historysOrderClose) {
-            this.logWorker.info(`🧨 historyOrderClose is null`);
+            this.logWorker().info(`🧨 historyOrderClose is null`);
             return;
         }
 
         const hisCloseTPSuccess = historysOrderClose.find((historyOrderClose) => {
             const isFind = historyOrderClose.is_liq === false;
             if (isFind) {
-                // this.logWorker.info(`🔵 ${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
+                // this.logWorker().info(`🔵 ${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
             }
             return isFind;
         });
@@ -2550,13 +2517,13 @@ class Bot {
         const hisPositionFixLiquidation = historysOrderClose.find((historyOrderClose) => {
             const isFind = historyOrderClose.is_liq === true;
             if (isFind) {
-                // this.logWorker.info(`❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
+                // this.logWorker().info(`❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
             }
             return isFind;
         });
 
         if (hisCloseTPSuccess === undefined && hisPositionFixLiquidation === undefined) {
-            // this.logWorker.info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
+            // this.logWorker().info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
             console.log(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
             return;
         }
@@ -2565,11 +2532,11 @@ class Bot {
             const maxStep = (this.settingUser.martingale?.options?.length ?? 0) - 1;
             if (stepNext > maxStep) {
                 stepNext = 0;
-                this.logWorker.info(
+                this.logWorker().info(
                     `🧨 ❌ ${contractShouldFix} Fix thất bại reset step: ${this.dataFixLiquidation.stepFixLiquidation} -> ${stepNext} / ${maxStep}`,
                 );
             } else {
-                this.logWorker.info(
+                this.logWorker().info(
                     `🧨 ❌ ${contractShouldFix} Fix thất bại tăng step: ${this.dataFixLiquidation.stepFixLiquidation} -> ${stepNext} / ${maxStep}`,
                 );
             }
@@ -2585,7 +2552,7 @@ class Bot {
             return;
         }
         if (hisCloseTPSuccess) {
-            this.logWorker.info(`🧨 ✅ ${contractShouldFix} Fix thành công`);
+            this.logWorker().info(`🧨 ✅ ${contractShouldFix} Fix thành công`);
             this.upsertFixLiquidation(true, EStatusFixLiquidation.SUCCESS);
 
             this.dataFixLiquidation.dataLiquidationShouldFix = null;
@@ -2646,11 +2613,11 @@ class Bot {
     }
 
     private isNextPhase(): boolean {
-        // this.logWorker.info(`roi ${this.takeProfitAccount?.roi}%/${this.settingUser.maxRoiNextPhase}%`);
+        // this.logWorker().info(`roi ${this.takeProfitAccount?.roi}%/${this.settingUser.maxRoiNextPhase}%`);
         if (!this.takeProfitAccount) return false;
         if (this.settingUser.maxRoiNextPhase === 0) return false;
         if (this.takeProfitAccount.roi >= this.settingUser.maxRoiNextPhase) {
-            this.logWorker.info(`➡️ Next phase: ${this.takeProfitAccount.roi} >= ${this.settingUser.maxRoiNextPhase}`);
+            this.logWorker().info(`➡️ Next phase: ${this.takeProfitAccount.roi} >= ${this.settingUser.maxRoiNextPhase}`);
             return true;
         }
         return false;
@@ -2663,7 +2630,7 @@ class Bot {
 
         // chốt trước khi chuyển phase
         this.upsertFixLiquidation(false, EStatusFixLiquidation.FAILED);
-        this.logWorker.info("➡️ Next phase 🧨 Reset All Fix Liquidation");
+        this.logWorker().info("➡️ Next phase 🧨 Reset All Fix Liquidation");
         this.dataFixLiquidation.dataLiquidationShouldFix = null;
         this.dataFixLiquidation.dataOrderOpenFixLiquidation = null;
         this.dataFixLiquidation.dataCloseTP = null;
@@ -2673,7 +2640,7 @@ class Bot {
         this.dataFixLiquidation.leverageFix = null;
 
         // chốt trước khi chuyển phase
-        this.logWorker.info("➡️ Next phase 🤷 Reset All Fix StopLoss");
+        this.logWorker().info("➡️ Next phase 🤷 Reset All Fix StopLoss");
         this.fixStopLossQueue = [];
         this.sendFixStopLossQueue();
         this.fixStopLossFailedPassTrue(0);
@@ -2727,14 +2694,14 @@ class Bot {
         }
 
         if (this.fixStopLossQueue.length === 0) {
-            // this.logWorker.info("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
+            // this.logWorker().info("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
             console.log("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
             return;
         }
 
         const itemDataStopLossShouldFix = this.fixStopLossQueue.shift();
         this.sendFixStopLossQueue();
-        // this.logWorker.info(`🤷 itemDataStopLossShouldFix`, itemDataStopLossShouldFix?.contract);
+        // this.logWorker().info(`🤷 itemDataStopLossShouldFix`, itemDataStopLossShouldFix?.contract);
 
         if (!itemDataStopLossShouldFix) {
             console.log("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
@@ -2763,20 +2730,20 @@ class Bot {
         }
 
         if (this.dataFixStopLoss.dataStopLossShouldFix === null) {
-            // this.logWorker.info(`🤷 Create Order Fix StopLoss: Skip by không có để fix`);
+            // this.logWorker().info(`🤷 Create Order Fix StopLoss: Skip by không có để fix`);
             console.log(`🤷 Create Order Fix StopLoss: Skip by không có để fix`);
             return false;
         }
 
         if (this.dataFixStopLoss.dataOrderOpenFixStopLoss) {
-            // this.logWorker.info(`🤷 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
+            // this.logWorker().info(`🤷 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
             console.log(`🤷 Create Order Fix StopLoss: Skip by đã có lệnh chờ để fix, không vào nữa`);
             return false;
         }
 
         if (!this.whiteListMartingale.includes(symbol.replace("/", "_"))) {
             // console.log(`🤷 Create Order Fix StopLoss: Skip by ${symbol} exist whiteListMartingale`);
-            this.logWorker.info(`🤷 Create Order Fix StopLoss: Skip by ${symbol} not exist whiteListMartingale`);
+            this.logWorker().info(`🤷 Create Order Fix StopLoss: Skip by ${symbol} not exist whiteListMartingale`);
             return false;
         }
 
@@ -2824,7 +2791,7 @@ class Bot {
             if (this.isTimeoutError(error)) {
                 throw new Error(error);
             }
-            this.logWorker.error(error?.message);
+            this.logWorker().error(error?.message);
             return false;
         }
     }
@@ -2836,17 +2803,17 @@ class Bot {
         }
 
         if (this.dataFixStopLoss.dataStopLossShouldFix === null) {
-            // this.logWorker.info(`Skip by listLiquidationShouldFix is null`);
+            // this.logWorker().info(`Skip by listLiquidationShouldFix is null`);
             return;
         }
 
         if (this.dataFixStopLoss.startTimeSec === null) {
-            // this.logWorker.info(`Skip by startTimeSec is null`);
+            // this.logWorker().info(`Skip by startTimeSec is null`);
             return;
         }
 
         if (this.dataFixStopLoss.dataCloseTP === null) {
-            // this.logWorker.info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
+            // this.logWorker().info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
             console.log(`🤷 Check Fix StopLoss Is Done: Skip by chưa có lệnh chờ tp của OrderOpenFixStopLoss`);
             return;
         }
@@ -2858,14 +2825,14 @@ class Bot {
         const historysOrderClose = await this.getHistoryOrderClose(this.dataFixStopLoss.startTimeSec, this.nowSec(), contractCloseTP);
 
         if (!historysOrderClose) {
-            this.logWorker.info(`🤷 historyOrderClose StopLoss is null`);
+            this.logWorker().info(`🤷 historyOrderClose StopLoss is null`);
             return;
         }
 
         const hisCloseTPSuccess = historysOrderClose.find((historyOrderClose) => {
             const isFind = historyOrderClose.id_string === idStringCloseTP && historyOrderClose.left === 0;
             if (isFind) {
-                // this.logWorker.info(`🤷 ✅${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
+                // this.logWorker().info(`🤷 ✅${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
             }
             return isFind;
         });
@@ -2873,13 +2840,13 @@ class Bot {
         const hisCloseTPFail = historysOrderClose.find((historyOrderClose) => {
             const isFind = historyOrderClose.id_string === idStringCloseTP && historyOrderClose.left !== 0;
             if (isFind) {
-                // this.logWorker.info(`🤷 ❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
+                // this.logWorker().info(`🤷 ❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
             }
             return isFind;
         });
 
         if (hisCloseTPSuccess === undefined && hisCloseTPFail === undefined) {
-            // this.logWorker.info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
+            // this.logWorker().info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
             console.log(`🤷 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
             return;
         }
@@ -2888,13 +2855,13 @@ class Bot {
             const maxStep = (this.settingUser.martingale?.options?.length ?? 0) - 1;
             if (stepNext > maxStep) {
                 stepNext = 0;
-                this.logWorker.info(
+                this.logWorker().info(
                     `🤷 ❌ ${contractShouldFix} Fix thất bại reset step: ${this.dataFixStopLoss.stepFixStopLoss} -> ${stepNext} / ${maxStep}`,
                 );
                 this.fixStopLossFailedPassTrue(stepNext);
                 return;
             } else {
-                this.logWorker.info(
+                this.logWorker().info(
                     `🤷 ❌ ${contractShouldFix} Fix thất bại tăng step: ${this.dataFixStopLoss.stepFixStopLoss} -> ${stepNext} / ${maxStep}`,
                 );
                 this.fixStopLossFailedPassFalse(stepNext);
@@ -2902,7 +2869,7 @@ class Bot {
             }
         }
         if (hisCloseTPSuccess) {
-            this.logWorker.info(`🤷 ✅ ${contractShouldFix} Fix thành công`);
+            this.logWorker().info(`🤷 ✅ ${contractShouldFix} Fix thành công`);
             this.fixStopLossSuccess();
             return;
         }
@@ -3065,7 +3032,7 @@ class Bot {
         const selectorCheckLogin = this.uiSelector?.find((item) => item.code === "checkLogin")?.selectorValue;
 
         if (!selectorCheckLogin) {
-            this.logWorker.info(`❌ Not found selector checkLogin`);
+            this.logWorker().info(`❌ Not found selector checkLogin`);
             throw new Error(`Not found selector checkLogin`);
         }
 
@@ -3087,7 +3054,7 @@ class Bot {
             throw new Error(`❌ Check Login error: ${error ?? "unknown"} ${body} ${ok}`);
         }
 
-        this.logWorker.info(`✅ Check Login`);
+        this.logWorker().info(`✅ Check Login`);
 
         return body;
     }
@@ -3096,7 +3063,7 @@ class Bot {
         const selectorGetUid = this.uiSelector?.find((item) => item.code === "getUid")?.selectorValue;
 
         if (!selectorGetUid) {
-            this.logWorker.info(`❌ Not found selector getUid`);
+            this.logWorker().info(`❌ Not found selector getUid`);
             throw new Error(`Not found selector getUid`);
         }
 
@@ -3120,12 +3087,12 @@ class Bot {
 
         if (body == null) {
             if (this.uidWeb || this.uidWeb === undefined) {
-                this.logWorker.info("❌ Not logined to gate");
+                this.logWorker().info("❌ Not logined to gate");
             }
             this.uidWeb = null;
         } else {
             if (!this.uidWeb) {
-                this.logWorker.info("✅ Logined to gate");
+                this.logWorker().info("✅ Logined to gate");
             }
             this.uidWeb = Number(body);
         }
@@ -3156,7 +3123,7 @@ class Bot {
 
         if (code >= 400 || code < 0) {
             const msg = `❌ Change Hedge: code:${code} | ${message}`;
-            this.logWorker.error(msg);
+            this.logWorker().error(msg);
             return false;
         }
 
