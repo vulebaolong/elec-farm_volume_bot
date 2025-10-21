@@ -251,3 +251,4 @@ ipcMain.handle("sessions:openPath", async (_e, name: string) => {
     await openSessionFolder(name);
     return { ok: true };
 });
+
