@@ -25,14 +25,14 @@ export default function Bot() {
                 <Controll />
                 {roleAllowed(info?.roleId) ? (
                     <>
-                        <RateCounter />
-                        <FixLiquidation />
-                        <FixStopLoss />
+                        {/* <FixLiquidation /> */}
+                        {/* <FixStopLoss /> */}
                         <SideCountIoc />
                         <Log />
-                        <PassiveSticky />
+                        {/* <PassiveSticky /> */}
                         <TakeprofitAccount />
-                        <SessionsManager />
+                        <RateCounter />
+                        {/* <SessionsManager /> */}
                     </>
                 ) : (
                     <>

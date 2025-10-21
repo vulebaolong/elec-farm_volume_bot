@@ -89,7 +89,7 @@ parentPort!.on("message", (msg: any) => {
                 type: "bot:log",
                 payload: {
                     level: "info",
-                    text: "6) ✅ bot:init - received",
+                    text: `6) ✅ bot:init - received  | PID: ${process.pid}`,
                 },
             };
             parentPort?.postMessage(payload);
@@ -329,35 +329,35 @@ class Bot {
 
         if (this.settingUser.delayScalp > 0) {
             if (this.isCheckDelayForPairsMs(keyDelay)) {
-                // const mes = `🔵 Delay Scalp ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
-                // this.logUnique("info", "all", mes);
-                // this.logWorker().info(mes);
+                const mes = `🔵 Delay Scalp ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
+                this.logWorker().info(mes);
                 return;
             }
         }
 
         if (!entry.core.gate.sScalp) {
             const mes = `Skip Scalp ${entrySymbol}: By Not Found sScalp: ${entry.core.gate.sScalp}`;
-            // this.logUnique("info", "all", mes);
             this.logWorker().info(mes);
             return;
         }
 
         const sideScalp = this.handleSideIOC(entry.core.gate.sScalp, keyPrevSidesCount);
-        if (sideScalp === null) return;
+        if (sideScalp === null) {
+            const mes = `Skip Scalp ${entrySymbol}: By Hold`;
+            this.logWorker().info(mes);
+            return;
+        }
 
         const maxSizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
         if (!maxSizeScalpIoc) {
             const mes = `Skip Scalp ${entrySymbol}: By Not Found Max Size: ${maxSizeScalpIoc}`;
-            // this.logUnique("info", "all", mes);
-            if (this.settingUser.sizeIOC === 6) this.logWorker().info(mes);
+            this.logWorker().info(mes);
             return;
         }
 
         let sizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
         if (!sizeScalpIoc) {
             const mes = `Skip Scalp ${entrySymbol}: By Not Found size: ${sizeScalpIoc}`;
-            // this.logUnique("info", "all", mes);
             this.logWorker().info(mes);
             return;
         }
@@ -388,7 +388,6 @@ class Bot {
 
         const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC`);
         // this.logWorker().info(`🧨 ${entrySymbol} | ${sideScalp} | ${payloadOpenOrder.price}`);
-
         this.sideCountsIOC.set(keyPrevSidesCount, { keyPrevSidesCount, longHits: 0, shortHits: 0 });
         this.sendSideCountsIOC();
 
@@ -404,32 +403,27 @@ class Bot {
         if (this.settingUser.delayFarm > 0) {
             if (this.isCheckDelayForPairsMs(keyDelay)) {
                 const mes = `🔵 Delay Farm ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
-                if (this.settingUser.sizeIOC === 6) this.logWorker().info(mes);
-                // this.logUnique("info", "all", mes);
-                // this.logWorker().info(mes);
+                this.logWorker().info(mes);
                 return;
             }
         }
 
         if (!entry.core.gate.sFarm) {
             const mes = `Skip Farm ${entrySymbol}: By Not Found sFarm: ${entry.core.gate.sFarm}`;
-            // this.logUnique("info", "all", mes);
             this.logWorker().info(mes);
             return;
         }
 
-        // const prevSide = this.prevSides.get(keyPrevSide);
         const sideFarm = this.handleSideIOC(entry.core.gate.sFarm, keyPrevSidesCount);
         if (sideFarm === null) {
-            // this.prevSides.delete(keyPrevSide);
+            const mes = `Skip Farm ${entrySymbol}: By Hold`;
+            this.logWorker().info(mes);
             return;
         }
-        // this.prevSides.set(keyPrevSide, sideFarm);
 
         const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
         if (!maxSizeFarmIoc) {
             const mes = `Skip Farm ${entrySymbol}: By Not Found Max Size: ${maxSizeFarmIoc}`;
-            // this.logUnique("info", "all", mes);
             this.logWorker().info(mes);
             return;
         }
@@ -437,7 +431,6 @@ class Bot {
         let sizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
         if (!sizeFarmIoc) {
             const mes = `Skip Farm ${entrySymbol}: By Not Found size: ${sizeFarmIoc}`;
-            // this.logUnique("info", "all", mes);
             this.logWorker().info(mes);
             return;
         }
@@ -456,7 +449,7 @@ class Bot {
             price = insidePrices.at(-1);
             if (!price) {
                 const mes = `Skip Farm ${entrySymbol}: by not found price: ${price}`;
-                this.logUnique("info", "all", mes);
+                this.logWorker().info(mes);
                 return;
             }
         }
@@ -1425,7 +1418,8 @@ class Bot {
         // }
     }
 
-    private handleSideIOC(s: number, keyPrevSidesCount: string, consecutiveN = 3): TSide | null {
+    private handleSideIOC(s: number, keyPrevSidesCount: string): TSide | null {
+        const stepS = this.settingUser.stepS
         // lấy / khởi tạo bộ đếm
         const rec = this.sideCountsIOC.get(keyPrevSidesCount) ?? {
             keyPrevSidesCount,
@@ -1439,7 +1433,7 @@ class Bot {
             rec.longHits += 1;
             rec.shortHits = 0;
 
-            if (rec.longHits >= consecutiveN) {
+            if (rec.longHits >= stepS) {
                 this.sideCountsIOC.set(keyPrevSidesCount, rec);
                 this.sendSideCountsIOC();
 
@@ -1452,7 +1446,7 @@ class Bot {
             rec.shortHits += 1;
             rec.longHits = 0;
 
-            if (rec.shortHits >= consecutiveN) {
+            if (rec.shortHits >= stepS) {
                 this.sideCountsIOC.set(keyPrevSidesCount, rec);
                 this.sendSideCountsIOC();
 
@@ -1479,9 +1473,13 @@ class Bot {
     }
 
     private sendSideCountsIOC() {
-        const payload: TWorkerData<TSideCountsIOCitem[]> = {
+        const payload: TWorkerData<{ sideCountItem: TSideCountsIOCitem[]; tauS: number, stepS: number }> = {
             type: "bot:ioc:sideCount",
-            payload: Array.from(this.sideCountsIOC.values()),
+            payload: {
+                tauS: this.settingUser.tauS,
+                sideCountItem: Array.from(this.sideCountsIOC.values()),
+                stepS: this.settingUser.stepS,
+            },
         };
         this.parentPort?.postMessage(payload);
     }
@@ -1894,8 +1892,17 @@ class Bot {
     }
 
     private async handleRoi(pos: TPosition): Promise<void> {
+        const { stopLoss, stopLossUsdtPnl, timeoutEnabled, timeoutMs } = this.settingUser;
+
+        // Nếu stopLoss = 100 (OFF) & stopLossUsdtPnl = 0 (OFF) => bỏ qua
+        if (stopLoss >= 100 && stopLossUsdtPnl <= 0) {
+            this.logWorker().info(`🟣 SL: skip — stopLoss=${stopLoss} >=100 & stopLossUsdtPnl=${stopLossUsdtPnl} <=0`);
+            return;
+        }
+
         const symbol = pos.contract.replace("/", "_");
 
+        // 🔹 Lấy thông tin hợp đồng
         const info = await this.getInfoContract(symbol);
         if (!info) {
             this.logWorker().error(`🟣 ❌ SL ${symbol}: Get info contract fail`);
@@ -1907,87 +1914,78 @@ class Bot {
         const initial_margin = Number(pos.initial_margin);
         const quanto = Number(info.quanto_multiplier);
         const lastPrice = Number(await this.getLastPrice(symbol));
-        const openTimeSec = Number(pos.open_time); // giây
+        const openTimeSec = Number(pos.open_time);
         const nowMs = Date.now();
 
-        // Bỏ qua nếu dữ liệu không hợp lệ
+        // 🔹 Kiểm tra dữ liệu hợp lệ
         if (!Number.isFinite(size) || size === 0) {
-            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get size ${size} contract fail`);
-            return;
+            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid size=${size}`);
         }
         if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
-            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get entryPrice ${entryPrice} contract fail`);
-            return;
+            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid entryPrice=${entryPrice}`);
         }
         if (!Number.isFinite(initial_margin) || initial_margin <= 0) {
-            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get initial_margin ${initial_margin} contract fail`);
-            return;
+            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid initial_margin=${initial_margin}`);
         }
         if (!Number.isFinite(quanto) || quanto <= 0) {
-            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get quanto ${quanto} contract fail`);
-            return;
+            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid quanto=${quanto}`);
         }
         if (!Number.isFinite(lastPrice) || lastPrice <= 0) {
-            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get lastPrice ${lastPrice} contract fail`);
-            return;
+            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid lastPrice=${lastPrice}`);
         }
 
+        // 🔹 Tính toán PnL và ROI
         const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
         const returnPercent = (unrealizedPnL / initial_margin) * 100;
-
-        const { stopLoss, timeoutEnabled, timeoutMs } = this.settingUser;
         const createdAtMs = openTimeSec > 0 ? openTimeSec * 1000 : nowMs;
-        const isSL = returnPercent <= -stopLoss;
-        const isTimedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
 
-        this.logWorker().info(`🟣 SL ${symbol}: ${returnPercent.toFixed(2)}%/-${stopLoss}% | isSL=${isSL} && isTimedOut=${isTimedOut}`);
+        // 🔹 Kiểm tra điều kiện StopLoss
+        let isSL = false;
+        let reason = "";
 
-        if (!isSL && !isTimedOut) {
-            return;
+        const validSLPercent = stopLoss < 100; // stopLoss (%) hợp lệ
+        const validSLUsdt = stopLossUsdtPnl > 0; // stopLoss theo USDT hợp lệ
+
+        // So sánh phần trăm
+        if (validSLPercent && returnPercent <= -stopLoss) {
+            isSL = true;
+            reason = `ROI=${returnPercent.toFixed(2)}% (<= -${stopLoss}%)`;
         }
 
-        // this.logWorker().info(
-        //     [
-        //         `🟣 ${symbol}`,
-        //         `sl: ${returnPercent.toFixed(2)}%/-${stopLoss}%  → ${isSL}`,
-        //         `timeout: ${timeoutEnabled ? "ON" : "OFF"} (${((nowMs - createdAtMs) / 1000).toFixed(1)}s / ${(timeoutMs / 1000).toFixed(1)}s) → ${isTimedOut}`,
-        //         `${size > 0 ? "long" : "short"}  ${size}`,
-        //         // `entry: ${entryPrice}  last: ${lastPrice}  lev: ${leverage}x  quanto: ${quanto}`,
-        //     ].join(" | "),
-        // );
+        // So sánh theo USD nếu chưa kích hoạt bởi %
+        if (!isSL && validSLUsdt && unrealizedPnL <= -stopLossUsdtPnl) {
+            isSL = true;
+            reason = `PnL=${unrealizedPnL.toFixed(2)} (<= -${stopLossUsdtPnl})`;
+        }
 
+        // Nếu cả hai hợp lệ thì xét cái nào đến trước
+        if (validSLPercent && validSLUsdt) {
+            const hitByPercent = returnPercent <= -stopLoss;
+            const hitByUsdt = unrealizedPnL <= -stopLossUsdtPnl;
+            if (hitByPercent || hitByUsdt) {
+                isSL = true;
+                reason = hitByPercent
+                    ? `ROI=${returnPercent.toFixed(2)}% (<= -${stopLoss}%)`
+                    : `PnL=${unrealizedPnL.toFixed(2)} (<= -${stopLossUsdtPnl})`;
+            }
+        }
+
+        // 🔹 Kiểm tra timeout (nếu bật)
+        const isTimedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
+
+        this.logWorker().info(
+            `🟣 SL ${symbol}: ROI=${returnPercent.toFixed(2)}% | PnL=${unrealizedPnL.toFixed(2)} | SL%=${stopLoss} | SL$=${stopLossUsdtPnl} | ` +
+                `isSL=${isSL} (${reason || "none"}) | isTimedOut=${isTimedOut}`,
+        );
+
+        // 🔹 Không có điều kiện nào kích hoạt → return
+        if (!isSL && !isTimedOut) return;
+
+        // 🔹 Kích hoạt StopLoss
         await this.clickMarketPostion(pos.contract, Number(pos.size) > 0 ? "long" : "short");
 
+        // 🔹 Ghi vào hàng đợi StopLossQueue
         this.handlePushFixStopLossQueue(pos);
-
-        // const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
-        // // this.logWorker().info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
-
-        // for (const payload of payloads) {
-        //     // this.logWorker().info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
-        //     try {
-        //         const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
-        //         if (!ok) continue;
-        //         await this.openEntry(payload, "SL: Close");
-        //         this.listSLROIFailed.delete(symbol);
-        //     } catch (error: any) {
-        //         if (error?.message === INSUFFICIENT_AVAILABLE) {
-        //             throw new Error(error);
-        //         }
-        //         if (this.isTimeoutError(error)) {
-        //             throw new Error(error);
-        //         }
-
-        //         this.logWorker().error(`🟣 ${error.message}`);
-
-        //     }
-        // }
-
-        // for (const [key, value] of this.listSLROIFailed) {
-        //     if (value.count >= 3) {
-        //         this.logWorker().info(`🟣 SL Close Failed: ${key} | ${value.count} | ${value.side}`);
-        //     }
-        // }
 
         return;
     }
@@ -2108,22 +2106,6 @@ class Bot {
         };
     }
 
-    private logUnique(level: keyof LogFunctions, key: string, ...params: any[]) {
-        const text = params.map(String).join(" ");
-
-        const last = this.lastLogs.get(key);
-        if (last === text) {
-            // Bỏ qua nếu log giống hệt lần trước
-            return;
-        }
-
-        // Lưu log mới
-        this.lastLogs.set(key, text);
-
-        // Gọi hàm log chuẩn
-        this.logWorker()[level](...params);
-    }
-
     private isTimeoutError(err: any): boolean {
         const TIMEOUT_PATTERNS = [
             /\btime(?:d\s*)?out\b/i, // timeout, timed out, time out
@@ -2160,20 +2142,10 @@ class Bot {
     }
 
     private isHandleSL() {
-        const raw = this.settingUser?.stopLoss;
-        const sl = Number(raw);
-
         // 1) Không có position -> không cần check SL
         if (this.positions.size === 0) {
             this.logWorker().info("🟣 SL: skip — no positions");
             console.log("🟣 SL: skip — no positions");
-            return false;
-        }
-
-        // 2) 100 hoặc hơn = tắt SL
-        if (sl >= 100) {
-            // this.logWorker().info(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
-            console.log(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
             return false;
         }
 

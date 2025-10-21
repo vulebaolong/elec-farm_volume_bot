@@ -69,6 +69,7 @@ export const FormSchema = z.object({
     sizeIOC: intField(1, "size IOC"),
     takeProfit: positiveNumber("Take Profit"),
     stopLoss: positiveNumber("Stop Loss"),
+    stopLossUsdtPnl: intField(0, "Stop Loss Usdt Pnl"),
     timeoutMs: intField(1, "Timeout (ms)"),
     timeoutEnabled: z.boolean(),
     minSpreadPercent: numberRange(0, 100, "Min Spread %"),
@@ -109,6 +110,8 @@ export const FormSchema = z.object({
     tauS: numberRange(0, 100, "Tau S"),
 
     logType: z.enum(ELogType).default(ELogType.Silent),
+
+    stepS: intField(1, "Step S"),
 });
 
 const defaultMartingale: MartingaleConfig = {
@@ -146,6 +149,7 @@ export default function SettingAdminUser({ type }: TProps) {
             sizeIOC: "",
             takeProfit: "",
             stopLoss: "",
+            stopLossUsdtPnl: "",
             timeoutMs: "",
             timeoutEnabled: false,
             minSpreadPercent: "",
@@ -184,6 +188,8 @@ export default function SettingAdminUser({ type }: TProps) {
             tauS: "",
 
             logType: ELogType.Silent,
+
+            stepS: "",
         },
     });
 
@@ -197,6 +203,7 @@ export default function SettingAdminUser({ type }: TProps) {
                 sizeIOC: setting.sizeIOC ?? "",
                 takeProfit: setting.takeProfit ?? "",
                 stopLoss: setting.stopLoss ?? "",
+                stopLossUsdtPnl: setting.stopLossUsdtPnl ?? "",
                 timeoutMs: setting.timeoutMs ?? "",
                 timeoutEnabled: setting.timeoutEnabled ?? false,
                 minSpreadPercent: setting.minSpreadPercent ?? "",
@@ -236,6 +243,8 @@ export default function SettingAdminUser({ type }: TProps) {
                 tauS: setting.tauS ?? "",
 
                 logType: setting.logType ?? "",
+
+                stepS: setting.stepS ?? "",
             });
         }
     }, [settingUser, getSettingUserById.data, form, type]);
@@ -253,6 +262,7 @@ export default function SettingAdminUser({ type }: TProps) {
             sizeIOC: data.sizeIOC,
             takeProfit: data.takeProfit,
             stopLoss: data.stopLoss,
+            stopLossUsdtPnl: data.stopLossUsdtPnl,
             timeoutMs: data.timeoutMs,
             timeoutEnabled: data.timeoutEnabled,
             minSpreadPercent: data.minSpreadPercent,
@@ -292,6 +302,8 @@ export default function SettingAdminUser({ type }: TProps) {
             tauS: data.tauS,
 
             logType: data.logType,
+
+            stepS: data.stepS,
         };
 
         console.log({ updateSettingUser: payload });
@@ -365,7 +377,33 @@ export default function SettingAdminUser({ type }: TProps) {
                             min={0}
                             step={0.1}
                             clampBehavior="strict"
-                            description={"If 100 OFF SL | 1 = 1%"}
+                            description={"If 100 is OFF Stoploss"}
+                        />
+                    )}
+                />
+
+                {/* stopLossUsdtPnl */}
+                <Controller
+                    name="stopLossUsdtPnl"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Stop Loss USDT PNL"
+                            placeholder="Stop Loss USDT PNL"
+                            inputWrapperOrder={["label", "input", "description", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.stopLossUsdtPnl?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            suffix=" USDT"
+                            min={0}
+                            step={0.1}
+                            clampBehavior="strict"
+                            description={"If 0 is OFF Stoploss USDT PNL"}
                         />
                     )}
                 />
@@ -1351,6 +1389,30 @@ export default function SettingAdminUser({ type }: TProps) {
                             onChange={(val) => field.onChange(Number(val) ?? "")}
                             onBlur={field.onBlur}
                             error={form.formState.errors.logType?.message}
+                        />
+                    )}
+                />
+
+                {/* stepS */}
+                <Controller
+                    name="stepS"
+                    control={form.control}
+                    render={({ field }) => (
+                        <NumberInput
+                            size="xs"
+                            withAsterisk
+                            label="Step S"
+                            placeholder="Step S"
+                            inputWrapperOrder={["label", "input", "description", "error"]}
+                            value={field.value ?? ""}
+                            onChange={(val) => field.onChange(val ?? "")}
+                            onBlur={field.onBlur}
+                            error={form.formState.errors.stepS?.message}
+                            decimalSeparator="."
+                            thousandSeparator=","
+                            min={0}
+                            step={1}
+                            clampBehavior="strict"
                         />
                     )}
                 />

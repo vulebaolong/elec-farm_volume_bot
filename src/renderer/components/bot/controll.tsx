@@ -27,9 +27,7 @@ export default function Controll({}: TProps) {
     const updateTakeProfitAccount = useUpdateTakeProfitAccount();
     const upsertAccount = useUpsertAccount();
 
-    const start = () => {
-        window.electron?.ipcRenderer.sendMessage("bot:start");
-    };
+    const start = () => window.electron?.ipcRenderer.sendMessage("bot:start");
     const stop = () => window.electron?.ipcRenderer.sendMessage("bot:stop");
     const reloadWebContentsView = () => {
         window.electron?.ipcRenderer.sendMessage("bot:reloadWebContentsView");
@@ -54,12 +52,28 @@ export default function Controll({}: TProps) {
                 const unrealised_pnl = data.payload[0].unrealised_pnl;
                 const newTotal = accountEquity(total, unrealised_pnl);
 
-                updateTakeProfitAccount.mutate({
-                    id: takeprofitAccountNewRef.current.id,
-                    data: {
-                        newTotal: newTotal,
+                updateTakeProfitAccount.mutate(
+                    {
+                        id: takeprofitAccountNewRef.current.id,
+                        data: {
+                            newTotal: newTotal,
+                            source: "gate",
+                            uid: accountRef.current.user,
+                        },
                     },
-                });
+                    {
+                        onSuccess: (data) => {
+                            if (takeprofitAccountNewRef.current) {
+                                takeprofitAccountNewRef.current.id = data.data;
+                            }
+                        },
+                        onError: (error: any) => {
+                            if (error?.response?.data?.message === "TakeProfitAccount not found") {
+                                takeprofitAccountNewRef.current = null;
+                            }
+                        },
+                    },
+                );
             }
         });
 
@@ -96,6 +110,7 @@ export default function Controll({}: TProps) {
 
         const offBotStop = window.electron.ipcRenderer.on("bot:stop", (data: TWorkerData<{ isStart: boolean }>) => {
             dispatch(SET_IS_START(data.payload.isStart));
+            takeprofitAccountNewRef.current = null;
         });
 
         const offReloadWebContentsView = window.electron.ipcRenderer.on("bot:reloadWebContentsView", (data: TWorkerData<{ isStart: boolean }>) => {
@@ -176,51 +191,6 @@ export default function Controll({}: TProps) {
                                 {isChildView ? "Close Web" : "Open Web"}
                             </Button>
                         </Group>
-
-                        {/* <Group>
-                            <Button
-                                size={"xs"}
-                                radius={"md"}
-                                variant="default"
-                                onClick={() => {
-                                    window.electron?.ipcRenderer.sendMessage("bot:ioc:hedge");
-                                }}
-                            >
-                                hedge
-                            </Button>
-
-                            <Button
-                                size={"xs"}
-                                radius={"md"}
-                                variant="default"
-                                onClick={() => {
-                                    window.electron?.ipcRenderer.sendMessage("bot:ioc:oneway");
-                                }}
-                            >
-                                oneway
-                            </Button>
-
-                            <Button
-                                size={"xs"}
-                                radius={"md"}
-                                variant="default"
-                                onClick={() => {
-                                    window.electron?.ipcRenderer.sendMessage("bot:ioc:long");
-                                }}
-                            >
-                                ioc long
-                            </Button>
-                            <Button
-                                size={"xs"}
-                                radius={"md"}
-                                variant="default"
-                                onClick={() => {
-                                    window.electron?.ipcRenderer.sendMessage("bot:ioc:short");
-                                }}
-                            >
-                                ioc short
-                            </Button>
-                        </Group> */}
                     </Stack>
                 </Stack>
             </Paper>

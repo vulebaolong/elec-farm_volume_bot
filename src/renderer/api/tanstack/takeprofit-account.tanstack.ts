@@ -48,7 +48,7 @@ export const useUpdateTakeProfitAccount = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (payload: TUpdateTakeprofitAccountReq) => {
-            const { data } = await api.patch<TRes<boolean>>(`${ENDPOINT.TAKEPROFIT_ACCOUNT.UPDATE}/${payload.id}`, payload.data);
+            const { data } = await api.patch<TRes<TTakeprofitAccount["id"]>>(`${ENDPOINT.TAKEPROFIT_ACCOUNT.UPDATE}/${payload.id}`, payload.data);
             return data;
         },
         onSuccess: () => {
@@ -57,6 +57,23 @@ export const useUpdateTakeProfitAccount = () => {
         onError: (error) => {
             console.log({ useCreateTakeProfitAccount: error });
             toast.error(resError(error, `Update Takeprofit Account Failed`));
+        },
+    });
+};
+
+export const useClearAllTakeProfitAccount = () => {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async () => {
+            const { data } = await api.post<TRes<boolean>>(ENDPOINT.TAKEPROFIT_ACCOUNT.CLEAR_ALL);
+            return data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: [`get-takeprofit-account`] });
+        },
+        onError: (error) => {
+            console.log({ useClearAllTakeProfitAccount: error });
+            toast.error(resError(error, `Clear All Takeprofit Account Failed`));
         },
     });
 };

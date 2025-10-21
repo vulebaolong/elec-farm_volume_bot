@@ -8,20 +8,17 @@ type SideCountItem = {
 };
 type WorkerMsg = {
     type: "bot:ioc:sideCount";
-    payload: SideCountItem[];
+    payload: { sideCountItem: SideCountItem[]; tauS: number; stepS: number };
     uid: number;
 };
 
-const N_STEPS = 3; // số nấc mỗi phía
 const STEP_VALUE = 10; // % mỗi nấc (3 nấc = 30%)
-const CENTER_VALUE = 40; // % dead-band
 const DISABLED = "gray";
 const GREEN = "green";
 const RED = "red";
 
 // Vị trí mốc theo %
-const LEFT_MARK = N_STEPS * STEP_VALUE; // -0.1  -> 30%
-const RIGHT_MARK = N_STEPS * STEP_VALUE + CENTER_VALUE; // +0.1  -> 70%
+
 const ZERO_MARK = 50; // 0     -> 50%
 
 function symbolFromKey(key: string) {
@@ -31,16 +28,35 @@ function symbolFromKey(key: string) {
 
 export default function SideCountIoc() {
     const [rows, setRows] = useState<Record<string, SideCountItem>>({});
+    const [tauS, setTauS] = useState<number>(0);
+    const [N_STEPS, setN_STEPS] = useState(1);
+
+    // 🧮 Tính toán STEP_VALUE và CENTER_VALUE động
+    const SIDE_PERCENT = 30; // tổng phần trăm mỗi bên
+    const STEP_VALUE = SIDE_PERCENT / N_STEPS;
+    const CENTER_VALUE = 100 - SIDE_PERCENT * 2; // luôn 40%
+
+    // Các mốc trái/phải
+    const LEFT_MARK = SIDE_PERCENT; // 30%
+    const RIGHT_MARK = 100 - SIDE_PERCENT; // 70%
 
     useEffect(() => {
         const off = window.electron.ipcRenderer.on("bot:ioc:sideCount", (msg: WorkerMsg) => {
+            if (tauS !== msg.payload.tauS) {
+                setTauS(msg.payload.tauS);
+            }
+            if (tauS !== msg.payload.stepS) {
+                setN_STEPS(msg.payload.stepS);
+            }
             setRows((prev) => {
                 const next = { ...prev };
-                for (const it of msg.payload || []) next[it.keyPrevSidesCount] = it;
+                for (const it of msg.payload.sideCountItem || []) next[it.keyPrevSidesCount] = it;
                 return next;
             });
         });
-        return () => off?.();
+        return () => {
+            off?.();
+        };
     }, []);
 
     const list = useMemo(() => Object.values(rows), [rows]);
@@ -56,28 +72,30 @@ export default function SideCountIoc() {
                 const l = Math.max(0, Math.min(N_STEPS, it.longHits | 0));
                 const s = Math.max(0, Math.min(N_STEPS, it.shortHits | 0));
 
-                const shortSections = [
-                    { value: STEP_VALUE, color: s >= 3 ? `${RED}.9` : `${DISABLED}.9`, key: "s3" },
-                    { value: STEP_VALUE, color: s >= 2 ? `${RED}.7` : `${DISABLED}.8`, key: "s2" },
-                    { value: STEP_VALUE, color: s >= 1 ? `${RED}.5` : `${DISABLED}.7`, key: "s1" },
-                ];
+                const shortSections = Array.from({ length: N_STEPS }, (_, i) => {
+                    const level = i + 1;
+                    return {
+                        value: STEP_VALUE,
+                        color: s >= level ? `${RED}.9` : `${DISABLED}.7`,
+                        key: `s${level}`,
+                    };
+                }).reverse();
                 const centerSection = [{ value: CENTER_VALUE, color: DISABLED, key: "c" }];
-                const longSections = [
-                    { value: STEP_VALUE, color: l >= 1 ? `${GREEN}.5` : `${DISABLED}.7`, key: "l1" },
-                    { value: STEP_VALUE, color: l >= 2 ? `${GREEN}.7` : `${DISABLED}.8`, key: "l2" },
-                    { value: STEP_VALUE, color: l >= 3 ? `${GREEN}.9` : `${DISABLED}.9`, key: "l3" },
-                ];
+                const longSections = Array.from({ length: N_STEPS }, (_, i) => {
+                    const level = i + 1; // step bắt đầu từ 1
+                    return {
+                        value: STEP_VALUE,
+                        // Nếu đã đạt tới level thì dùng màu xanh, ngược lại là màu mờ
+                        color: l >= level ? `${GREEN}.${5 + (level - 1) * 2}` : `${DISABLED}.${7 + (level - 1) * 0.5}`,
+                        key: `l${level}`,
+                    };
+                });
 
                 return (
                     <Box key={it.keyPrevSidesCount} mb="md">
-                        <Group mb={6}>
-                            <Text size="xs" fw={600}>
-                                {sym}
-                            </Text>
-                            <Text size="xs" c="dimmed">
-                                S:{it.shortHits} | L:{it.longHits}
-                            </Text>
-                        </Group>
+                        <Text size="xs" fw={600}>
+                            {sym}
+                        </Text>
 
                         {/* Wrapper tương đối để cắm mốc tuyệt đối */}
                         <Box pos="relative">
@@ -138,7 +156,7 @@ export default function SideCountIoc() {
                                     whiteSpace: "nowrap",
                                 }}
                             >
-                                -0.1
+                                -{tauS}
                             </Text>
                             <Text
                                 size="xs"
@@ -164,7 +182,7 @@ export default function SideCountIoc() {
                                     whiteSpace: "nowrap",
                                 }}
                             >
-                                +0.1
+                                +{tauS}
                             </Text>
                         </Box>
                     </Box>

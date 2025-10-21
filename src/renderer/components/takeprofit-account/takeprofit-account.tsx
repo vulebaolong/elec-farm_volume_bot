@@ -1,7 +1,7 @@
-import { useGetTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
+import { useClearAllTakeProfitAccount, useGetTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
 import { formatLocalTime } from "@/helpers/function.helper";
 import { TTakeprofitAccount } from "@/types/takeprofit-account.type";
-import { ActionIcon, Badge, Group, Loader, Paper, Table, Text } from "@mantine/core";
+import { ActionIcon, Badge, Button, Group, Loader, Paper, Table, Text } from "@mantine/core";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -25,6 +25,7 @@ export default function TakeprofitAccount() {
     const pageSize = 10;
     const totalPageRef = useRef(0);
 
+    const clearAllTakeProfitAccount = useClearAllTakeProfitAccount();
     const getTakeProfitAccount = useGetTakeProfitAccount({
         pagination: { page, pageSize },
         filters: {},
@@ -88,6 +89,17 @@ export default function TakeprofitAccount() {
             <Group justify="space-between" align="center" mb="sm">
                 <Group>
                     <Text fw={600}>Take Profit Account</Text>
+                    <Button
+                        onClick={() => {
+                            clearAllTakeProfitAccount.mutate();
+                        }}
+                        variant="light"
+                        loading={clearAllTakeProfitAccount.isPending}
+                        size="xs"
+                        color="red"
+                    >
+                        Clear
+                    </Button>
                     {getTakeProfitAccount.isLoading ? <Loader size="xs" /> : null}
                 </Group>
 

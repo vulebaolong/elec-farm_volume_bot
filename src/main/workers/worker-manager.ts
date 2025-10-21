@@ -35,6 +35,7 @@ type WorkerEntry = {
     gateView?: {
         webContentsView: WebContentsView;
         attached: boolean;
+        layoutGateView: () => void;
     };
 };
 
@@ -182,7 +183,11 @@ export class BotWorkerManager {
                 case "bot:sticky:remove":
                 case "bot:ioc:sideCount":
                 case "bot:sticky:clear": {
-                    this.mainWindow.webContents.send(msg.type, withUid);
+                    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+                        this.mainWindow.webContents.send(msg.type, withUid);
+                    } else {
+                        this.workerLog.error(`[uid=${uid}] mainWindow not found`);
+                    }
                     break;
                 }
 
@@ -625,6 +630,12 @@ export class BotWorkerManager {
             try {
                 wc.removeAllListeners();
             } catch {}
+            try {
+                const entry = this.entries.get(uid);
+                if (entry?.gateView?.layoutGateView) {
+                    this.mainWindow.removeListener("resize", entry.gateView.layoutGateView);
+                }
+            } catch {}
 
             // (c) Đóng và CHỜ 'destroyed'
             await new Promise<void>((resolve) => {
@@ -692,14 +703,6 @@ export class BotWorkerManager {
         this.mainWindow.contentView.addChildView(gateView);
         this.sendIsChildView(true);
 
-        const entry = this.entries.get(uid);
-        if (entry) {
-            entry.gateView = {
-                webContentsView: gateView,
-                attached: true,
-            };
-        }
-
         const layoutGateView = () => {
             if (this.mainWindow.isDestroyed()) return;
             const { width, height } = this.mainWindow.getContentBounds();
@@ -712,6 +715,15 @@ export class BotWorkerManager {
         };
         layoutGateView();
         this.mainWindow.on("resize", layoutGateView);
+
+        const entry = this.entries.get(uid);
+        if (entry) {
+            entry.gateView = {
+                webContentsView: gateView,
+                attached: true,
+                layoutGateView: layoutGateView,
+            };
+        }
 
         gateView.webContents.setWindowOpenHandler(({ url }) => {
             // mở popup ngoài app

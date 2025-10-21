@@ -111,6 +111,7 @@ export const ENDPOINT = {
         CREATE: "takeprofit-account",
         UPDATE: "takeprofit-account",
         GET: "takeprofit-account",
+        CLEAR_ALL: "takeprofit-account/clear-all",
     },
     FIX_LIQUIDATION: {
         UPSERT: "fix-liquidation/upsert",

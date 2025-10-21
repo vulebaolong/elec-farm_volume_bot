@@ -11,6 +11,7 @@ export type TSettingUsers = {
     inputUSDT: number;
     takeProfit: number;
     stopLoss: number;
+    stopLossUsdtPnl: number;
     timeoutEnabled: boolean;
     timeoutMs: number;
     minSpreadPercent: number;
@@ -51,6 +52,8 @@ export type TSettingUsers = {
     tauS: number;
 
     logType: number;
+
+    stepS: number;
 } & TBaseTimestamps;
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;

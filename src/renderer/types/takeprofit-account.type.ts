@@ -23,5 +23,7 @@ export type TUpdateTakeprofitAccountReq = {
     id: number;
     data: {
         newTotal: string;
+        uid: number;
+        source: string;
     };
 };
