@@ -69,7 +69,7 @@ export const FormSchema = z.object({
     sizeIOC: intField(1, "size IOC"),
     takeProfit: positiveNumber("Take Profit"),
     stopLoss: positiveNumber("Stop Loss"),
-    stopLossUsdtPnl: intField(0, "Stop Loss Usdt Pnl"),
+    stopLossUsdtPnl: positiveNumber("Stop Loss Usdt Pnl"),
     timeoutMs: intField(1, "Timeout (ms)"),
     timeoutEnabled: z.boolean(),
     minSpreadPercent: numberRange(0, 100, "Min Spread %"),
@@ -111,7 +111,7 @@ export const FormSchema = z.object({
 
     logType: z.enum(ELogType).default(ELogType.Silent),
 
-    stepS: intField(1, "Step S"),
+    stepS: intField(1,"Step S"),
 });
 
 const defaultMartingale: MartingaleConfig = {
@@ -1411,7 +1411,7 @@ export default function SettingAdminUser({ type }: TProps) {
                             decimalSeparator="."
                             thousandSeparator=","
                             min={0}
-                            step={1}
+                            step={0.1}
                             clampBehavior="strict"
                         />
                     )}

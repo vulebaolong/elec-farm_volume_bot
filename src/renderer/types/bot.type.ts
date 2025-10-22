@@ -13,13 +13,8 @@ export type TDataInitBot = {
     parentPort: import("worker_threads").MessagePort;
     settingUser: TSettingUsers;
     uiSelector: TUiSelector[];
-    blackList: string[];
-    whiteListMartingale: TWhiteListMartingale["symbol"][];
     whiteListFarmIoc: TWhiteListFarmIoc[];
     whiteListScalpIoc: TWhiteListScalpIoc[];
-    fixLiquidationInDB?: TFixLiquidationInDB;
-    fixStopLossInDB?: TFixStopLossInDB;
-    fixStopLossQueueInDB?: TFixStopLossQueueInDB;
     uids: TUid[]
     uidDB: TUid["uid"]
 };

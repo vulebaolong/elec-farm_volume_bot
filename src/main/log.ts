@@ -3,6 +3,7 @@ import log from "electron-log/main";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import fs from "node:fs";
+import { IS_PRODUCTION } from "@/constant/app.constant";
 
 export function initLog() {
     log.initialize();
@@ -11,9 +12,17 @@ export function initLog() {
     // main → renderer qua IPC để bạn thấy log main trong DevTools của renderer.
     // error < warn < info < verbose < debug < silly
     log.transports.file.level = "silly";
-    log.transports.ipc.level = "silly";
     log.errorHandler.startCatching();
     log.eventLogger.startLogging();
+
+    if (IS_PRODUCTION) {
+        log.transports.console.level = false;
+        log.transports.ipc.level = false;
+    } else {
+        // log.transports.ipc.level = "silly";
+    }
+    log.transports.console.level = false;
+    log.transports.ipc.level = false;
 
     const fileInfo = () => log.transports.file.getFile(); // { path, size, ... }
     // --- IPC: path / size / read / clear / reveal ---

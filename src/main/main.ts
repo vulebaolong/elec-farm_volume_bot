@@ -21,12 +21,12 @@ const isDebug = process.env.NODE_ENV === "development" || process.env.DEBUG_PROD
 // const isDebug = false;
 
 if (!isDebug) {
-    // console.log = () => {};
-    // console.debug = () => {};
-    // console.info = () => {};
-    // console.trace = () => {};
-    // redirect để tất cả console.* ghi vào file log
-    Object.assign(console, log.functions);
+    const noop = () => {};
+    console.log = noop;
+    console.info = noop;
+    console.debug = noop;
+    console.warn = noop; 
+    console.error = noop;
 }
 
 class AppUpdater {
@@ -86,7 +86,7 @@ const createWindow = async () => {
         icon: getAssetPath("icon.png"),
         webPreferences: {
             webviewTag: true,
-            partition: 'persist:app',
+            partition: "persist:app",
             preload: app.isPackaged ? path.join(__dirname, "preload.js") : path.join(__dirname, "../../.erb/dll/preload.js"),
         },
     });
@@ -105,24 +105,24 @@ const createWindow = async () => {
             mainWindow.maximize();
             mainWindow.show();
         }
-        // Khi máy chuẩn bị sleep
-        powerMonitor.on("suspend", () => {
-            console.log("Máy sắp sleep");
-        });
+        // // Khi máy chuẩn bị sleep
+        // powerMonitor.on("suspend", () => {
+        //     console.log("Máy sắp sleep");
+        // });
 
-        // Khi máy wake lại từ sleep
-        powerMonitor.on("resume", () => {
-            console.log("Máy vừa wake lại từ sleep");
-        });
+        // // Khi máy wake lại từ sleep
+        // powerMonitor.on("resume", () => {
+        //     console.log("Máy vừa wake lại từ sleep");
+        // });
 
-        // Nếu cần detect cả lock/unlock screen
-        powerMonitor.on("lock-screen", () => {
-            console.log("Màn hình đã bị khóa");
-        });
+        // // Nếu cần detect cả lock/unlock screen
+        // powerMonitor.on("lock-screen", () => {
+        //     console.log("Màn hình đã bị khóa");
+        // });
 
-        powerMonitor.on("unlock-screen", () => {
-            console.log("Màn hình đã được mở khóa");
-        });
+        // powerMonitor.on("unlock-screen", () => {
+        //     console.log("Màn hình đã được mở khóa");
+        // });
     });
 
     mainWindow.on("closed", () => {
@@ -251,4 +251,3 @@ ipcMain.handle("sessions:openPath", async (_e, name: string) => {
     await openSessionFolder(name);
     return { ok: true };
 });
-

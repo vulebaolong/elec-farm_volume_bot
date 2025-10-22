@@ -6,6 +6,7 @@ import {
     createCodeStringClickOrder,
     setLocalStorageScript,
 } from "@/javascript-string/logic-farm";
+import { TGateApiRes } from "@/types/base-gate.type";
 import {
     TDataInitBot,
     TFectMainRes,
@@ -22,6 +23,7 @@ import {
     TResultClickOpenOrder,
     TResultClickTabOpenOrder,
 } from "@/types/bot.type";
+import { TOrderOpen } from "@/types/order.type";
 import { TWorkerData } from "@/types/worker.type";
 import { BrowserWindow, Event, RenderProcessGoneDetails, WebContentsView, app, ipcMain, shell } from "electron";
 import type Logger from "electron-log";
@@ -32,11 +34,9 @@ import path from "path";
 type WorkerEntry = {
     uid: number;
     worker: Worker;
-    gateView?: {
-        webContentsView: WebContentsView;
-        attached: boolean;
-        layoutGateView: () => void;
-    };
+    attached: boolean;
+    webContentsViewGate?: WebContentsView;
+    layoutGateView?: () => void;
 };
 
 if (IS_PRODUCTION) {
@@ -49,6 +49,7 @@ if (IS_PRODUCTION) {
 export class BotWorkerManager {
     private entries = new Map<number, WorkerEntry>();
     private mainWindow: BrowserWindow;
+
     private mainLog: Logger.LogFunctions;
     private workerLog: Logger.LogFunctions;
 
@@ -78,9 +79,29 @@ export class BotWorkerManager {
             url: "https://www.gate.com/apiw/v2/futures/usdt/positions",
             method: "GET",
         },
+        createOrders: {
+            method: "POST",
+            url: "https://www.gate.com/apiw/v2/futures/usdt/orders",
+        },
+    };
+    private REQUEST_API = {
+        positions: {
+            url: "https://www.gate.com/apiw/v2/futures/usdt/positions",
+            method: "GET",
+        },
+        orders: {
+            url: "https://www.gate.com/apiw/v2/futures/usdt/orders",
+            method: "POST",
+        },
     };
 
     private GATE_TIMEOUT = "GATE_TIMEOUT";
+
+    private resolveBodyCreateOrder: ((value: { bodyText: string }) => void) | null = null;
+    private timer: NodeJS.Timeout | null = null;
+
+    private isDisableApiPosition = false;
+    private lastPositionsBody: string | null = null;
 
     constructor(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions, workerLog: Logger.LogFunctions) {
         this.mainWindow = mainWindow;
@@ -138,14 +159,16 @@ export class BotWorkerManager {
             ? path.join(process.resourcesPath, "app.asar.unpacked", "dist", "main", "workers", "bot.worker.js")
             : path.join(__dirname, "workers", "bot.worker.bundle.dev.js");
 
-        const worker = new Worker(workerPath);
-        this.mainLog.info(`3) ✅ [WorkerManager]New Worker uid=${uid} | threadId= ${worker.threadId}`);
-
-        const entry: WorkerEntry = { uid, worker };
+        const entry: WorkerEntry = {
+            uid,
+            worker: new Worker(workerPath),
+            attached: false,
+        };
         this.entries.set(uid, entry);
+        this.mainLog.info(`3) ✅ [WorkerManager]New Worker uid=${uid} | threadId= ${entry.worker.threadId} | PID=${process.pid}`);
 
         // === Lắng nghe từ worker ===
-        worker.on("message", async (msg: any) => {
+        entry.worker.on("message", async (msg: any) => {
             // TIP: nếu worker chưa tự include uid trong msg, ta sẽ "gắn uid" trước khi forward xuống renderer
             const withUid = { ...msg, uid };
 
@@ -162,9 +185,9 @@ export class BotWorkerManager {
                 case "bot:init:done": {
                     this.mainLog.info(`7) ✅ [WorkerManager] bot:init:done uid=${uid}`);
 
-                    const gateView = this.createGateViewForUid(uid, isDebug);
+                    await this.createGateViewForUid(uid, isDebug);
 
-                    this.interceptRequest(gateView, worker);
+                    this.interceptRequest(uid);
 
                     break;
                 }
@@ -193,13 +216,22 @@ export class BotWorkerManager {
 
                 case "bot:fetch": {
                     const { url, init, reqId } = msg.payload;
-                    const timeoutMs = 5_000;
-                    const gateView = entry.gateView;
-                    if (!gateView) {
-                        worker.postMessage({ type: "bot:fetch:res", payload: { ok: false, reqId, bodyText: "", error: "gateView not found" } });
-                        return;
-                    }
+                    const type = "bot:fetch:res";
                     try {
+                        const timeoutMs = 5_000;
+
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: TGateOrderMainRes = {
+                                ok: false,
+                                reqOrderId: reqId,
+                                bodyText: "",
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
                         const js = `
                             (async () => {
                                 const ctrl = new AbortController();
@@ -220,14 +252,16 @@ export class BotWorkerManager {
                                 } finally { clearTimeout(to); }
                             })()
                             `;
-                        const result: TFectMainRes = await gateView.webContentsView.webContents.executeJavaScript(js, true);
+                        const result: TFectMainRes = await webContentsViewGate.webContents.executeJavaScript(js, true);
+
                         if (result.ok === false && result.error) throw new Error(result.error);
-                        worker.postMessage({ type: "bot:fetch:res", payload: { ok: true, reqId, bodyText: result?.bodyText, error: null } });
+
+                        entry.worker.postMessage({ type: type, payload: { ok: true, reqId, bodyText: result?.bodyText, error: null } });
                     } catch (e: any) {
                         const msg = String(e?.message || e);
                         const looksTimeout = /\btime(?:d\s+)?out\b/i.test(msg) || e?.name === "AbortError" || e?.code === "ETIMEDOUT";
-                        worker.postMessage({
-                            type: "bot:fetch:res",
+                        entry.worker.postMessage({
+                            type: type,
                             payload: { ok: false, reqId, bodyText: "", error: looksTimeout ? this.GATE_TIMEOUT : msg },
                         });
                     }
@@ -235,62 +269,97 @@ export class BotWorkerManager {
                 }
 
                 case "bot:order": {
-                    const gateView = entry.gateView?.webContentsView;
-                    if (!gateView) return;
                     const { payloadOrder: payloadOrderRaw, selector, reqOrderId } = msg?.payload;
-                    const tag = `O${reqOrderId}`;
+                    const type = "bot:order:res";
                     try {
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: Omit<TGateOrderMainRes, "bodyText"> & { body: null } = {
+                                ok: false,
+                                reqOrderId: reqOrderId,
+                                body: null,
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
                         this.payloadOrder = payloadOrderRaw;
 
                         // Tạo promise chờ API order
-                        const waitOrder = this.waitForOneRequest(
-                            gateView.webContents,
-                            {
-                                method: "POST",
-                                urlPrefix: "https://www.gate.com/apiw/v2/futures/usdt/orders",
-                            },
-                            tag,
-                        );
+                        const waitOrder = this.waitForOneRequest();
 
                         // Thực hiện click (trả về khi JS của bạn xong, không phải khi API xong)
                         const js = createCodeStringClickOrder(selector);
-                        const resultClick: TResultClickOpenOrder = await gateView.webContents.executeJavaScript(js, true);
+                        const resultClick: TResultClickOpenOrder = await webContentsViewGate.webContents.executeJavaScript(js, true);
                         if (resultClick.ok === false && resultClick.error) {
                             throw new Error(resultClick.error);
                         }
 
                         // Chờ API xong, lấy body
-                        const { bodyText } = await waitOrder;
+                        const bodyText = await waitOrder;
 
-                        const payload: TGateOrderMainRes = {
+                        let parsed: TGateApiRes<TOrderOpen | null>;
+                        try {
+                            parsed = JSON.parse(bodyText) as TGateApiRes<TOrderOpen | null>;
+                        } catch (e) {
+                            throw new Error(`Invalid JSON from Order: ${String(e)}`);
+                        }
+
+                        // console.log("parsed", parsed);
+                        if (parsed.data === null) {
+                            throw new Error(`Order fail: ${parsed.message}`);
+                        } else {
+                            if (parsed.data.tif === "ioc") {
+                                // nếu left là 0 nghĩa là fill hết
+                                if (parsed.data.left === 0) {
+                                    this.isDisableApiPosition = false;
+                                } else {
+                                    this.isDisableApiPosition = true;
+                                }
+                            }
+                        }
+
+                        const payload: Omit<TGateOrderMainRes, "bodyText"> & { body: TGateApiRes<TOrderOpen | null> } = {
                             ok: true,
                             reqOrderId,
-                            bodyText,
+                            body: parsed,
                             error: null,
                         };
 
-                        worker.postMessage({ type: "bot:order:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     } catch (e: any) {
-                        const payload: TGateOrderMainRes = {
+                        const payload: Omit<TGateOrderMainRes, "bodyText"> & { body: null } = {
                             ok: false,
                             reqOrderId: reqOrderId,
-                            bodyText: "",
+                            body: null,
                             error: String(e?.message || e),
                         };
-                        worker.postMessage({ type: "bot:order:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     }
                     break;
                 }
 
                 case "bot:clickTabOpenOrder": {
-                    const gateView = entry.gateView?.webContentsView;
-
-                    if (!gateView) return;
-
                     const { reqClickTabOpenOrderId, stringClickTabOpenOrder } = msg?.payload;
-
+                    const type = "bot:clickTabOpenOrder:res";
                     try {
-                        const result: TResultClickTabOpenOrder = await gateView.webContents.executeJavaScript(stringClickTabOpenOrder, true);
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: TGateOrderMainRes = {
+                                ok: false,
+                                reqOrderId: reqClickTabOpenOrderId,
+                                bodyText: "",
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
+                        const result: TResultClickTabOpenOrder = await webContentsViewGate.webContents.executeJavaScript(
+                            stringClickTabOpenOrder,
+                            true,
+                        );
 
                         if (result.ok === false && result.error) {
                             throw new Error(result.error);
@@ -303,7 +372,7 @@ export class BotWorkerManager {
                             error: null,
                         };
 
-                        worker.postMessage({ type: "bot:clickTabOpenOrder:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     } catch (e: any) {
                         const payload: TGateClickTabOpenOrderRes = {
                             ok: false,
@@ -311,20 +380,29 @@ export class BotWorkerManager {
                             reqClickTabOpenOrderId: reqClickTabOpenOrderId,
                             error: String(e?.message || e),
                         };
-                        worker.postMessage({ type: "bot:clickTabOpenOrder:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     }
                     break;
                 }
 
                 case "bot:clickCanelAllOpen": {
-                    const gateView = entry.gateView?.webContentsView;
-
-                    if (!gateView) return;
-
                     const { reqClickCanelAllOpenOrderId, stringClickCanelAllOpen } = msg?.payload;
+                    const type = "bot:clickCanelAllOpen:res";
 
                     try {
-                        const result: TResultClickCancelOpen = await gateView.webContents.executeJavaScript(stringClickCanelAllOpen, true);
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: TGateOrderMainRes = {
+                                ok: false,
+                                reqOrderId: reqClickCanelAllOpenOrderId,
+                                bodyText: "",
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
+                        const result: TResultClickCancelOpen = await webContentsViewGate.webContents.executeJavaScript(stringClickCanelAllOpen, true);
 
                         if (result.ok === false && result.error) {
                             throw new Error(result.error);
@@ -337,7 +415,7 @@ export class BotWorkerManager {
                             error: null,
                         };
 
-                        worker.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     } catch (e: any) {
                         const payload: TGateClickCancelAllOpenRes = {
                             ok: false,
@@ -345,27 +423,25 @@ export class BotWorkerManager {
                             reqClickCanelAllOpenOrderId: reqClickCanelAllOpenOrderId,
                             error: String(e?.message || e),
                         };
-                        worker.postMessage({ type: "bot:clickCanelAllOpen:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     }
                     break;
                 }
 
                 case "bot:reloadWebContentsView:Request": {
-                    const gateView = entry.gateView?.webContentsView;
-
-                    if (!gateView) {
-                        this.mainLog.error("bot:reloadWebContentsView:Request: gateView not found");
-                        return;
-                    }
-
                     try {
-                        await this.reloadAndWait(gateView, worker, 30000);
-                        // re-inject mọi thứ cần chạy lại sau reload
-                        gateView.webContents.executeJavaScript(setLocalStorageScript, true).catch(() => {});
-                        gateView.webContents.executeJavaScript(codeStringKillMantineToasts, true).catch(() => {});
-                        // (nếu có) re-enable các patch WS / CDP, v.v.
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            this.mainLog.error(`bot:reloadWebContentsView:Request: webContentsViewGate not found`);
+                            return;
+                        }
 
-                        worker.postMessage({ type: "bot:reloadWebContentsView:Response", payload: msg?.payload });
+                        await this.reloadAndWait(webContentsViewGate, entry.worker, 30000);
+                        webContentsViewGate.webContents.executeJavaScript(setLocalStorageScript, true);
+                        webContentsViewGate.webContents.executeJavaScript(codeStringKillMantineToasts, true);
+                        webContentsViewGate.webContents.executeJavaScript(codeStringCloseAnnouncements, true);
+
+                        entry.worker.postMessage({ type: "bot:reloadWebContentsView:Response", payload: msg?.payload });
                     } catch (e) {
                         // log lỗi reload nếu cần
                         this.mainLog.error(`bot:reloadWebContentsView:Request: ${e}`);
@@ -374,18 +450,31 @@ export class BotWorkerManager {
                 }
 
                 case "bot:clickMarketPosition": {
-                    const gateView = entry.gateView?.webContentsView;
-
-                    if (!gateView) return;
-
                     const { reqClickMarketPositionId, stringClickMarketPosition } = msg?.payload;
-
+                    const type = "bot:clickMarketPosition:res";
                     try {
-                        const result: TResultClickMarketPosition = await gateView.webContents.executeJavaScript(stringClickMarketPosition, true);
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: TGateOrderMainRes = {
+                                ok: false,
+                                reqOrderId: reqClickMarketPositionId,
+                                bodyText: "",
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
+                        const result: TResultClickMarketPosition = await webContentsViewGate.webContents.executeJavaScript(
+                            stringClickMarketPosition,
+                            true,
+                        );
 
                         if (result.ok === false && result.error) {
                             throw new Error(result.error);
                         }
+
+                        this.isDisableApiPosition = false;
 
                         const payload: TGateClickMarketPositionRes = {
                             ok: result.ok,
@@ -394,7 +483,7 @@ export class BotWorkerManager {
                             error: null,
                         };
 
-                        worker.postMessage({ type: "bot:clickMarketPosition:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     } catch (e: any) {
                         const payload: TGateClickMarketPositionRes = {
                             ok: false,
@@ -402,20 +491,28 @@ export class BotWorkerManager {
                             reqClickMarketPositionId: reqClickMarketPositionId,
                             error: String(e?.message || e),
                         };
-                        worker.postMessage({ type: "bot:clickMarketPosition:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     }
                     break;
                 }
 
                 case "bot:checkLogin": {
-                    const gateView = entry.gateView?.webContentsView;
-
-                    if (!gateView) return;
-
                     const { reqCheckLoginId, stringCheckLogin } = msg?.payload;
-
+                    const type = "bot:checkLogin:res";
                     try {
-                        const result: TResultClick<boolean> = await gateView.webContents.executeJavaScript(stringCheckLogin, true);
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: TGateOrderMainRes = {
+                                ok: false,
+                                reqOrderId: reqCheckLoginId,
+                                bodyText: "",
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
+                        const result: TResultClick<boolean> = await webContentsViewGate.webContents.executeJavaScript(stringCheckLogin, true);
 
                         if (result.ok === false && result.error) {
                             throw new Error(result.error);
@@ -428,7 +525,7 @@ export class BotWorkerManager {
                             error: null,
                         };
 
-                        worker.postMessage({ type: "bot:checkLogin:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     } catch (e: any) {
                         const payload: TGateClick<boolean> & { reqCheckLoginId: number } = {
                             ok: false,
@@ -436,20 +533,28 @@ export class BotWorkerManager {
                             reqCheckLoginId: reqCheckLoginId,
                             error: String(e?.message || e),
                         };
-                        worker.postMessage({ type: "bot:checkLogin:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     }
                     break;
                 }
 
                 case "bot:clickClearAll": {
-                    const gateView = entry.gateView?.webContentsView;
-
-                    if (!gateView) return;
-
                     const { reqClickClearAllId, stringClickClearAll } = msg?.payload;
-
+                    const type = "bot:clickClearAll:res";
                     try {
-                        const result: TResultClick<boolean> = await gateView.webContents.executeJavaScript(stringClickClearAll, true);
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: TGateOrderMainRes = {
+                                ok: false,
+                                reqOrderId: reqClickClearAllId,
+                                bodyText: "",
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
+                        const result: TResultClick<boolean> = await webContentsViewGate.webContents.executeJavaScript(stringClickClearAll, true);
 
                         if (result.ok === false && result.error) {
                             throw new Error(result.error);
@@ -462,7 +567,7 @@ export class BotWorkerManager {
                             error: null,
                         };
 
-                        worker.postMessage({ type: "bot:clickClearAll:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     } catch (e: any) {
                         const payload: TGateClick<boolean> & { reqClickClearAllId: number } = {
                             ok: false,
@@ -470,20 +575,28 @@ export class BotWorkerManager {
                             reqClickClearAllId: reqClickClearAllId,
                             error: String(e?.message || e),
                         };
-                        worker.postMessage({ type: "bot:clickClearAll:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     }
                     break;
                 }
 
                 case "bot:getUid": {
-                    const gateView = entry.gateView?.webContentsView;
-
-                    if (!gateView) return;
-
                     const { reqGetUidId, stringGetUid } = msg?.payload;
-
+                    const type = "bot:getUid:res";
                     try {
-                        const result: TResultClick<string | null> = await gateView.webContents.executeJavaScript(stringGetUid, true);
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: TGateOrderMainRes = {
+                                ok: false,
+                                reqOrderId: reqGetUidId,
+                                bodyText: "",
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
+                        const result: TResultClick<string | null> = await webContentsViewGate.webContents.executeJavaScript(stringGetUid, true);
 
                         if (result.ok === false && result.error) {
                             throw new Error(result.error);
@@ -496,7 +609,7 @@ export class BotWorkerManager {
                             error: null,
                         };
 
-                        worker.postMessage({ type: "bot:getUid:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     } catch (e: any) {
                         const payload: TGateClick<string> & { reqGetUidId: number } = {
                             ok: false,
@@ -504,7 +617,7 @@ export class BotWorkerManager {
                             reqGetUidId: reqGetUidId,
                             error: String(e?.message || e),
                         };
-                        worker.postMessage({ type: "bot:getUid:res", payload: payload });
+                        entry.worker.postMessage({ type: type, payload: payload });
                     }
 
                     break;
@@ -512,11 +625,11 @@ export class BotWorkerManager {
             }
         });
 
-        worker.on("error", (err) => {
+        entry.worker.on("error", (err) => {
             this.workerLog.error(`[WorkerManager] worker error uid=${uid}`, err);
         });
 
-        worker.on("exit", (code) => {
+        entry.worker.on("exit", (code) => {
             this.workerLog.error(`[WorkerManager] worker exit uid=${uid} code=${code}`);
             // dọn map + view
             // this.destroyOne(uid);
@@ -524,67 +637,67 @@ export class BotWorkerManager {
             this.mainWindow?.webContents.send("worker:exit", { uid, code });
         });
 
-        worker.once("online", () => {
+        entry.worker.once("online", () => {
             this.mainLog.info(`4) ✅ [WorkerManager] Worker Online uid=${uid}`);
             const payloadInit: Omit<TDataInitBot, "parentPort"> = {
                 ...initBase,
                 uidDB: uid,
             };
-            worker.postMessage({ type: "bot:init", payload: payloadInit });
-            this.mainLog.info(`5) ✅ [WorkerManager] bot:init sent | uid=${uid} | threadId=${worker?.threadId}`);
+            entry.worker.postMessage({ type: "bot:init", payload: payloadInit });
+            this.mainLog.info(`5) ✅ [WorkerManager] bot:init sent | uid=${uid} | threadId=${entry.worker?.threadId}`);
         });
 
         // lắng nghe từ rerender
         ipcMain.on("bot:start", (event, data) => {
-            worker.postMessage({ type: "bot:start", payload: data });
+            entry.worker.postMessage({ type: "bot:start", payload: data });
         });
         ipcMain.on("bot:stop", (event, data) => {
-            worker.postMessage({ type: "bot:stop", payload: data });
+            entry.worker.postMessage({ type: "bot:stop", payload: data });
         });
         ipcMain.on("bot:reloadWebContentsView", (event, data) => {
-            worker.postMessage({ type: "bot:reloadWebContentsView", payload: data });
+            entry.worker.postMessage({ type: "bot:reloadWebContentsView", payload: data });
         });
         ipcMain.on("bot:setWhiteList", (event, data) => {
-            worker.postMessage({ type: "bot:setWhiteList", payload: data });
+            entry.worker.postMessage({ type: "bot:setWhiteList", payload: data });
         });
         ipcMain.on("bot:settingUser", (event, data) => {
-            worker.postMessage({ type: "bot:settingUser", payload: data });
+            entry.worker.postMessage({ type: "bot:settingUser", payload: data });
         });
         ipcMain.on("bot:uiSelector", (event, data) => {
-            worker.postMessage({ type: "bot:uiSelector", payload: data });
+            entry.worker.postMessage({ type: "bot:uiSelector", payload: data });
         });
         ipcMain.on("bot:blackList", (event, data) => {
-            worker.postMessage({ type: "bot:blackList", payload: data });
+            entry.worker.postMessage({ type: "bot:blackList", payload: data });
         });
         ipcMain.on("bot:rateMax:set", (event, data) => {
-            worker.postMessage({ type: "bot:rateMax:set", payload: data });
+            entry.worker.postMessage({ type: "bot:rateMax:set", payload: data });
         });
         ipcMain.on("bot:takeProfitAccount", (event, data) => {
-            worker.postMessage({ type: "bot:takeProfitAccount", payload: data });
+            entry.worker.postMessage({ type: "bot:takeProfitAccount", payload: data });
         });
         ipcMain.on("bot:removeFixStopLossQueue", (event, data) => {
-            worker.postMessage({ type: "bot:removeFixStopLossQueue", payload: data });
+            entry.worker.postMessage({ type: "bot:removeFixStopLossQueue", payload: data });
         });
         ipcMain.on("bot:ioc:long", (event, data) => {
-            worker.postMessage({ type: "bot:ioc:long", payload: data });
+            entry.worker.postMessage({ type: "bot:ioc:long", payload: data });
         });
         ipcMain.on("bot:ioc:short", (event, data) => {
-            worker.postMessage({ type: "bot:ioc:short", payload: data });
+            entry.worker.postMessage({ type: "bot:ioc:short", payload: data });
         });
         ipcMain.on("bot:ioc:hedge", (event, data) => {
-            worker.postMessage({ type: "bot:ioc:hedge", payload: data });
+            entry.worker.postMessage({ type: "bot:ioc:hedge", payload: data });
         });
         ipcMain.on("bot:ioc:oneway", (event, data) => {
-            worker.postMessage({ type: "bot:ioc:oneway", payload: data });
+            entry.worker.postMessage({ type: "bot:ioc:oneway", payload: data });
         });
         ipcMain.on("bot:whiteListMartingale", (event, data) => {
-            worker.postMessage({ type: "bot:whiteListMartingale", payload: data });
+            entry.worker.postMessage({ type: "bot:whiteListMartingale", payload: data });
         });
         ipcMain.on("bot:whiteListFarmIoc", (event, data) => {
-            worker.postMessage({ type: "bot:whiteListFarmIoc", payload: data });
+            entry.worker.postMessage({ type: "bot:whiteListFarmIoc", payload: data });
         });
         ipcMain.on("bot:whiteListScalpIoc", (event, data) => {
-            worker.postMessage({ type: "bot:whiteListScalpIoc", payload: data });
+            entry.worker.postMessage({ type: "bot:whiteListScalpIoc", payload: data });
         });
     }
 
@@ -610,57 +723,55 @@ export class BotWorkerManager {
         }
 
         // 2) Huỷ Gate WebContentsView đúng thứ tự
-        const view = entry.gateView?.webContentsView;
-        if (view) {
-            const wc = view.webContents;
+        if (entry.webContentsViewGate) {
+            const webcontents = entry.webContentsViewGate.webContents;
 
             // (a) Tháo khỏi cây view để giải phóng liên kết layout/render
             try {
-                this.mainWindow.contentView.removeChildView(view);
+                this.mainWindow.contentView.removeChildView(entry.webContentsViewGate);
                 this.sendIsChildView(false);
             } catch {}
 
             // (b) Dọn dẹp phụ trợ trước khi close
             try {
-                if (wc.isDevToolsOpened()) wc.closeDevTools();
+                if (webcontents.isDevToolsOpened()) webcontents.closeDevTools();
             } catch {}
             try {
-                wc.stop();
+                webcontents.stop();
             } catch {}
             try {
-                wc.removeAllListeners();
+                webcontents.removeAllListeners();
             } catch {}
             try {
-                const entry = this.entries.get(uid);
-                if (entry?.gateView?.layoutGateView) {
-                    this.mainWindow.removeListener("resize", entry.gateView.layoutGateView);
+                if (entry.layoutGateView) {
+                    this.mainWindow.removeListener("resize", entry.layoutGateView);
                 }
             } catch {}
 
             // (c) Đóng và CHỜ 'destroyed'
             await new Promise<void>((resolve) => {
-                if (wc.isDestroyed()) return resolve();
+                if (webcontents.isDestroyed()) return resolve();
 
                 const timer = setTimeout(() => {
                     this.mainLog.warn(`[WorkerManager] webContents close timed out uid=${uid}`);
                     resolve(); // fallback
                 }, 3000);
 
-                wc.once("destroyed", () => {
+                webcontents.once("destroyed", () => {
                     clearTimeout(timer);
                     resolve();
                 });
 
                 // Bỏ qua beforeunload để không bị chặn
                 try {
-                    wc.close({ waitForBeforeUnload: false });
+                    webcontents.close({ waitForBeforeUnload: false });
                 } catch {
                     clearTimeout(timer);
                     resolve();
                 }
             });
 
-            this.mainLog.info(`gateView uid=${uid} destroyed=${wc.isDestroyed()}`);
+            this.mainLog.info(`gateView uid=${uid} destroyed=${webcontents.isDestroyed()}`);
         }
 
         // 3) Xoá entry để GC gọn gàng
@@ -683,10 +794,16 @@ export class BotWorkerManager {
         e.worker.postMessage({ type, payload });
     }
 
-    private createGateViewForUid(uid: number, isDebug: boolean): WebContentsView {
+    private async createGateViewForUid(uid: number, isDebug: boolean) {
+        const entry = this.entries.get(uid);
+        if (!entry) {
+            this.mainLog.error(`${uid}: Not found entry to create gate view`);
+            return;
+        }
+
         // Tạo WebContentsView riêng theo uid với session/partition tách biệt
         const partition = `persist:gate${uid}`;
-        const gateView = new WebContentsView({
+        entry.webContentsViewGate = new WebContentsView({
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
@@ -700,179 +817,109 @@ export class BotWorkerManager {
             },
         });
 
-        this.mainWindow.contentView.addChildView(gateView);
+        this.mainWindow.contentView.addChildView(entry.webContentsViewGate);
         this.sendIsChildView(true);
 
-        const layoutGateView = () => {
+        entry.attached = true;
+
+        entry.layoutGateView = () => {
             if (this.mainWindow.isDestroyed()) return;
-            const { width, height } = this.mainWindow.getContentBounds();
-            gateView.setBounds({
-                x: 0,
-                y: this.TOP_PANEL,
-                width: Math.max(0, width),
-                height: Math.max(0, height - this.TOP_PANEL),
-            });
+
+            for (const [uid, data] of this.entries) {
+                if (!data.webContentsViewGate) continue;
+                const { width, height } = this.mainWindow.getContentBounds();
+                data.webContentsViewGate.setBounds({
+                    x: 0,
+                    y: this.TOP_PANEL,
+                    width: Math.max(0, width),
+                    height: Math.max(0, height - this.TOP_PANEL),
+                });
+            }
         };
-        layoutGateView();
-        this.mainWindow.on("resize", layoutGateView);
+        entry.layoutGateView();
+        this.mainWindow.on("resize", entry.layoutGateView);
 
-        const entry = this.entries.get(uid);
-        if (entry) {
-            entry.gateView = {
-                webContentsView: gateView,
-                attached: true,
-                layoutGateView: layoutGateView,
-            };
-        }
-
-        gateView.webContents.setWindowOpenHandler(({ url }) => {
+        entry.webContentsViewGate.webContents.setWindowOpenHandler(({ url }) => {
             // mở popup ngoài app
             shell.openExternal(url);
             return { action: "deny" };
         });
 
         // load trang Gate
-        gateView.webContents.loadURL("https://www.gate.com/futures/USDT/BTC_USDT").then(() => {
-            gateView.webContents.executeJavaScript(setLocalStorageScript, true);
-            gateView.webContents.executeJavaScript(codeStringKillMantineToasts, true);
-            gateView.webContents.executeJavaScript(codeStringCloseAnnouncements, true);
-        });
+        await entry.webContentsViewGate.webContents.loadURL("https://www.gate.com/futures/USDT/BTC_USDT");
+        entry.webContentsViewGate.webContents.executeJavaScript(setLocalStorageScript, true);
+        entry.webContentsViewGate.webContents.executeJavaScript(codeStringKillMantineToasts, true);
+        entry.webContentsViewGate.webContents.executeJavaScript(codeStringCloseAnnouncements, true);
 
         if (!IS_PRODUCTION) {
             if (isDebug) {
-                gateView.webContents.openDevTools({ mode: "detach" });
+                entry.webContentsViewGate.webContents.openDevTools({ mode: "detach" });
             }
         }
-
-        return gateView;
     }
 
     private attachView(uid: number) {
         const rec = this.entries.get(uid);
-        if (!rec || !rec.gateView || rec.gateView.attached) return;
+        if (!rec || !rec.webContentsViewGate || rec.attached) return;
 
-        this.mainWindow.contentView.addChildView(rec.gateView.webContentsView);
+        this.mainWindow.contentView.addChildView(rec.webContentsViewGate);
         this.sendIsChildView(true);
 
-        rec.gateView.attached = true;
+        rec.attached = true;
     }
 
     private detachView(uid: number) {
         const rec = this.entries.get(uid);
-        if (!rec || !rec.gateView || !rec.gateView.attached) return;
+        if (!rec || !rec.webContentsViewGate || rec.attached) return;
 
         try {
-            this.mainWindow.contentView.removeChildView(rec.gateView.webContentsView);
+            this.mainWindow.contentView.removeChildView(rec.webContentsViewGate);
             this.sendIsChildView(false);
         } catch {}
 
-        rec.gateView.attached = false;
+        rec.attached = false;
     }
 
     private toggleGateView(uid: number): boolean {
         let rec = this.entries.get(uid);
-
-        console.log("toggleGateView", uid, rec?.gateView?.attached);
-
-        if (rec?.gateView?.attached) {
-            this.detachView(uid);
-            return false; // đang tắt
-        } else {
-            this.attachView(uid);
-            return true; // đang bật
+        if (rec) {
+            if (rec.attached) {
+                this.detachView(uid);
+                return false; // đang tắt
+            } else {
+                this.attachView(uid);
+                return true; // đang bật
+            }
         }
+        return false;
+        // console.log("toggleGateView", uid, rec?.gateView?.attached);
     }
 
     private sendIsChildView(isChildView: boolean) {
         this.mainWindow.webContents.send("bot:isChildView", { isChildView });
     }
 
-    private waitForOneRequest(
-        wc: Electron.WebContents,
-        match: { method: string; urlPrefix: string },
-        tag: string,
-        timeoutMs = 8000,
-    ): Promise<{ bodyText: string; status?: number }> {
-        const dbg = wc.debugger;
-        const t0 = Date.now();
-
+    private waitForOneRequest(timeoutMs = 8000): Promise<string> {
         return new Promise((resolve, reject) => {
-            let done = false;
-            let timer: NodeJS.Timeout | null = null;
-            const tracked = new Set<string>();
-
-            const clean = () => {
-                if (timer) clearTimeout(timer);
-                dbg.off("message", onMsg);
-                tracked.clear();
-            };
-
-            const finish = (ok: boolean, msg: string, extra?: any) => {
-                if (done) return;
-                done = true;
-            };
-
-            const onMsg = async (_e: any, method: string, params: any) => {
-                try {
-                    if (method === "Network.requestWillBeSent") {
-                        const req = params.request;
-                        if (!req) return;
-                        if (req.method === match.method && String(req.url).startsWith(match.urlPrefix)) {
-                            tracked.add(params.requestId);
-                        }
-                    } else if (method === "Network.responseReceived") {
-                        const id = params.requestId;
-                        if (tracked.has(id)) {
-                        }
-                    } else if (method === "Network.loadingFinished") {
-                        const id = params.requestId;
-                        if (!tracked.has(id)) return;
-
-                        try {
-                            const { body, base64Encoded } = await dbg.sendCommand("Network.getResponseBody", { requestId: id });
-                            const text = base64Encoded ? Buffer.from(body, "base64").toString("utf8") : (body as string);
-                            finish(true, "body received", { len: text.length });
-                            clean();
-                            resolve({ bodyText: text, status: undefined });
-                        } catch (e: any) {
-                            finish(false, "getBody fail", { err: String(e?.message || e) });
-                            clean();
-                            reject(e);
-                        }
-                    } else if (method === "Network.loadingFailed") {
-                        const id = params.requestId;
-                        if (!tracked.has(id)) return;
-                        finish(false, "loadingFailed", { errorText: params.errorText });
-                        clean();
-                        reject(new Error(params.errorText || "loadingFailed"));
-                    }
-                } catch (e) {
-                    finish(false, "onMsg exception", { err: String(e) });
-                    clean();
-                    reject(e);
-                }
-            };
-
-            dbg.on("message", onMsg);
-            timer = setTimeout(() => {
-                finish(false, `waitForOneRequest ${this.GATE_TIMEOUT}`);
-                clean();
+            this.resolveBodyCreateOrder = resolve as any;
+            this.timer = setTimeout(() => {
+                if (this.timer) clearTimeout(this.timer);
                 reject(new Error(`waitForOneRequest ${this.GATE_TIMEOUT}`));
             }, timeoutMs);
         });
     }
 
     private async reloadAndWait(gateView: Electron.WebContentsView, botWorker: import("worker_threads").Worker, timeoutMs = 30000) {
-        const wc = gateView.webContents;
+        const webContent = gateView.webContents;
 
         return new Promise<void>((resolve, reject) => {
             let timer: NodeJS.Timeout;
 
             const cleanup = () => {
                 clearTimeout(timer);
-                wc.off("did-finish-load", onDone);
-                wc.off("did-fail-load", onFail);
-                wc.off("render-process-gone", onGone);
+                webContent.off("did-finish-load", onDone);
+                webContent.off("did-fail-load", onFail);
+                webContent.off("render-process-gone", onGone);
             };
 
             const onDone = () => {
@@ -906,175 +953,141 @@ export class BotWorkerManager {
             }, timeoutMs);
 
             // đăng ký CHỈ cho lần reload này
-            wc.once("did-finish-load", onDone);
-            wc.once("did-fail-load", onFail);
-            wc.once("render-process-gone", onGone);
+            webContent.once("did-finish-load", onDone);
+            webContent.once("did-fail-load", onFail);
+            webContent.once("render-process-gone", onGone);
 
-            wc.reload(); // hoặc reloadIgnoringCache()
+            webContent.reload(); // hoặc reloadIgnoringCache()
         });
     }
 
-    private interceptRequest(gateView: WebContentsView, botWorker: import("worker_threads").Worker) {
-        const wc = gateView.webContents;
+    private interceptRequest(uid: number) {
+        const entry = this.entries.get(uid);
+        if (!entry) {
+            this.mainLog.error(`${uid}: Not found entry to interceptRequest`);
+            return;
+        }
+
+        if (!entry.webContentsViewGate) {
+            this.mainLog.error(`${uid}: Not found webContentsViewGate to interceptRequest`);
+            return;
+        }
+
+        const webContents = entry.webContentsViewGate.webContents;
 
         // Attach debugger 1 lần
-        if (!wc.debugger.isAttached()) {
-            wc.debugger.attach("1.3"); // version protocol
-            wc.debugger.sendCommand("Network.enable");
-            wc.debugger.sendCommand("Fetch.enable", {
+        if (!webContents.debugger.isAttached()) {
+            // pattern riêng cho lấy body khi nhận phản hồi
+            const responsePatterns = Object.values(this.FLOWS_API).map((item) => ({
+                urlPattern: item.url, // match EXACT url
+                requestStage: "Response",
+                resourceType: "XHR",
+            }));
+
+            // pattern riêng cho sửa payload (POST /orders) – để nguyên logic sửa
+            const requestPatterns = Object.values(this.REQUEST_API).map((item) => ({
+                urlPattern: item.url, // match EXACT url
+                requestStage: "Request",
+                resourceType: "XHR",
+            }));
+
+            webContents.debugger.attach("1.3"); // version protocol
+            // webContents.debugger.sendCommand("Network.enable");
+            webContents.debugger.sendCommand("Fetch.enable", {
                 patterns: [
-                    { urlPattern: "*://www.gate.com/*", requestStage: "Request" }, // chỉ domain gate
+                    // sửa payload order
+                    ...requestPatterns,
+                    // lấy body khi nhận phản hồi (khỏi cần Network.*)
+                    ...responsePatterns,
                 ],
             });
         }
 
-        // Track requestId -> {method,url,status} cho các request bạn quan tâm
-        const tracked = new Map<string, { method: string; url: string; status?: number }>();
-        const watchNetworkIds = new Set<string>();
+        webContents.debugger.on("message", async (_e, cdpMethod, params: any) => {
+            if (cdpMethod !== "Fetch.requestPaused") return;
 
-        wc.debugger.on("message", async (_e, method, params: any) => {
-            try {
-                switch (method) {
-                    /* --------- A) CHẶN & SỬA REQUEST TRƯỚC KHI GỬI --------- */
-                    case "Fetch.requestPaused": {
-                        const { requestId, request, networkId } = params as {
-                            requestId: string;
-                            networkId?: string;
-                            request: { url: string; method: string; headers?: Record<string, string>; postData?: string };
-                        };
-                        const key = `${request.method} ${request.url}`;
-                        // console.log(`[Fetch.requestPaused] ${key}`);
+            const { requestId, request, responseStatusCode } = params;
+            const url = String(request?.url || "");
+            const reqMethod = String(request?.method || "");
 
-                        switch (key) {
-                            case "POST https://www.gate.com/apiw/v2/futures/usdt/orders":
-                                // console.log(`[Fetch.requestPaused] ${key}`);
+            // --- PHA RESPONSE: chỉ đọc body khi KHỚP CHÍNH XÁC method + url theo FLOWS_API ---
+            if (responseStatusCode !== undefined) {
+                const isAccounts = reqMethod === this.FLOWS_API.acounts.method && url === this.FLOWS_API.acounts.url;
+                const isPositions = reqMethod === this.FLOWS_API.positions.method && url === this.FLOWS_API.positions.url;
+                const isOrdersGet = reqMethod === this.FLOWS_API.orders.method && url === this.FLOWS_API.orders.url;
+                const isOrdersPost = reqMethod === this.FLOWS_API.createOrders.method && url === this.FLOWS_API.createOrders.url;
 
-                                let bodyOrder = request.postData ?? "";
-                                try {
-                                    const obj = JSON.parse(bodyOrder);
+                if (isAccounts || isPositions || isOrdersGet || isOrdersPost) {
+                    try {
+                        const { body, base64Encoded } = await webContents.debugger.sendCommand("Fetch.getResponseBody", { requestId });
+                        const bodyText = base64Encoded ? Buffer.from(body, "base64").toString("utf8") : body;
 
-                                    const modified = this.handlePayloadModification(obj, {
-                                        contract: this.payloadOrder.contract,
-                                        price: this.payloadOrder.price,
-                                        reduce_only: this.payloadOrder.reduce_only,
-                                        size: this.payloadOrder.size,
-                                        tif: this.payloadOrder.tif,
-                                    });
+                        if (isOrdersPost) {
+                            this.resolveBodyCreateOrder?.(bodyText); // resolve string
+                            if (this.timer) clearTimeout(this.timer);
+                            this.resolveBodyCreateOrder = null;
+                        } else {
+                            if (isPositions) this.lastPositionsBody = bodyText;
 
-                                    const jsonText = JSON.stringify(modified);
-
-                                    const postDataB64 = Buffer.from(jsonText, "utf8").toString("base64");
-
-                                    await wc.debugger.sendCommand("Fetch.continueRequest", {
-                                        requestId,
-                                        postData: postDataB64,
-                                    });
-
-                                    if (networkId) watchNetworkIds.add(networkId);
-                                } catch (err) {
-                                    console.log(`có lỗi`, err);
-                                    // await wc.debugger.sendCommand("Fetch.continueRequest", { requestId });
-                                }
-                                break;
-
-                            default: {
-                                // Các request khác: cho đi thẳng
-                                await wc.debugger.sendCommand("Fetch.continueRequest", { requestId });
-                                break;
-                            }
+                            const valueFollowApi: TWorkerData<TPayloadFollowApi> = {
+                                type: "bot:followApi",
+                                payload: { method: reqMethod, url, status: responseStatusCode, bodyText },
+                            };
+                            entry.worker.postMessage(valueFollowApi);
                         }
-                        break;
-                    }
-
-                    /* --------- B) THEO DÕI & LẤY BODY RESPONSE --------- */
-                    case "Network.requestWillBeSent": {
-                        const reqId = params.requestId as string;
-                        const url = params.request?.url as string;
-                        const method = params.request?.method as string;
-                        const key = `${method} ${url}`;
-
-                        // === GIỮ SWITCH CỦA BẠN Ở ĐÂY ===
-                        switch (key) {
-                            case `${this.FLOWS_API.acounts.method} ${this.FLOWS_API.acounts.url}`:
-                                tracked.set(reqId, { method, url });
-                                break;
-                            case `${this.FLOWS_API.orders.method} ${this.FLOWS_API.orders.url}`:
-                                tracked.set(reqId, { method, url });
-                                break;
-                            case `${this.FLOWS_API.positions.method} ${this.FLOWS_API.positions.url}`:
-                                tracked.set(reqId, { method, url });
-                                break;
-                            default:
-                                break;
-                        }
-
-                        break;
-                    }
-
-                    case "Network.responseReceived": {
-                        const reqId = params.requestId as string;
-                        if (tracked.has(reqId)) {
-                            const status = params.response?.status as number | undefined;
-                            const rec = tracked.get(reqId)!;
-                            rec.status = status;
-                        }
-                        break;
-                    }
-
-                    case "Network.loadingFinished": {
-                        const reqId = params.requestId as string;
-                        const rec = tracked.get(reqId);
-                        if (!rec) break;
-                        // Lấy body (đã giải nén). Có thể lớn → DevTools trả base64 khi cần.
-                        const { body, base64Encoded } = await wc.debugger.sendCommand("Network.getResponseBody", { requestId: reqId });
-                        const bodyText = base64Encoded ? Buffer.from(body, "base64").toString("utf8") : (body as string);
-                        const key = `${rec.method} ${rec.url}`;
-
-                        const valueFollowApi: TWorkerData<TPayloadFollowApi> = {
-                            type: "bot:followApi",
-                            payload: { method: rec.method, url: rec.url, status: rec.status, bodyText },
-                        };
-
-                        switch (key) {
-                            case `${this.FLOWS_API.acounts.method} ${this.FLOWS_API.acounts.url}`:
-                                botWorker?.postMessage(valueFollowApi);
-                                break;
-                            case `${this.FLOWS_API.orders.method} ${this.FLOWS_API.orders.url}`:
-                                botWorker?.postMessage(valueFollowApi);
-                                break;
-                            case `${this.FLOWS_API.positions.method} ${this.FLOWS_API.positions.url}`:
-                                botWorker?.postMessage(valueFollowApi);
-                                break;
-                            default:
-                                break;
-                        }
-
-                        // Dọn state để không rò rỉ
-                        tracked.delete(reqId);
-                        break;
-                    }
-
-                    case "Network.loadingFailed":
-                    case "Network.loadingFinishedExtraInfo":
-                    case "Network.responseReceivedExtraInfo": {
-                        // Không bắt buộc dùng, nhưng có thể dọn map nếu fail
-                        const reqId = params.requestId as string;
-                        if (tracked.has(reqId) && method === "Network.loadingFailed") tracked.delete(reqId);
-                        break;
+                    } catch (e) {
+                        // đọc body lỗi thì vẫn cho qua request
                     }
                 }
-            } catch (e) {
-                // Nếu body chưa sẵn (hiếm), bạn có thể thử lại tại loadingFinished; ở đây log là đủ
-                console.error("[intercept-devtools error]", e);
+
+                await webContents.debugger.sendCommand("Fetch.continueRequest", { requestId });
+                return;
             }
+
+            // --- PHA REQUEST: GIỮ NGUYÊN SỬA PAYLOAD CHO POST /orders ---
+            // Lưu ý: vẫn dùng startsWith để cover trường hợp sau này có query / v2 thay đổi nhẹ
+            if (reqMethod === this.REQUEST_API.orders.method && url === this.REQUEST_API.orders.url) {
+                try {
+                    const obj = JSON.parse(request?.postData ?? "{}");
+                    const modified = this.handlePayloadModification(obj, this.payloadOrder); // để nguyên hàm của bạn
+                    const postDataB64 = Buffer.from(JSON.stringify(modified), "utf8").toString("base64");
+                    await webContents.debugger.sendCommand("Fetch.continueRequest", { requestId, postData: postDataB64 });
+                } catch {
+                    // Nếu parse/sửa lỗi -> cứ cho request đi thẳng
+                    await webContents.debugger.sendCommand("Fetch.continueRequest", { requestId });
+                }
+                return;
+            }
+
+            // --- REQUEST: CHẶN/FAKE GET /positions khi IOC fill ---
+            if (reqMethod === this.REQUEST_API.positions.method && url === this.REQUEST_API.positions.url) {
+                if (this.isDisableApiPosition) {
+                    // Khuyến nghị: fulfill 200 + body rỗng/cached → UI không lỗi, request hoàn tất ngay
+                    const bodyText = this.lastPositionsBody ?? JSON.stringify({
+                        code: 200,
+                        data: [],
+                        message: "success",
+                        method: "/apiw/v2/futures/usdt/positions",
+                    }); // hoặc body gần nhất, hoặc "[]"
+                    await webContents.debugger.sendCommand("Fetch.fulfillRequest", {
+                        requestId,
+                        responseCode: 200,
+                        responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+                        body: Buffer.from(bodyText, "utf8").toString("base64"),
+                    });
+                    return; // ĐÃ xử lý xong
+                }
+            }
+
+            // Các request khác: cho đi thẳng
+            await webContents.debugger.sendCommand("Fetch.continueRequest", { requestId });
         });
 
         // Khi window đóng, nên detach
-        wc.once("destroyed", () => {
+        entry.webContentsViewGate.webContents.once("destroyed", () => {
             try {
-                wc.debugger.detach();
+                webContents.debugger.detach();
             } catch {}
-            tracked.clear();
         });
     }
 

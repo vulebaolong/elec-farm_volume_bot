@@ -122,26 +122,16 @@ export const useInitData = () => {
         // });
         if (!settingUser) return;
         if (!getUiSelector.data) return;
-        if (!getMyBlackList.data) return;
-        if (!getAllWhiteListMartingale.data) return;
         if (!getWhiteListFarmIoc.data) return;
         if (!getWhiteListScalpIoc.data) return;
-        if (!getFixLiquidation.data) return;
-        if (!getFixStopLoss.data) return;
-        if (!getFixStopLossQueueByUserId.data) return;
         if (!uids) return;
         if (!isInitWorker) return;
 
         const dataWorkerInit: Omit<TDataInitBot, "parentPort" | "uidDB"> = {
             settingUser: settingUser,
             uiSelector: getUiSelector.data,
-            blackList: getMyBlackList.data.map((item) => item.symbol),
-            whiteListMartingale: getAllWhiteListMartingale.data.map((item) => item.symbol),
             whiteListFarmIoc: getWhiteListFarmIoc.data.items,
             whiteListScalpIoc: getWhiteListScalpIoc.data.items,
-            fixLiquidationInDB: getFixLiquidation.data.items?.[0],
-            fixStopLossInDB: getFixStopLoss.data.items?.[0],
-            fixStopLossQueueInDB: getFixStopLossQueueByUserId.data,
             uids: uids,
         };
         window.electron?.ipcRenderer.sendMessage("worker:initMany", dataWorkerInit);
@@ -149,13 +139,8 @@ export const useInitData = () => {
     }, [
         settingUser,
         getUiSelector.data,
-        getMyBlackList.data,
-        getAllWhiteListMartingale.data,
         getWhiteListFarmIoc.data,
         getWhiteListScalpIoc.data,
-        getFixLiquidation.data,
-        getFixStopLoss.data,
-        getFixStopLossQueueByUserId.data,
         isInitWorker,
     ]);
 

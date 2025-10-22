@@ -1,18 +1,10 @@
+import { roleAllowed } from "@/helpers/function.helper";
+import { useAppSelector } from "@/redux/store";
 import { BotIcon } from "lucide-react";
-import FixLiquidation from "../fix-liquidation/fix-liquidation";
-import FixStopLoss from "../fix-stoploss/fix-stoploss";
 import Log from "../log/log";
-import PassiveSticky from "../log/passive-sticky";
-import RateCounter from "../rate-counter/rate-counter";
-import TakeprofitAccount from "../takeprofit-account/takeprofit-account";
+import SideCountIoc from "../side-count-ioc/side-count-ioc";
 import { PageTitle } from "../title-page/title-page";
 import Controll from "./controll";
-import { useAppSelector } from "@/redux/store";
-import { roleAllowed } from "@/helpers/function.helper";
-import FixLiquidationForUser from "../fix-liquidation/fix-liquidation-for-user";
-import FixStoplossForUser from "../fix-stoploss/fix-stoploss-for-user";
-import SessionsManager from "../session/sessions-manager";
-import SideCountIoc from "../side-count-ioc/side-count-ioc";
 
 export default function Bot() {
     const info = useAppSelector((state) => state.user.info);
@@ -23,22 +15,16 @@ export default function Bot() {
 
             <div className="flex flex-col gap-5 h-full p-5">
                 <Controll />
-                {roleAllowed(info?.roleId) ? (
+                {roleAllowed(info?.roleId) && (
                     <>
                         {/* <FixLiquidation /> */}
                         {/* <FixStopLoss /> */}
                         <SideCountIoc />
                         <Log />
                         {/* <PassiveSticky /> */}
-                        <TakeprofitAccount />
-                        <RateCounter />
+                        {/* <TakeprofitAccount /> */}
+                        {/* <RateCounter /> */}
                         {/* <SessionsManager /> */}
-                    </>
-                ) : (
-                    <>
-                        <FixLiquidationForUser />
-                        <FixStoplossForUser />
-                        <TakeprofitAccount />
                     </>
                 )}
             </div>

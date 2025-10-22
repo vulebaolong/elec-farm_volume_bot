@@ -44,14 +44,16 @@
 // import { TUid } from "@/types/uid.type";
 // import { TWhiteListFarmIoc } from "@/types/white-list-farm-ioc.type";
 // import { TWhiteListMartingale } from "@/types/white-list-martingale.type";
-// import { TWhiteListScalpIoc } from "@/types/white-list-scalp-ioc.type";
-// import { TWhiteList, TWhitelistEntry } from "@/types/white-list.type";
+// import { TMaxScapsPosition, TWhiteListScalpIoc } from "@/types/white-list-scalp-ioc.type";
+// import { TWhiteList, TWhitelistEntry, TWhitelistEntryFarmIoc, TWhitelistEntryNew, TWhiteListItem } from "@/types/white-list.type";
 // import { TWorkerData, TWorkerHeartbeat, TWorkLog } from "@/types/worker.type";
 // import axios from "axios";
 // import { LogFunctions } from "electron-log";
 // import { performance } from "node:perf_hooks";
 // import { parentPort } from "node:worker_threads";
 // import { calcSize, handleEntryCheckAll, handleEntryCheckAll2 } from "./util-bot.worker";
+// import { TSideCountsIOC, TSideCountsIOCitem } from "@/types/side-count-ioc.type";
+// import { ELogType } from "@/types/enum/log-type.enum";
 
 // const FLOWS_API = {
 //     acounts: {
@@ -87,7 +89,7 @@
 //                 type: "bot:log",
 //                 payload: {
 //                     level: "info",
-//                     text: "6) ✅ bot:init - received",
+//                     text: `6) ✅ bot:init - received  | PID: ${process.pid}`,
 //                 },
 //             };
 //             parentPort?.postMessage(payload);
@@ -124,19 +126,30 @@
 //     private parentPort: import("worker_threads").MessagePort;
 //     private isStart = false;
 //     private orderOpens: TOrderOpen[] = [];
-//     private positions = new Map<string, TPosition>(); // "BTC_USDT"
+
+//     /**
+//      * key của map: "BTC_USDT", dữ liệu contract bên trong "BTC/USDT"
+//      */
+//     private positions = new Map<string, TPosition>();
+
 //     private changedLaveragelist = new Map<string, TValueChangeLeverage>();
 //     private changedLaverageCrosslist = new Map<string, TValueChangeLeverage>();
 //     private settingUser: TSettingUsers;
 //     private uiSelector: TUiSelector[];
+
 //     private whitelistEntry: TWhitelistEntry[] = [];
+//     private whitelistEntryFarmIoc: TWhitelistEntry[] = [];
+//     private whitelistEntryScalpIoc: TWhitelistEntry[] = [];
+//     private whitelistEntryFarmIocNew: TWhitelistEntryNew[] = [];
+//     private whitelistEntryScalpIocNew: TWhitelistEntryNew[] = [];
 //     private whiteList: TWhiteList = {};
+
 //     private infoContract = new Map<string, TGetInfoContractRes>();
 //     private blackList: string[] = [];
 //     private whiteListMartingale: TWhiteListMartingale["symbol"][] = [];
 //     private whiteListFarmIoc: TWhiteListFarmIoc[] = [];
 //     private whiteListScalpIoc: TWhiteListScalpIoc[] = [];
-//     private nextOpenAt: number = 0;
+//     private nextOpenAt = new Map<string, number>();
 //     private accounts: TAccount[] = [];
 //     private rateCounter = new SlidingRateCounter();
 //     private rateMax: Record<WindowKey, number> = {
@@ -160,6 +173,20 @@
 //     private uidDB: TUid["uid"];
 
 //     private uidWeb: TUid["uid"] | null | undefined = undefined;
+
+//     /**
+//      * key của map: "BTC_USDT", dữ liệu contract bên trong "BTC/USDT"
+//      */
+//     private maxScalpsPosition = new Map<string, TMaxScapsPosition>();
+
+//     /**
+//      * key của map: "BTC_USDT", dữ liệu contract bên trong "BTC/USDT"
+//      */
+//     private maxFarmsPosition = new Map<string, TMaxScapsPosition>();
+
+//     private lastLogs = new Map<string, string>();
+
+//     private sideCountsIOC: TSideCountsIOC = new Map();
 
 //     constructor(dataInitBot: TDataInitBot) {
 //         this.parentPort = dataInitBot.parentPort;
@@ -217,10 +244,6 @@
 //         if (this.running) return;
 //         this.running = true;
 //         this.parentPort.postMessage({ type: "bot:init:done", payload: true });
-
-//         // const infoGate = await this.getInfoGate();
-//         // this.infoGate = infoGate;
-
 //         for (;;) {
 //             const iterStart = performance.now();
 //             try {
@@ -228,218 +251,35 @@
 //                 this.log(`✅✅✅✅✅ ITER START ${this.count} | ${this.isStart} | ${this.running} =====`);
 //                 await this.beforeEach();
 
-//                 if (!this.uidWeb) continue;
+//                 // if (!this.uidWeb) continue;
 
-//                 if (this.settingUser.sizeIOC === 0) {
-//                     if (this.isStart) {
-//                         const isHedged = await this.handleDualMode("hedged");
-//                         if (!isHedged) continue;
+//                 if (this.isStart) {
+//                     const isOneWay = await this.handleDualMode("oneway");
+//                     if (!isOneWay) continue;
 
-//                         if (this.isNextPhase()) {
-//                             await this.handleNextPhase();
-//                             continue;
+//                     for (const [key, entry] of Object.entries(this.whiteList)) {
+//                         const symbol = entry.core.gate.symbol.replace("/", "_");
+
+//                         const isExitsScalp = this.whiteListScalpIoc.find((item) => item.symbol === symbol);
+//                         if (isExitsScalp) {
+//                             await this.handleWhiteListScalpIocNew(symbol, entry);
 //                         }
 
-//                         await this.setWhitelistEntry();
-//                         this.syncDataOrderOpenFixStopLoss();
-
-//                         // ===== 1) CREATE CLOSE ==============================================
-//                         await this.createTPClose();
-
-//                         // ===== 2) CLEAR OPEN =================================================
-//                         if (this.orderOpens.length > 0) {
-//                             const contractsToCancel = this.contractsToCancelWithEarliest();
-//                             for (const contract of contractsToCancel) {
-//                                 if (this.isClearOpen(contract.earliest, contract.contract)) {
-//                                     await this.clickCanelAllOpen(contract.contract);
-//                                 }
-//                             }
-
-//                             // Cập nhật TP-close xen kẽ
-//                             await this.createTPClose();
-
-//                             this.log("🟢 ✅ Clear Open: done");
-//                         } else {
-//                             this.log("🟢 Clear Open: no order open");
+//                         const isExitsFarm = this.whiteListFarmIoc.find((item) => item.symbol === symbol);
+//                         if (isExitsFarm) {
+//                             await this.handleWhiteListFarmIocNew(symbol, entry);
 //                         }
-//                         console.log("\n\n");
-
-//                         await this.createLiquidationShouldFix();
-//                         this.createStopLossShouldFix();
-
-//                         // ===== 3) CREATE OPEN ===============================================
-//                         if (this.isHandleCreateOpen()) {
-//                             for (const whitelistItem of Object.values(this.whitelistEntry)) {
-//                                 const { symbol, sizeStr, side, lastPriceGate, quanto_multiplier } = whitelistItem;
-
-//                                 if (this.isCheckLimit()) {
-//                                     this.logWorker.info(`🔵 Create Open: skip rate limit hit`);
-//                                     break;
-//                                 }
-
-//                                 if (this.isCheckDelayForPairsMs()) {
-//                                     this.logWorker.info(`🔵 Create Open: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
-//                                     break;
-//                                 }
-
-//                                 // nếu symbol đó đã tồn tại trong orderOpens -> bỏ qua
-//                                 if (this.isOrderExitsByContract(symbol)) {
-//                                     this.logWorker.info(`🔵 Create Open: skip ${symbol} (already exists)`);
-//                                     continue;
-//                                 }
-
-//                                 // nếu symbol tồn tại trong blackList -> bỏ qua
-//                                 if (this.isExitsBlackList(symbol)) {
-//                                     continue;
-//                                 }
-
-//                                 const bidsAsks = await this.getBidsAsks(symbol);
-//                                 const prices = bidsAsks[side === "long" ? "bids" : "asks"].slice(0, IS_PRODUCTION ? 3 : 1);
-//                                 const price = prices[IS_PRODUCTION ? 1 : 0].p;
-
-//                                 let isCreateOrderOpenFix: boolean;
-
-//                                 if (this.isFixStopLoss()) {
-//                                     isCreateOrderOpenFix = await this.createOrderOpenFixStopLoss(
-//                                         symbol,
-//                                         price,
-//                                         lastPriceGate,
-//                                         quanto_multiplier,
-//                                         side,
-//                                     );
-//                                 } else {
-//                                     isCreateOrderOpenFix = await this.createOrderOpenFixLiquidation(symbol, price, lastPriceGate, quanto_multiplier);
-//                                 }
-
-//                                 if (isCreateOrderOpenFix) continue;
-
-//                                 // nếu đã max thì không vào thoát vòng lặp
-//                                 if (this.isCheckMaxOpenPO()) {
-//                                     this.logWorker.info(`🔵 Create Open: skip MaxOpenPO ${this.getLengthOrderInOrderOpensAndPosition()}`);
-//                                     break;
-//                                 }
-
-//                                 const size = IS_PRODUCTION ? sizeStr : `1`;
-//                                 // const size = sizeStr;
-
-//                                 const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
-//                                 if (!ok) continue;
-
-//                                 for (const price of prices) {
-//                                     const payloadOpenOrder: TPayloadOrder = {
-//                                         contract: symbol,
-//                                         size: side === "long" ? size : `-${size}`,
-//                                         price: price.p,
-//                                         reduce_only: false,
-//                                         tif: "poc",
-//                                     };
-//                                     try {
-//                                         await this.openEntry(payloadOpenOrder, `Open`);
-//                                     } catch (error: any) {
-//                                         if (error?.message === INSUFFICIENT_AVAILABLE) {
-//                                             throw new Error(error);
-//                                         }
-//                                         if (this.isTimeoutError(error)) {
-//                                             throw new Error(error);
-//                                         }
-//                                         this.logWorker.error(error?.message);
-//                                         continue;
-//                                     }
-//                                 }
-
-//                                 // cập nhật TP-close
-//                                 await this.createTPClose();
-
-//                                 // ✅ đặt cooldown cho symbol này sau khi xử lý xong
-//                                 this.postponePair(this.settingUser.delayForPairsMs);
-//                             }
-//                         }
-//                         console.log("\n\n");
-
-//                         await this.checkDataFixLiquidationIsDone();
-//                         await this.checkDataFixStopLossIsDone();
-
-//                         // ===== 4) SL / ROI ===================================================
-//                         if (this.isHandleSL()) {
-//                             for (const [, pos] of this.positions) {
-//                                 if (this.isExitsBlackList(pos.contract)) {
-//                                     continue;
-//                                 }
-//                                 await this.handleRoi(pos);
-//                             }
-//                             await this.createTPClose();
-//                         }
-//                         console.log("\n\n");
-//                     } else {
-//                         this.log("isStart=false → skip all work");
 //                     }
-//                 } else {
-//                     if (this.isStart) {
-//                         const isOneWay = await this.handleDualMode("oneway");
-//                         if (!isOneWay) continue;
 
-//                         await this.setWhitelistEntry2();
-
-//                         for (const entry of this.whitelistEntry) {
-//                             if (this.isCheckDelayForPairsMs()) {
-//                                 this.logWorker.info(`🔵 Create IOC: skip (delayForPairsMs ${this.cooldownLeft()}ms)`);
-//                                 break;
-//                             }
-
-//                             // Scalp
-//                             if (this.checkWhiteListScalpIoc(entry.symbol)) {
-//                                 const bidsAsks = await this.getBidsAsks(entry.symbol);
-
-//                                 const pricesScalp = bidsAsks[entry.side === "long" ? "bids" : "asks"].slice(0, 3);
-
-//                                 for (const price of pricesScalp) {
-//                                     const payloadOpenOrder: TPayloadOrder = {
-//                                         contract: entry.symbol,
-//                                         size: entry.side === "long" ? `${this.settingUser.sizeIOC}` : `-${this.settingUser.sizeIOC}`,
-//                                         // size: entry.side === "long" ? `1` : `-1`,
-//                                         price: price.p,
-//                                         reduce_only: false,
-//                                         tif: "ioc",
-//                                     };
-
-//                                     const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
-//                                     if (!ok) continue;
-
-//                                     const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC | ${payloadOpenOrder.price}`);
-//                                 }
-//                             } else {
-//                                 this.logWorker.info(`Skip Scalp ${entry.symbol}: by whiteListScalpIoc not found`);
-//                             }
-
-//                             // Farm
-//                             if (this.whiteListFarmIoc.map((item) => item.symbol).includes(entry.symbol)) {
-//                                 const bidsAsks = await this.getBidsAsks(entry.symbol);
-//                                 const tick = entry.order_price_round;
-//                                 const insidePrices = this.computeInsidePrices(entry.side, bidsAsks, tick, this.decimalsFromTick.bind(this));
-
-//                                 for (const priceStr of insidePrices) {
-//                                     const payloadOpenOrder: TPayloadOrder = {
-//                                         contract: entry.symbol,
-//                                         size: entry.side === "long" ? `${this.settingUser.sizeIOC}` : `-${this.settingUser.sizeIOC}`,
-//                                         // size: entry.side === "long" ? "1" : "-1",
-//                                         price: priceStr,
-//                                         reduce_only: false,
-//                                         tif: "ioc", // hoặc "poc" nếu bạn muốn maker
-//                                     };
-
-//                                     const ok = await this.changeLeverageCross(entry.symbol, this.settingUser.leverage);
-//                                     if (!ok) continue;
-
-//                                     await this.openEntry(payloadOpenOrder, `🧨 Farm IOC | ${payloadOpenOrder.price}`);
-//                                 }
-//                             } else {
-//                                 this.logWorker.info(`Skip Farm ${entry.symbol}: by whiteListFarmIoc not found`);
-//                             }
+//                     // ===== 4) SL / ROI ===================================================
+//                     if (this.isHandleSL()) {
+//                         for (const [, pos] of this.positions) {
+//                             await this.handleRoi(pos);
 //                         }
 //                     }
 //                 }
 //             } catch (err: any) {
-//                 this.logWorker.error(err?.message);
+//                 this.logWorker().error(err?.message);
 //                 if (this.isTimeoutError(err)) {
 //                     this.reloadWebContentsViewRequest();
 //                 }
@@ -453,11 +293,12 @@
 //     }
 
 //     private async handleDualMode(dualModeExpected: "oneway" | "hedged"): Promise<boolean> {
-//         const account = this.accounts.find((item) => {
-//             return item.user === this.uidWeb;
-//         });
+//         // const account = this.accounts.find((item) => {
+//         //     return item.user === this.uidWeb;
+//         // });
+//         const account = this.accounts[0];
 //         if (!account) {
-//             this.logWorker.info("account not found");
+//             this.logWorker().info("account not found");
 //             return false;
 //         }
 
@@ -466,7 +307,7 @@
 //         if (dualModeExpected === "oneway") {
 //             if (account.in_dual_mode === true) {
 //                 await this.handleChangePositionMode({ mode: "oneway" });
-//                 this.logWorker.info("hedged => oneway");
+//                 this.logWorker().info("hedged => oneway");
 //                 return true;
 //             } else {
 //                 return true;
@@ -474,7 +315,7 @@
 //         } else {
 //             if (account.in_dual_mode === false) {
 //                 await this.handleChangePositionMode({ mode: "hedged" });
-//                 this.logWorker.info("oneway => hedged");
+//                 this.logWorker().info("oneway => hedged");
 //                 return true;
 //             } else {
 //                 return true;
@@ -482,12 +323,274 @@
 //         }
 //     }
 
-//     private checkWhiteListScalpIoc(symbol: string): boolean {
-//         const isExits = this.whiteListScalpIoc.map((item) => item.symbol).includes(symbol);
-//         const pos = this.positions.get(symbol);
-//         if (!pos) return false;
-//         const isMaxSizePosition = Math.abs(pos.size) >= pos.size;
-//         return isExits && isMaxSizePosition;
+//     private async handleWhiteListScalpIocNew(entrySymbol: string, entry: TWhiteListItem) {
+//         const keyDelay = `scalp:${entrySymbol}`;
+//         const keyPrevSidesCount = `scalp:${entrySymbol}`;
+
+//         if (this.settingUser.delayScalp > 0) {
+//             if (this.isCheckDelayForPairsMs(keyDelay)) {
+//                 const mes = `🔵 Delay Scalp ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
+//                 this.logWorker().info(mes);
+//                 return;
+//             }
+//         }
+
+//         if (!entry.core.gate.sScalp) {
+//             const mes = `Skip Scalp ${entrySymbol}: By Not Found sScalp: ${entry.core.gate.sScalp}`;
+//             this.logWorker().info(mes);
+//             return;
+//         }
+
+//         const sideScalp = this.handleSideIOC(entry.core.gate.sScalp, keyPrevSidesCount);
+//         if (sideScalp === null) {
+//             const mes = `Skip Scalp ${entrySymbol}: By Hold`;
+//             this.logWorker().info(mes);
+//             return;
+//         }
+
+//         const maxSizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
+//         if (!maxSizeScalpIoc) {
+//             const mes = `Skip Scalp ${entrySymbol}: By Not Found Max Size: ${maxSizeScalpIoc}`;
+//             this.logWorker().info(mes);
+//             return;
+//         }
+
+//         let sizeScalpIoc = this.whiteListScalpIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
+//         if (!sizeScalpIoc) {
+//             const mes = `Skip Scalp ${entrySymbol}: By Not Found size: ${sizeScalpIoc}`;
+//             this.logWorker().info(mes);
+//             return;
+//         }
+
+//         const isNextByMaxSize = this.checkMaxSize2(entrySymbol, sideScalp, maxSizeScalpIoc);
+//         if (!isNextByMaxSize) return;
+
+//         // const bidsAsks = await this.getBidsAsks(entrySymbol);
+
+//         const indexBidAsk = Math.max(0, Math.min(4, this.settingUser.indexBidAsk - 1));
+//         // chỗ này sẽ để càng xa càng tốt là 0, 1, 2, 3, ... => để 2
+//         // càng xa càng khó khớp lệnh nên tạm thời để 0 để test
+//         const pricesScalp = entry.core.gate[sideScalp === "long" ? "bids" : "asks"][indexBidAsk];
+//         // const pricesScalps = bidsAsks[sideScalp === "long" ? "bids" : "asks"].slice(0, 2);
+
+//         if (!IS_PRODUCTION) sizeScalpIoc = 1;
+
+//         const payloadOpenOrder: TPayloadOrder = {
+//             contract: entrySymbol,
+//             size: sideScalp === "long" ? `${sizeScalpIoc}` : `-${sizeScalpIoc}`,
+//             price: pricesScalp.p,
+//             reduce_only: false,
+//             tif: "ioc",
+//         };
+
+//         const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
+//         if (!ok) return;
+
+//         const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC`);
+//         // this.logWorker().info(`🧨 ${entrySymbol} | ${sideScalp} | ${payloadOpenOrder.price}`);
+//         this.sideCountsIOC.set(keyPrevSidesCount, { keyPrevSidesCount, longHits: 0, shortHits: 0 });
+//         this.sendSideCountsIOC();
+
+//         if (this.settingUser.delayScalp > 0) {
+//             this.postponePair(keyDelay, this.settingUser.delayScalp);
+//         }
+//     }
+
+//     private async handleWhiteListFarmIocNew(entrySymbol: string, entry: TWhiteListItem) {
+//         const keyDelay = `farm:${entrySymbol}`;
+//         const keyPrevSidesCount = `farm:${entrySymbol}`;
+
+//         if (this.settingUser.delayFarm > 0) {
+//             if (this.isCheckDelayForPairsMs(keyDelay)) {
+//                 const mes = `🔵 Delay Farm ${entrySymbol} ${this.cooldownLeft(keyDelay)}ms`;
+//                 this.logWorker().info(mes);
+//                 return;
+//             }
+//         }
+
+//         if (!entry.core.gate.sFarm) {
+//             const mes = `Skip Farm ${entrySymbol}: By Not Found sFarm: ${entry.core.gate.sFarm}`;
+//             this.logWorker().info(mes);
+//             return;
+//         }
+
+//         const sideFarm = this.handleSideIOC(entry.core.gate.sFarm, keyPrevSidesCount);
+//         if (sideFarm === null) {
+//             const mes = `Skip Farm ${entrySymbol}: By Hold`;
+//             this.logWorker().info(mes);
+//             return;
+//         }
+
+//         const maxSizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.maxSize;
+//         if (!maxSizeFarmIoc) {
+//             const mes = `Skip Farm ${entrySymbol}: By Not Found Max Size: ${maxSizeFarmIoc}`;
+//             this.logWorker().info(mes);
+//             return;
+//         }
+
+//         let sizeFarmIoc = this.whiteListFarmIoc.find((item) => item.symbol.replace("/", "_") === entrySymbol)?.size;
+//         if (!sizeFarmIoc) {
+//             const mes = `Skip Farm ${entrySymbol}: By Not Found size: ${sizeFarmIoc}`;
+//             this.logWorker().info(mes);
+//             return;
+//         }
+
+//         const isNextByMaxSize = this.checkMaxSize2(entrySymbol, sideFarm, maxSizeFarmIoc);
+//         if (!isNextByMaxSize) return;
+
+//         // const bidsAsks = await this.getBidsAsks(entrySymbol);
+
+//         let price: any = entry.core.gate[sideFarm === "long" ? "bids" : "asks"][2].p;
+
+//         if (!IS_PRODUCTION) {
+//             sizeFarmIoc = 1;
+//             const tick = entry.contractInfo.order_price_round;
+//             const insidePrices = this.computeInsidePrices(sideFarm, entry.core.gate, tick, this.decimalsFromTick.bind(this));
+//             price = insidePrices.at(-1);
+//             if (!price) {
+//                 const mes = `Skip Farm ${entrySymbol}: by not found price: ${price}`;
+//                 this.logWorker().info(mes);
+//                 return;
+//             }
+//         }
+
+//         const payloadOpenOrder: TPayloadOrder = {
+//             contract: entrySymbol,
+//             size: sideFarm === "long" ? `${sizeFarmIoc}` : `-${sizeFarmIoc}`,
+//             price: price,
+//             reduce_only: false,
+//             tif: "ioc",
+//         };
+
+//         const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
+//         if (!ok) return;
+
+//         await this.openEntry(payloadOpenOrder, `🧨 Farm IOC`);
+//         // this.logWorker().info(`🧨 ${entrySymbol} | ${sideFarm} | ${payloadOpenOrder.price}`);
+//         this.sideCountsIOC.set(keyPrevSidesCount, { keyPrevSidesCount, longHits: 0, shortHits: 0 });
+//         this.sendSideCountsIOC();
+
+//         if (this.settingUser.delayFarm > 0) {
+//             this.postponePair(keyDelay, this.settingUser.delayFarm);
+//         }
+//     }
+
+//     private addMaxScapsPosition(symbol: string) {
+//         this.maxScalpsPosition.set(symbol.replace("/", "_"), { symbol: symbol, at: Date.now() });
+//     }
+//     private addMaxFarmsPosition(symbol: string) {
+//         this.maxFarmsPosition.set(symbol.replace("/", "_"), { symbol: symbol, at: Date.now() });
+//     }
+
+//     private syncMaxScapsPosition(positions: TPosition[]) {
+//         // Nếu không có position nào → xóa toàn bộ
+//         if (positions.length === 0) {
+//             this.maxScalpsPosition.clear();
+//             return;
+//         }
+
+//         // Nếu maxScalpsPosition đang trống → không cần làm gì
+//         if (this.maxScalpsPosition.size === 0) return;
+
+//         for (const key of this.maxScalpsPosition.keys()) {
+//             // Chuẩn hóa tên contract trong positions
+//             const exists = positions.some((pos) => pos.contract.replace("/", "_") === key.replace("/", "_"));
+
+//             if (!exists) {
+//                 this.maxScalpsPosition.delete(key);
+//             }
+//         }
+//     }
+
+//     private syncMaxFarmsPosition(positions: TPosition[]) {
+//         // Nếu không có position nào → xóa toàn bộ
+//         if (positions.length === 0) {
+//             this.maxFarmsPosition.clear();
+//             return;
+//         }
+
+//         // Nếu maxFarmsPosition đang trống → không cần làm gì
+//         if (this.maxFarmsPosition.size === 0) return;
+
+//         for (const key of this.maxFarmsPosition.keys()) {
+//             // Chuẩn hóa tên contract trong positions
+//             const exists = positions.some((pos) => pos.contract.replace("/", "_") === key.replace("/", "_"));
+
+//             if (!exists) {
+//                 this.maxFarmsPosition.delete(key);
+//             }
+//         }
+//     }
+
+//     private handleLogicMaxSide(flag: "farm" | "scalp", entrySymbol: string, entrySide: TSide, maxSize: number): boolean {
+//         const isMaxSizeExits = flag === "scalp" ? this.maxScalpsPosition.get(entrySymbol) : this.maxFarmsPosition.get(entrySymbol);
+
+//         if (isMaxSizeExits) {
+//             // nếu đã maxSize thì vào ngược chiều với side của position
+//             const position = this.positions.get(entrySymbol);
+//             if (position) {
+//                 return this.checkMaxSize(position, entrySide);
+//             }
+//             return true;
+//             // nếu không có position là lệnh chưa được fill nên vẫn đi theo side của setting
+//         } else {
+//             // nếu chưa maxSize thì kiểm tra xem max chưa để lưu vào maxScalpsPosition
+//             const position = this.positions.get(entrySymbol);
+//             if (position) {
+//                 if (Math.abs(position.size) >= maxSize) {
+//                     if (flag === "scalp") {
+//                         this.addMaxScapsPosition(entrySymbol);
+//                     } else {
+//                         this.addMaxFarmsPosition(entrySymbol);
+//                     }
+//                     return this.checkMaxSize(position, entrySide);
+//                 }
+//             }
+//             return true;
+//         }
+//     }
+
+//     private checkMaxSize(position: TPosition, entrySide: TSide): boolean {
+//         // nếu size của position lớn hơn 0 là long, thì tín hiệu phải là short mới vào
+//         // sideShoudBe sẽ là side mong muốn ngược với side position
+//         const sidePosition = position.size > 0 ? "long" : "short";
+//         const sideShoudBe = sidePosition === "long" ? "short" : "long";
+//         if (sideShoudBe !== entrySide) {
+//             // this.logWorker().info(`${entrySymbol} ${sidePosition} skip by: cần tín hiệu là ${sideShoudBe}`);
+//             return false;
+//         } else {
+//             // this.logWorker().info(`${entrySymbol} ${sidePosition} đúng side cần ${sideShoudBe} => tiến hành vào lệnh`);
+//             return true;
+//         }
+//     }
+
+//     private checkMaxSize2(symbol: string, entrySide: TSide, maxSize: number): boolean {
+//         const position = this.positions.get(symbol);
+//         if (!position) {
+//             // nếu không có position là lệnh chưa được fill tiếp tục vào lệnh
+//             return true;
+//         }
+
+//         if (Math.abs(position.size) >= maxSize) {
+//             // nếu size của position lớn hơn 0 là long, thì tín hiệu phải là short mới vào
+//             // sideShoudBe sẽ là side mong muốn ngược với side position
+//             const sidePosition = position.size > 0 ? "long" : "short";
+//             const sideShoudBe = sidePosition === "long" ? "short" : "long";
+//             if (sideShoudBe !== entrySide) {
+//                 const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): cần tín hiệu là ${sideShoudBe}`;
+//                 if (this.settingUser.sizeIOC === 5) this.logWorker().info(mes);
+//                 // this.logUnique("info", "all", mes);
+//                 return false;
+//             } else {
+//                 const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): đúng side cần ${sideShoudBe} => tiến hành vào lệnh`;
+//                 if (this.settingUser.sizeIOC === 5) this.logWorker().info(mes);
+//                 // this.logUnique("info", "all", mes);
+//                 return true;
+//             }
+//         } else {
+//             // size của position nhỏ hơn maxSize thì tiếp tục vào lệnh
+//             return true;
+//         }
 //     }
 
 //     private async createTPClose() {
@@ -539,7 +642,7 @@
 //                     if (this.isTimeoutError(error)) {
 //                         throw new Error(error);
 //                     }
-//                     this.logWorker.error(error?.message);
+//                     this.logWorker().error(error?.message);
 //                     continue;
 //                 }
 //             }
@@ -552,13 +655,13 @@
 //     private async beforeEach() {
 //         this.heartbeat();
 //         this.rateCounterSendRenderer();
-//         await this.getUid();
-//         this.checkUid();
+//         // await this.getUid();
+//         // this.checkUid();
 //         // await this.checkLoginGate();
 //         // await this.handleGetInfoGate();
 //         // await this.checkUid();
 //         // this.getSideCCC();
-//         // this.logWorker.log(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
+//         // this.logWorker().log(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
 //         // console.log(`positions`, Object(this.positions).keys());
 //         // console.log(`orderOpens`, this.orderOpens);
 //         // console.log(`settingUser`, this.settingUser);
@@ -570,9 +673,15 @@
 //         // console.log("uidDB", this.uidDB);
 //         // console.log("whitelistEntry", this.whitelistEntry);
 //         // console.log("whiteListMartingale", this.whiteListMartingale);
-//         console.log("whiteListFarmIoc", this.whiteListFarmIoc);
-//         console.log("whiteListScalpIoc", this.whiteListScalpIoc);
-//         // console.dir(this.whiteList, { colors: true, depth: null });
+//         // console.log("whiteListFarmIoc", this.whiteListFarmIoc);
+//         // console.log("whiteListScalpIoc", this.whiteListScalpIoc);
+//         // console.dir(this.positions, { colors: true, depth: null });
+//         // console.log(`maxScalpsPosition`, Object(this.maxScalpsPosition).keys());
+//         // console.log(`maxFarmsPosition`, Object(this.maxFarmsPosition).keys());
+//         // console.log("whitelistEntryFarmIocNew", this.whitelistEntryFarmIocNew);
+//         // console.log("whitelistEntryScalpIocNew", this.whitelistEntryScalpIocNew);
+//         // console.log("nextOpenAt", this.nextOpenAt);
+//         // console.dir(this.sideCountsIOC, { colors: true, depth: null });
 //     }
 
 //     private heartbeat() {
@@ -681,13 +790,13 @@
 //     private start(isNextPhase = true) {
 //         this.isStart = true;
 //         this.parentPort?.postMessage({ type: "bot:start", payload: { isStart: this.isStart, isNextPhase } });
-//         this.logWorker.info("🟢 Start");
+//         this.logWorker().info("🟢 Start");
 //     }
 
 //     private stop() {
 //         this.isStart = false;
 //         this.parentPort?.postMessage({ type: "bot:stop", payload: { isStart: this.isStart } });
-//         this.logWorker.info("🔴 Stop");
+//         this.logWorker().info("🔴 Stop");
 //     }
 
 //     private sleep(ms: number) {
@@ -698,7 +807,7 @@
 //         // return false;
 //         const isWhiteListEntryEmpty = this.isCheckWhitelistEntryEmty();
 //         if (isWhiteListEntryEmpty) {
-//             this.logWorker.info(`🔵 Create Open: skip White list entry empty: ${this.whitelistEntry.length}`);
+//             this.logWorker().info(`🔵 Create Open: skip White list entry empty: ${this.whitelistEntry.length}`);
 //             return false;
 //         }
 
@@ -823,7 +932,7 @@
 
 //         if (code >= 400 || code < 0) {
 //             const msg = `❌ Change Leverage: ${symbol} | code:${code} | ${message}`;
-//             this.logWorker.error(msg);
+//             this.logWorker().error(msg);
 //             return false;
 //         }
 
@@ -834,14 +943,14 @@
 
 //         if (data?.[0]?.leverage !== leverageString || data?.[1]?.leverage !== leverageString) {
 //             const msg = `❌ Change Leverage: ${symbol} | mismatched leverage`;
-//             this.logWorker.error(msg);
+//             this.logWorker().error(msg);
 //             return false;
 //         }
 
 //         this.changedLaveragelist.delete(symbol);
 //         this.changedLaveragelist.set(symbol, { symbol, leverage: leverageNumber });
 //         const msg = `✅ Change Leverage: ${symbol} | ${leverageString}`;
-//         this.logWorker.info(msg);
+//         this.logWorker().info(msg);
 
 //         return true;
 //     }
@@ -872,7 +981,7 @@
 
 //         if (code >= 400 || code < 0) {
 //             const msg = `❌ Change Leverage Cross: ${symbol} | code:${code} | ${message}`;
-//             this.logWorker.error(msg);
+//             this.logWorker().error(msg);
 //             return false;
 //         }
 
@@ -883,14 +992,14 @@
 
 //         if (data?.cross_leverage_limit !== leverageString) {
 //             const msg = `❌ Change Leverage: ${symbol} | mismatched leverage`;
-//             this.logWorker.error(msg);
+//             this.logWorker().error(msg);
 //             return false;
 //         }
 
 //         this.changedLaverageCrosslist.delete(symbol);
 //         this.changedLaverageCrosslist.set(symbol, { symbol, leverage: leverageNumber });
 //         const msg = `✅ Change Leverage Cross: ${symbol} | ${leverageString}`;
-//         this.logWorker.info(msg);
+//         this.logWorker().info(msg);
 
 //         return true;
 //     }
@@ -898,7 +1007,7 @@
 //     private async openEntry(payload: TPayloadOrder, label: string) {
 //         if (Number(this.accounts[0].available || 0) <= 0) {
 //             const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${INSUFFICIENT_AVAILABLE}`;
-//             this.logWorker.error(msg);
+//             this.logWorker().error(msg);
 //             throw new Error(INSUFFICIENT_AVAILABLE);
 //         }
 
@@ -925,9 +1034,9 @@
 //             // this.rateCounter.stop(); // từ giờ ngừng đếm
 
 //             const msg = `❌ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}: ${body?.message || TOO_MANY_REQUEST}`;
-//             this.logWorker.error(msg);
+//             this.logWorker().error(msg);
 
-//             this.logWorker.warn(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
+//             this.logWorker().warn(`[RATE] hit limit; counts so far: ${JSON.stringify(this.rateCounter.counts())}`);
 
 //             throw new Error(msg);
 //         }
@@ -947,8 +1056,8 @@
 //             throw new Error(msg);
 //         }
 
-//         const status = `✅ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price}`;
-//         this.logWorker.info(status);
+//         const status = `✅ ${payload.contract} - ${label} ${Number(payload.size) >= 0 ? "long" : "short"} | ${payload.size} | ${payload.price} | ${body.data.size - body.data.left}`;
+//         this.logWorker(ELogType.Trade).info(status);
 
 //         return body.data;
 //     }
@@ -1090,7 +1199,7 @@
 //             throw new Error(`🟢 ❌ Click Cancel All Order error: ${error ?? "unknown"} ${body} ${ok}`);
 //         }
 
-//         this.logWorker.info(`✅ ${contract} Cancel All Open: ${body.clicked}`);
+//         this.logWorker().info(`✅ ${contract} Cancel All Open: ${body.clicked}`);
 //         this.removeSticky(`timeout:${contract}`);
 
 //         return body;
@@ -1130,7 +1239,7 @@
 //             throw new Error(`🟢 ❌ Click Market Position error: ${error ?? "unknown"} ${body} ${ok}`);
 //         }
 
-//         this.logWorker.info(`✅ 🤷 ${symbol} Click StopLoss Market Position`);
+//         this.logWorker(ELogType.Trade).info(`✅ 🤷 ${symbol} Click StopLoss Market Position`);
 //         return body;
 //     }
 
@@ -1142,7 +1251,7 @@
 //         const selectorButtonCloseAllOpenOrder = this.uiSelector?.find((item) => item.code === "buttonCloseAllOpenOrder")?.selectorValue;
 
 //         if (!selectorButtonTabPosition || !selectorButtonCloseAllPosition || !selectorButtonTabOpenOrder || !selectorButtonCloseAllOpenOrder) {
-//             this.logWorker.info(`❌ Not found selector clickClearAll`);
+//             this.logWorker().info(`❌ Not found selector clickClearAll`);
 //             throw new Error(`Not found selector`);
 //         }
 
@@ -1169,7 +1278,7 @@
 //             throw new Error(`❌ Click Clear All error: ${error ?? "unknown"} ${body} ${ok}`);
 //         }
 
-//         this.logWorker.info(`✅ Click Clear All`);
+//         this.logWorker().info(`✅ Click Clear All`);
 
 //         return body;
 //     }
@@ -1197,7 +1306,7 @@
 //             });
 
 //             if (errString) {
-//                 this.logWorker.error(errString);
+//                 this.logWorker().error(errString);
 //                 continue;
 //             } else if (qualified && result && result.side) {
 //                 this.whitelistEntry.push({
@@ -1215,36 +1324,164 @@
 //     }
 
 //     private async setWhitelistEntry2() {
-//         const whiteListArr = Object.values(this.whiteList);
-//         if (whiteListArr.length === 0) {
-//             this.whitelistEntry = [];
-//             return;
-//         }
+//         // const whiteListArr = Object.values(this.whiteList);
+//         // if (whiteListArr.length === 0) {
+//         //     this.whitelistEntry = [];
+//         //     this.whitelistEntryFarmIoc = [];
+//         //     this.whitelistEntryScalpIoc = [];
+//         //     this.whitelistEntryFarmIocNew = [];
+//         //     this.whitelistEntryScalpIocNew = [];
+//         //     return;
+//         // }
+//         // this.whitelistEntry = [];
+//         // this.whitelistEntryFarmIoc = [];
+//         // this.whitelistEntryScalpIoc = [];
+//         // this.whitelistEntryFarmIocNew = [];
+//         // this.whitelistEntryScalpIocNew = [];
+//         // for (const whitelistItem of whiteListArr) {
+//         //     // new
+//         //     if (whitelistItem.core.gate.sFarm) {
+//         //         const sideFarm = this.handleSideIOC(whitelistItem.core.gate.sFarm);
+//         //         const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
+//         //             return whitelistItem.core.gate.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
+//         //         });
+//         //         if (sideFarm && isExitsFarm) {
+//         //             this.whitelistEntryFarmIocNew.push({
+//         //                 order_price_round: whitelistItem.contractInfo.order_price_round,
+//         //                 side: sideFarm,
+//         //                 symbol: whitelistItem.core.gate.symbol,
+//         //             });
+//         //         }
+//         //     }
+//         //     if (whitelistItem.core.gate.sScalp) {
+//         //         const sideScalp = this.handleSideIOC(whitelistItem.core.gate.sScalp);
+//         //         const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
+//         //             return whitelistItem.core.gate.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
+//         //         });
+//         //         if (sideScalp && isExitsScalp) {
+//         //             this.whitelistEntryScalpIocNew.push({
+//         //                 order_price_round: whitelistItem.contractInfo.order_price_round,
+//         //                 side: sideScalp,
+//         //                 symbol: whitelistItem.core.gate.symbol,
+//         //             });
+//         //         }
+//         //     }
+//         //     // old
+//         //     // const {
+//         //     //     errString: farmErrString,
+//         //     //     qualified: qualifiedFarm,
+//         //     //     result: resultFarm,
+//         //     // } = handleEntryCheckAll2({ flag: "farm", whitelistItem, settingUser: this.settingUser });
+//         //     // const {
+//         //     //     errString: scalpErrString,
+//         //     //     qualified: qualifiedScalp,
+//         //     //     result: resultScalp,
+//         //     // } = handleEntryCheckAll2({ flag: "scalp", whitelistItem, settingUser: this.settingUser });
+//         //     // if (farmErrString || scalpErrString) {
+//         //     //     this.logWorker().error(farmErrString ?? scalpErrString);
+//         //     //     continue;
+//         //     // }
+//         //     // if (resultFarm && resultFarm.side) {
+//         //     //     const isExitsFarm = this.whiteListFarmIoc.find((farmIoc) => {
+//         //     //         return resultFarm.symbol.replace("/", "_") === farmIoc.symbol.replace("/", "_");
+//         //     //     });
+//         //     //     if (isExitsFarm) {
+//         //     //         this.whitelistEntryFarmIoc.push({
+//         //     //             symbol: resultFarm.symbol,
+//         //     //             sizeStr: `${this.settingUser.sizeIOC}`,
+//         //     //             side: resultFarm.side,
+//         //     //             askBest: resultFarm.askBest,
+//         //     //             bidBest: resultFarm.bidBest,
+//         //     //             order_price_round: resultFarm.order_price_round,
+//         //     //             lastPriceGate: resultFarm.lastPriceGate,
+//         //     //             quanto_multiplier: resultFarm.quanto_multiplier,
+//         //     //         });
+//         //     //     }
+//         //     // }
+//         //     // if (qualifiedScalp && resultScalp && resultScalp.side) {
+//         //     //     const isExitsScalp = this.whiteListScalpIoc.find((scalpIoc) => {
+//         //     //         return resultScalp.symbol.replace("/", "_") === scalpIoc.symbol.replace("/", "_");
+//         //     //     });
+//         //     //     if (isExitsScalp) {
+//         //     //         this.whitelistEntryScalpIoc.push({
+//         //     //             symbol: resultScalp.symbol,
+//         //     //             sizeStr: `${this.settingUser.sizeIOC}`,
+//         //     //             side: resultScalp.side,
+//         //     //             askBest: resultScalp.askBest,
+//         //     //             bidBest: resultScalp.bidBest,
+//         //     //             order_price_round: resultScalp.order_price_round,
+//         //     //             lastPriceGate: resultScalp.lastPriceGate,
+//         //     //             quanto_multiplier: resultScalp.quanto_multiplier,
+//         //     //         });
+//         //     //     }
+//         //     // }
+//         // }
+//     }
 
-//         this.whitelistEntry = []; // cho bot
+//     private handleSideIOC(s: number, keyPrevSidesCount: string): TSide | null {
+//         const stepS = this.settingUser.stepS
+//         // lấy / khởi tạo bộ đếm
+//         const rec = this.sideCountsIOC.get(keyPrevSidesCount) ?? {
+//             keyPrevSidesCount,
+//             longHits: 0,
+//             shortHits: 0,
+//         };
 
-//         for (const whitelistItem of whiteListArr) {
-//             const { errString, qualified, result } = handleEntryCheckAll2({
-//                 whitelistItem,
-//                 settingUser: this.settingUser,
-//             });
+//         let out: TSide | null = null;
 
-//             if (errString) {
-//                 this.logWorker.error(errString);
-//                 continue;
-//             } else if (qualified && result && result.side) {
-//                 this.whitelistEntry.push({
-//                     symbol: result.symbol,
-//                     sizeStr: `${this.settingUser.sizeIOC}`,
-//                     side: result.side,
-//                     askBest: result.askBest,
-//                     bidBest: result.bidBest,
-//                     order_price_round: result.order_price_round,
-//                     lastPriceGate: result.lastPriceGate,
-//                     quanto_multiplier: result.quanto_multiplier,
-//                 });
+//         if (s > this.settingUser.tauS) {
+//             rec.longHits += 1;
+//             rec.shortHits = 0;
+
+//             if (rec.longHits >= stepS) {
+//                 this.sideCountsIOC.set(keyPrevSidesCount, rec);
+//                 this.sendSideCountsIOC();
+
+//                 rec.longHits = 0; // reset để tránh bắn liên tục mỗi tick
+//                 this.sideCountsIOC.set(keyPrevSidesCount, rec);
+//                 out = "long"; // đủ N lần liên tiếp → bật tín hiệu long
+//                 return out;
 //             }
+//         } else if (s < -this.settingUser.tauS) {
+//             rec.shortHits += 1;
+//             rec.longHits = 0;
+
+//             if (rec.shortHits >= stepS) {
+//                 this.sideCountsIOC.set(keyPrevSidesCount, rec);
+//                 this.sendSideCountsIOC();
+
+//                 rec.shortHits = 0; // reset để tránh bắn liên tục mỗi tick
+//                 this.sideCountsIOC.set(keyPrevSidesCount, rec);
+//                 out = "short"; // đủ N lần liên tiếp → bật tín hiệu short
+//                 return out;
+//             }
+//         } else {
+//             // rơi vào dead-band → reset cả hai phía (đếm LIÊN TIẾP đúng nghĩa)
+//             rec.longHits = 0;
+//             rec.shortHits = 0;
 //         }
+
+//         if (this.settingUser.tauS === undefined && this.settingUser.tauS === null) {
+//             rec.longHits = 0;
+//             rec.shortHits = 0;
+//             out = null;
+//         }
+
+//         this.sideCountsIOC.set(keyPrevSidesCount, rec);
+//         this.sendSideCountsIOC();
+//         return out; // "long" | "short" | null
+//     }
+
+//     private sendSideCountsIOC() {
+//         const payload: TWorkerData<{ sideCountItem: TSideCountsIOCitem[]; tauS: number, stepS: number }> = {
+//             type: "bot:ioc:sideCount",
+//             payload: {
+//                 tauS: this.settingUser.tauS,
+//                 sideCountItem: Array.from(this.sideCountsIOC.values()),
+//                 stepS: this.settingUser.stepS,
+//             },
+//         };
+//         this.parentPort?.postMessage(payload);
 //     }
 
 //     private async getCloseOrderPayloads(): Promise<TPayloadOrder[]> {
@@ -1262,7 +1499,7 @@
 
 //             const infoContract = await this.getInfoContract(contract);
 //             if (!infoContract) {
-//                 this.logWorker.error(`❌ getCloseOrderPayloads: infoContract not found: ${contract}`);
+//                 this.logWorker().error(`❌ getCloseOrderPayloads: infoContract not found: ${contract}`);
 //                 continue;
 //             }
 //             const tickSize = infoContract.order_price_round;
@@ -1274,7 +1511,7 @@
 
 //             const lastPrice = await this.getLastPrice(contract);
 //             if (!lastPrice) {
-//                 this.logWorker.error(`❌ getLastPrice: lastPrice not found: ${contract}`);
+//                 this.logWorker().error(`❌ getLastPrice: lastPrice not found: ${contract}`);
 //                 continue;
 //             }
 //             this.log(`✅ getLastPrice: lastPrice: ${lastPrice}`);
@@ -1486,7 +1723,7 @@
 //         const elapsed = Math.max(0, nowSec - createdSec);
 
 //         // log rõ ràng + đơn vị giây
-//         // this.logWorker.info(`⏰ ${contract}: ${elapsed}s / ${timeoutLimit}s`);
+//         // this.logWorker().info(`⏰ ${contract}: ${elapsed}s / ${timeoutLimit}s`);
 //         this.setSticky(`timeout:${contract}`, `${contract}: ${elapsed}s / ${timeoutLimit}s`);
 
 //         return elapsed >= timeoutLimit;
@@ -1552,7 +1789,7 @@
 //     private isExitsBlackList(contract: string): boolean {
 //         // console.log({ blacklist: this.blackList });
 //         const isExits = this.blackList.includes(contract.replace("/", "_"));
-//         // if (isExits) this.logWorker.info(`🔵 ${contract} Exits In BlackList => continue`);
+//         // if (isExits) this.logWorker().info(`🔵 ${contract} Exits In BlackList => continue`);
 //         return isExits;
 //     }
 
@@ -1612,7 +1849,7 @@
 //         // 1) lấy info & orderbook
 //         const info = await this.getInfoContract(symbol);
 //         if (!info) {
-//             this.logWorker.error(`❌ buildClosePayloadsFromExistingTP: infoContract not found: ${symbol}`);
+//             this.logWorker().error(`❌ buildClosePayloadsFromExistingTP: infoContract not found: ${symbol}`);
 //             return [];
 //         }
 
@@ -1621,7 +1858,7 @@
 //         const takeProfitArr = all.filter((o) => !this.isSLCloseOrderForPosition(pos, o));
 
 //         if (takeProfitArr.length === 0) {
-//             this.logWorker.info(`${symbol} haved SL orders, skip...`);
+//             this.logWorker().info(`${symbol} haved SL orders, skip...`);
 //             return [];
 //         }
 //         // console.log("takeProfitArr: ", takeProfitArr);
@@ -1631,7 +1868,7 @@
 //         const bestBidL2 = Number(book?.bids?.[1]?.p ?? book?.bids?.[0]?.p);
 //         const bestAskL2 = Number(book?.asks?.[1]?.p ?? book?.asks?.[0]?.p);
 //         if (!Number.isFinite(bestBidL2) || !Number.isFinite(bestAskL2)) {
-//             this.logWorker.error(`❌ buildClosePayloadsFromExistingTP: invalid L2 book for ${symbol}`);
+//             this.logWorker().error(`❌ buildClosePayloadsFromExistingTP: invalid L2 book for ${symbol}`);
 //             return [];
 //         }
 
@@ -1655,106 +1892,100 @@
 //     }
 
 //     private async handleRoi(pos: TPosition): Promise<void> {
+//         const { stopLoss, stopLossUsdtPnl, timeoutEnabled, timeoutMs } = this.settingUser;
+
+//         // Nếu stopLoss = 100 (OFF) & stopLossUsdtPnl = 0 (OFF) => bỏ qua
+//         if (stopLoss >= 100 && stopLossUsdtPnl <= 0) {
+//             this.logWorker().info(`🟣 SL: skip — stopLoss=${stopLoss} >=100 & stopLossUsdtPnl=${stopLossUsdtPnl} <=0`);
+//             return;
+//         }
+
 //         const symbol = pos.contract.replace("/", "_");
 
+//         // 🔹 Lấy thông tin hợp đồng
 //         const info = await this.getInfoContract(symbol);
 //         if (!info) {
-//             this.logWorker.error(`🟣 ❌ SL ${symbol}: Get info contract fail`);
+//             this.logWorker().error(`🟣 ❌ SL ${symbol}: Get info contract fail`);
 //             return;
 //         }
 
 //         const size = Number(pos.size);
 //         const entryPrice = Number(pos.entry_price);
-//         const leverage = Number(pos.leverage);
+//         const initial_margin = Number(pos.initial_margin);
 //         const quanto = Number(info.quanto_multiplier);
 //         const lastPrice = Number(await this.getLastPrice(symbol));
-//         const openTimeSec = Number(pos.open_time); // giây
+//         const openTimeSec = Number(pos.open_time);
 //         const nowMs = Date.now();
 
-//         // Bỏ qua nếu dữ liệu không hợp lệ
+//         // 🔹 Kiểm tra dữ liệu hợp lệ
 //         if (!Number.isFinite(size) || size === 0) {
-//             this.logWorker.error(`🟣 ❌ SL ${symbol}: Get size ${size} contract fail`);
-//             return;
+//             return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid size=${size}`);
 //         }
 //         if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
-//             this.logWorker.error(`🟣 ❌ SL ${symbol}: Get entryPrice ${entryPrice} contract fail`);
-//             return;
+//             return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid entryPrice=${entryPrice}`);
 //         }
-//         if (!Number.isFinite(leverage) || leverage <= 0) {
-//             this.logWorker.error(`🟣 ❌ SL ${symbol}: Get leverage ${leverage} contract fail`);
-//             return;
+//         if (!Number.isFinite(initial_margin) || initial_margin <= 0) {
+//             return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid initial_margin=${initial_margin}`);
 //         }
 //         if (!Number.isFinite(quanto) || quanto <= 0) {
-//             this.logWorker.error(`🟣 ❌ SL ${symbol}: Get quanto ${quanto} contract fail`);
-//             return;
+//             return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid quanto=${quanto}`);
 //         }
 //         if (!Number.isFinite(lastPrice) || lastPrice <= 0) {
-//             this.logWorker.error(`🟣 ❌ SL ${symbol}: Get lastPrice ${lastPrice} contract fail`);
-//             return;
+//             return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid lastPrice=${lastPrice}`);
 //         }
 
-//         // let countSLROI = this.listSLROIFailed.get(symbol);
-//         // if (!countSLROI) {
-//         //     this.listSLROIFailed.set(symbol, { symbol: symbol, count: 0, side: size > 0 ? "long" : "short" });
-//         // }
-
-//         const initialMargin = (entryPrice * Math.abs(size) * quanto) / leverage;
+//         // 🔹 Tính toán PnL và ROI
 //         const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
-//         const returnPercent = (unrealizedPnL / initialMargin) * 100;
-
-//         const { stopLoss, timeoutEnabled, timeoutMs } = this.settingUser;
+//         const returnPercent = (unrealizedPnL / initial_margin) * 100;
 //         const createdAtMs = openTimeSec > 0 ? openTimeSec * 1000 : nowMs;
-//         const isSL = returnPercent <= -stopLoss;
+
+//         // 🔹 Kiểm tra điều kiện StopLoss
+//         let isSL = false;
+//         let reason = "";
+
+//         const validSLPercent = stopLoss < 100; // stopLoss (%) hợp lệ
+//         const validSLUsdt = stopLossUsdtPnl > 0; // stopLoss theo USDT hợp lệ
+
+//         // So sánh phần trăm
+//         if (validSLPercent && returnPercent <= -stopLoss) {
+//             isSL = true;
+//             reason = `ROI=${returnPercent.toFixed(2)}% (<= -${stopLoss}%)`;
+//         }
+
+//         // So sánh theo USD nếu chưa kích hoạt bởi %
+//         if (!isSL && validSLUsdt && unrealizedPnL <= -stopLossUsdtPnl) {
+//             isSL = true;
+//             reason = `PnL=${unrealizedPnL.toFixed(2)} (<= -${stopLossUsdtPnl})`;
+//         }
+
+//         // Nếu cả hai hợp lệ thì xét cái nào đến trước
+//         if (validSLPercent && validSLUsdt) {
+//             const hitByPercent = returnPercent <= -stopLoss;
+//             const hitByUsdt = unrealizedPnL <= -stopLossUsdtPnl;
+//             if (hitByPercent || hitByUsdt) {
+//                 isSL = true;
+//                 reason = hitByPercent
+//                     ? `ROI=${returnPercent.toFixed(2)}% (<= -${stopLoss}%)`
+//                     : `PnL=${unrealizedPnL.toFixed(2)} (<= -${stopLossUsdtPnl})`;
+//             }
+//         }
+
+//         // 🔹 Kiểm tra timeout (nếu bật)
 //         const isTimedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
 
-//         this.logWorker.info(`🟣 SL ${symbol}: ${returnPercent.toFixed(2)}%/-${stopLoss}% | isSL=${isSL} && isTimedOut=${isTimedOut}`);
+//         this.logWorker().info(
+//             `🟣 SL ${symbol}: ROI=${returnPercent.toFixed(2)}% | PnL=${unrealizedPnL.toFixed(2)} | SL%=${stopLoss} | SL$=${stopLossUsdtPnl} | ` +
+//                 `isSL=${isSL} (${reason || "none"}) | isTimedOut=${isTimedOut}`,
+//         );
 
-//         if (!isSL && !isTimedOut) {
-//             return;
-//         }
+//         // 🔹 Không có điều kiện nào kích hoạt → return
+//         if (!isSL && !isTimedOut) return;
 
-//         // this.logWorker.info(
-//         //     [
-//         //         `🟣 ${symbol}`,
-//         //         `sl: ${returnPercent.toFixed(2)}%/-${stopLoss}%  → ${isSL}`,
-//         //         `timeout: ${timeoutEnabled ? "ON" : "OFF"} (${((nowMs - createdAtMs) / 1000).toFixed(1)}s / ${(timeoutMs / 1000).toFixed(1)}s) → ${isTimedOut}`,
-//         //         `${size > 0 ? "long" : "short"}  ${size}`,
-//         //         // `entry: ${entryPrice}  last: ${lastPrice}  lev: ${leverage}x  quanto: ${quanto}`,
-//         //     ].join(" | "),
-//         // );
-
+//         // 🔹 Kích hoạt StopLoss
 //         await this.clickMarketPostion(pos.contract, Number(pos.size) > 0 ? "long" : "short");
 
+//         // 🔹 Ghi vào hàng đợi StopLossQueue
 //         this.handlePushFixStopLossQueue(pos);
-
-//         // const payloads = await this.buildClosePayloadsFromExistingTP(symbol, pos);
-//         // // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payloads)}`);
-
-//         // for (const payload of payloads) {
-//         //     // this.logWorker.info(`🟣 SL Close Payloads: ${JSON.stringify(payload)}`);
-//         //     try {
-//         //         const ok = await this.changeLeverage(symbol, this.settingUser.leverage);
-//         //         if (!ok) continue;
-//         //         await this.openEntry(payload, "SL: Close");
-//         //         this.listSLROIFailed.delete(symbol);
-//         //     } catch (error: any) {
-//         //         if (error?.message === INSUFFICIENT_AVAILABLE) {
-//         //             throw new Error(error);
-//         //         }
-//         //         if (this.isTimeoutError(error)) {
-//         //             throw new Error(error);
-//         //         }
-
-//         //         this.logWorker.error(`🟣 ${error.message}`);
-
-//         //     }
-//         // }
-
-//         // for (const [key, value] of this.listSLROIFailed) {
-//         //     if (value.count >= 3) {
-//         //         this.logWorker.info(`🟣 SL Close Failed: ${key} | ${value.count} | ${value.side}`);
-//         //     }
-//         // }
 
 //         return;
 //     }
@@ -1768,6 +1999,7 @@
 //     }
 
 //     private setWhitelist(whiteList: TWhiteList) {
+//         // console.dir(whiteList, { colors: true, depth: null });
 //         this.whiteList = whiteList;
 //     }
 
@@ -1780,7 +2012,7 @@
 //     }
 
 //     private reloadWebContentsViewRequest() {
-//         this.logWorker.info("🔄 Reload WebContentsView Request");
+//         this.logWorker().info("🔄 Reload WebContentsView Request");
 //         let isStop = false;
 //         if (this.isStart) {
 //             this.stop();
@@ -1790,7 +2022,7 @@
 //     }
 
 //     private async reloadWebContentsViewResponse({ isStop }: { isStop: boolean }) {
-//         this.logWorker.info("🔄 Reload WebContentsView Response");
+//         this.logWorker().info("🔄 Reload WebContentsView Response");
 //         await this.sleep(1000);
 //         if (isStop) this.start(false);
 //         this.parentPort?.postMessage({ type: "bot:reloadWebContentsView", payload: true });
@@ -1820,91 +2052,59 @@
 
 //                     if (!bodyPositions.data || !Array.isArray(bodyPositions.data)) break;
 
-//                     const result = bodyPositions.data.filter((pos) => Number(pos.size) !== 0);
-
+//                     const result = bodyPositions.data.filter((pos) => {
+//                         return Number(pos.size) !== 0;
+//                     });
 //                     this.replacePositions(result);
+//                     this.syncMaxScapsPosition(result);
+//                     this.syncMaxFarmsPosition(result);
 //                     break;
 
 //                 default:
 //                     break;
 //             }
 //         } catch (error) {
-//             this.logWorker.error(`❌ handleFollowApi: ${String(error)}`);
+//             this.logWorker().error(`❌ handleFollowApi: ${String(error)}`);
 //         }
 //     }
 
-//     private logWorker: LogFunctions = {
-//         info: (...params: any[]) => {
+//     private shouldEmit(category: ELogType): boolean {
+//         const mode = this.settingUser?.logType;
+//         switch (mode) {
+//             case ELogType.Silent:
+//                 return false; // tắt hết
+//             case ELogType.All:
+//                 return true; // bật hết
+//             case ELogType.Trade:
+//                 return category === ELogType.Trade; // chỉ log kênh Trade
+//             default:
+//                 return false;
+//         }
+//     }
+
+//     private logWorker(category: ELogType = ELogType.All): LogFunctions {
+//         const send = (level: TWorkLog["level"], parts: any[]) => {
+//             if (!this.shouldEmit(category)) return;
 //             const payload: TWorkerData<TWorkLog> = {
 //                 type: "bot:log",
 //                 payload: {
-//                     level: "info",
-//                     text: params.map(String).join(" "),
+//                     level,
+//                     text: parts.map(String).join(" "),
 //                 },
 //             };
 //             parentPort?.postMessage(payload);
-//         },
-//         error: (...params: any[]) => {
-//             const payload: TWorkerData<TWorkLog> = {
-//                 type: "bot:log",
-//                 payload: {
-//                     level: "error",
-//                     text: params.map(String).join(" "),
-//                 },
-//             };
-//             parentPort?.postMessage(payload);
-//         },
-//         warn: (...params: any[]) => {
-//             const payload: TWorkerData<TWorkLog> = {
-//                 type: "bot:log",
-//                 payload: {
-//                     level: "warn",
-//                     text: params.map(String).join(" "),
-//                 },
-//             };
-//             parentPort?.postMessage(payload);
-//         },
-//         debug: (...params: any[]) => {
-//             const payload: TWorkerData<TWorkLog> = {
-//                 type: "bot:log",
-//                 payload: {
-//                     level: "debug",
-//                     text: params.map(String).join(" "),
-//                 },
-//             };
-//             parentPort?.postMessage(payload);
-//         },
-//         log: (...params: any[]) => {
-//             const payload: TWorkerData<TWorkLog> = {
-//                 type: "bot:log",
-//                 payload: {
-//                     level: "info",
-//                     text: params.map(String).join(" "),
-//                 },
-//             };
-//             parentPort?.postMessage(payload);
-//         },
-//         silly: (...params: any[]) => {
-//             const payload: TWorkerData<TWorkLog> = {
-//                 type: "bot:log",
-//                 payload: {
-//                     level: "silly",
-//                     text: params.map(String).join(" "),
-//                 },
-//             };
-//             parentPort?.postMessage(payload);
-//         },
-//         verbose: (...params: any[]) => {
-//             const payload: TWorkerData<TWorkLog> = {
-//                 type: "bot:log",
-//                 payload: {
-//                     level: "verbose",
-//                     text: params.map(String).join(" "),
-//                 },
-//             };
-//             parentPort?.postMessage(payload);
-//         },
-//     };
+//         };
+
+//         return {
+//             info: (...p: any[]) => send("info", p),
+//             error: (...p: any[]) => send("error", p),
+//             warn: (...p: any[]) => send("warn", p),
+//             debug: (...p: any[]) => send("debug", p),
+//             log: (...p: any[]) => send("info", p),
+//             silly: (...p: any[]) => send("silly", p),
+//             verbose: (...p: any[]) => send("verbose", p),
+//         };
+//     }
 
 //     private isTimeoutError(err: any): boolean {
 //         const TIMEOUT_PATTERNS = [
@@ -1928,38 +2128,24 @@
 //         return TIMEOUT_PATTERNS.some((re) => re.test(msg));
 //     }
 
-//     private isCheckDelayForPairsMs() {
-//         if (!this.settingUser.delayForPairsMs) {
-//             return false;
-//         } else {
-//             const result = Date.now() < this.nextOpenAt;
-//             return result;
-//         }
+//     private isCheckDelayForPairsMs(key: string) {
+//         const nextAt = this.nextOpenAt.get(key) || 0;
+//         return Date.now() < nextAt;
 //     }
-//     private cooldownLeft() {
-//         return Math.max(0, this.nextOpenAt - Date.now());
+//     private cooldownLeft(key: string) {
+//         return Math.max(0, (this.nextOpenAt.get(key) || 0) - Date.now());
 //     }
-//     private postponePair(delayForPairsMs: number) {
+//     private postponePair(key: string, delayForPairsMs: number) {
 //         if (delayForPairsMs) {
-//             this.nextOpenAt = Date.now() + delayForPairsMs;
+//             this.nextOpenAt.set(key, Date.now() + delayForPairsMs);
 //         }
 //     }
 
 //     private isHandleSL() {
-//         const raw = this.settingUser?.stopLoss;
-//         const sl = Number(raw);
-
 //         // 1) Không có position -> không cần check SL
 //         if (this.positions.size === 0) {
-//             // this.logWorker.info("🟣 SL: skip — no positions");
+//             this.logWorker().info("🟣 SL: skip — no positions");
 //             console.log("🟣 SL: skip — no positions");
-//             return false;
-//         }
-
-//         // 2) 100 hoặc hơn = tắt SL
-//         if (sl >= 100) {
-//             // this.logWorker.info(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
-//             console.log(`🟣 SL: skip — stopLoss = ${this.settingUser.stopLoss}`);
 //             return false;
 //         }
 
@@ -2007,7 +2193,7 @@
 //             console.log("getSideCCC: ", data);
 //             return data.side;
 //         } catch (error) {
-//             this.logWorker.error(`getSideCCC: ${error}`);
+//             this.logWorker().error(`getSideCCC: ${error}`);
 //             return null;
 //         }
 //     }
@@ -2171,7 +2357,7 @@
 //         const historysOrderClose = await this.getHistoryOrderClose(this.dataFixLiquidation.startTimeSec || this.startOfTodayUtcSec(), this.nowSec());
 
 //         if (!historysOrderClose) {
-//             this.logWorker.error(`❌ historyOrderClose is null`);
+//             this.logWorker().error(`❌ historyOrderClose is null`);
 //             return;
 //         }
 
@@ -2203,13 +2389,13 @@
 //         }
 
 //         if (this.dataFixLiquidation.dataLiquidationShouldFix === null) {
-//             // this.logWorker.info(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
+//             // this.logWorker().info(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
 //             console.log(`🧨 Create Order Fix Liquidation: Skip by không có để fix`);
 //             return false;
 //         }
 
 //         if (this.dataFixLiquidation.dataOrderOpenFixLiquidation) {
-//             // this.logWorker.info(`🧨 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
+//             // this.logWorker().info(`🧨 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
 //             console.log(`🧨 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
 //             return false;
 //         }
@@ -2255,7 +2441,7 @@
 //             if (this.isTimeoutError(error)) {
 //                 throw new Error(error);
 //             }
-//             this.logWorker.error(error?.message);
+//             this.logWorker().error(error?.message);
 //             return false;
 //         }
 //     }
@@ -2267,17 +2453,17 @@
 //         }
 
 //         if (this.dataFixLiquidation.dataLiquidationShouldFix === null) {
-//             // this.logWorker.info(`Skip by listLiquidationShouldFix is null`);
+//             // this.logWorker().info(`Skip by listLiquidationShouldFix is null`);
 //             return;
 //         }
 
 //         if (this.dataFixLiquidation.startTimeSec === null) {
-//             // this.logWorker.info(`Skip by startTimeSec is null`);
+//             // this.logWorker().info(`Skip by startTimeSec is null`);
 //             return;
 //         }
 
 //         if (this.dataFixLiquidation.dataCloseTP === null) {
-//             // this.logWorker.info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
+//             // this.logWorker().info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
 //             // console.log(`🧨 Check Liquidation Is Done: Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
 //             return;
 //         }
@@ -2288,14 +2474,14 @@
 //         const historysOrderClose = await this.getHistoryOrderClose(this.dataFixLiquidation.startTimeSec, this.nowSec(), contractCloseTP);
 
 //         if (!historysOrderClose) {
-//             this.logWorker.info(`🧨 historyOrderClose is null`);
+//             this.logWorker().info(`🧨 historyOrderClose is null`);
 //             return;
 //         }
 
 //         const hisCloseTPSuccess = historysOrderClose.find((historyOrderClose) => {
 //             const isFind = historyOrderClose.is_liq === false;
 //             if (isFind) {
-//                 // this.logWorker.info(`🔵 ${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
+//                 // this.logWorker().info(`🔵 ${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
 //             }
 //             return isFind;
 //         });
@@ -2303,13 +2489,13 @@
 //         const hisPositionFixLiquidation = historysOrderClose.find((historyOrderClose) => {
 //             const isFind = historyOrderClose.is_liq === true;
 //             if (isFind) {
-//                 // this.logWorker.info(`❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
+//                 // this.logWorker().info(`❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
 //             }
 //             return isFind;
 //         });
 
 //         if (hisCloseTPSuccess === undefined && hisPositionFixLiquidation === undefined) {
-//             // this.logWorker.info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
+//             // this.logWorker().info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
 //             console.log(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
 //             return;
 //         }
@@ -2318,11 +2504,11 @@
 //             const maxStep = (this.settingUser.martingale?.options?.length ?? 0) - 1;
 //             if (stepNext > maxStep) {
 //                 stepNext = 0;
-//                 this.logWorker.info(
+//                 this.logWorker().info(
 //                     `🧨 ❌ ${contractShouldFix} Fix thất bại reset step: ${this.dataFixLiquidation.stepFixLiquidation} -> ${stepNext} / ${maxStep}`,
 //                 );
 //             } else {
-//                 this.logWorker.info(
+//                 this.logWorker().info(
 //                     `🧨 ❌ ${contractShouldFix} Fix thất bại tăng step: ${this.dataFixLiquidation.stepFixLiquidation} -> ${stepNext} / ${maxStep}`,
 //                 );
 //             }
@@ -2338,7 +2524,7 @@
 //             return;
 //         }
 //         if (hisCloseTPSuccess) {
-//             this.logWorker.info(`🧨 ✅ ${contractShouldFix} Fix thành công`);
+//             this.logWorker().info(`🧨 ✅ ${contractShouldFix} Fix thành công`);
 //             this.upsertFixLiquidation(true, EStatusFixLiquidation.SUCCESS);
 
 //             this.dataFixLiquidation.dataLiquidationShouldFix = null;
@@ -2399,11 +2585,11 @@
 //     }
 
 //     private isNextPhase(): boolean {
-//         // this.logWorker.info(`roi ${this.takeProfitAccount?.roi}%/${this.settingUser.maxRoiNextPhase}%`);
+//         // this.logWorker().info(`roi ${this.takeProfitAccount?.roi}%/${this.settingUser.maxRoiNextPhase}%`);
 //         if (!this.takeProfitAccount) return false;
 //         if (this.settingUser.maxRoiNextPhase === 0) return false;
 //         if (this.takeProfitAccount.roi >= this.settingUser.maxRoiNextPhase) {
-//             this.logWorker.info(`➡️ Next phase: ${this.takeProfitAccount.roi} >= ${this.settingUser.maxRoiNextPhase}`);
+//             this.logWorker().info(`➡️ Next phase: ${this.takeProfitAccount.roi} >= ${this.settingUser.maxRoiNextPhase}`);
 //             return true;
 //         }
 //         return false;
@@ -2416,7 +2602,7 @@
 
 //         // chốt trước khi chuyển phase
 //         this.upsertFixLiquidation(false, EStatusFixLiquidation.FAILED);
-//         this.logWorker.info("➡️ Next phase 🧨 Reset All Fix Liquidation");
+//         this.logWorker().info("➡️ Next phase 🧨 Reset All Fix Liquidation");
 //         this.dataFixLiquidation.dataLiquidationShouldFix = null;
 //         this.dataFixLiquidation.dataOrderOpenFixLiquidation = null;
 //         this.dataFixLiquidation.dataCloseTP = null;
@@ -2426,7 +2612,7 @@
 //         this.dataFixLiquidation.leverageFix = null;
 
 //         // chốt trước khi chuyển phase
-//         this.logWorker.info("➡️ Next phase 🤷 Reset All Fix StopLoss");
+//         this.logWorker().info("➡️ Next phase 🤷 Reset All Fix StopLoss");
 //         this.fixStopLossQueue = [];
 //         this.sendFixStopLossQueue();
 //         this.fixStopLossFailedPassTrue(0);
@@ -2480,14 +2666,14 @@
 //         }
 
 //         if (this.fixStopLossQueue.length === 0) {
-//             // this.logWorker.info("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
+//             // this.logWorker().info("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
 //             console.log("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
 //             return;
 //         }
 
 //         const itemDataStopLossShouldFix = this.fixStopLossQueue.shift();
 //         this.sendFixStopLossQueue();
-//         // this.logWorker.info(`🤷 itemDataStopLossShouldFix`, itemDataStopLossShouldFix?.contract);
+//         // this.logWorker().info(`🤷 itemDataStopLossShouldFix`, itemDataStopLossShouldFix?.contract);
 
 //         if (!itemDataStopLossShouldFix) {
 //             console.log("🤷 Create StopLoss Should Fix: Skip by fixStopLossQueue empty");
@@ -2516,20 +2702,20 @@
 //         }
 
 //         if (this.dataFixStopLoss.dataStopLossShouldFix === null) {
-//             // this.logWorker.info(`🤷 Create Order Fix StopLoss: Skip by không có để fix`);
+//             // this.logWorker().info(`🤷 Create Order Fix StopLoss: Skip by không có để fix`);
 //             console.log(`🤷 Create Order Fix StopLoss: Skip by không có để fix`);
 //             return false;
 //         }
 
 //         if (this.dataFixStopLoss.dataOrderOpenFixStopLoss) {
-//             // this.logWorker.info(`🤷 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
+//             // this.logWorker().info(`🤷 Create Order Fix Liquidation: Skip by đã có lệnh chờ để fix, không vào nữa`);
 //             console.log(`🤷 Create Order Fix StopLoss: Skip by đã có lệnh chờ để fix, không vào nữa`);
 //             return false;
 //         }
 
 //         if (!this.whiteListMartingale.includes(symbol.replace("/", "_"))) {
 //             // console.log(`🤷 Create Order Fix StopLoss: Skip by ${symbol} exist whiteListMartingale`);
-//             this.logWorker.info(`🤷 Create Order Fix StopLoss: Skip by ${symbol} not exist whiteListMartingale`);
+//             this.logWorker().info(`🤷 Create Order Fix StopLoss: Skip by ${symbol} not exist whiteListMartingale`);
 //             return false;
 //         }
 
@@ -2577,7 +2763,7 @@
 //             if (this.isTimeoutError(error)) {
 //                 throw new Error(error);
 //             }
-//             this.logWorker.error(error?.message);
+//             this.logWorker().error(error?.message);
 //             return false;
 //         }
 //     }
@@ -2589,17 +2775,17 @@
 //         }
 
 //         if (this.dataFixStopLoss.dataStopLossShouldFix === null) {
-//             // this.logWorker.info(`Skip by listLiquidationShouldFix is null`);
+//             // this.logWorker().info(`Skip by listLiquidationShouldFix is null`);
 //             return;
 //         }
 
 //         if (this.dataFixStopLoss.startTimeSec === null) {
-//             // this.logWorker.info(`Skip by startTimeSec is null`);
+//             // this.logWorker().info(`Skip by startTimeSec is null`);
 //             return;
 //         }
 
 //         if (this.dataFixStopLoss.dataCloseTP === null) {
-//             // this.logWorker.info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
+//             // this.logWorker().info(`Skip by chưa có lệnh chờ tp của OrderOpenFixLiquidation`);
 //             console.log(`🤷 Check Fix StopLoss Is Done: Skip by chưa có lệnh chờ tp của OrderOpenFixStopLoss`);
 //             return;
 //         }
@@ -2611,14 +2797,14 @@
 //         const historysOrderClose = await this.getHistoryOrderClose(this.dataFixStopLoss.startTimeSec, this.nowSec(), contractCloseTP);
 
 //         if (!historysOrderClose) {
-//             this.logWorker.info(`🤷 historyOrderClose StopLoss is null`);
+//             this.logWorker().info(`🤷 historyOrderClose StopLoss is null`);
 //             return;
 //         }
 
 //         const hisCloseTPSuccess = historysOrderClose.find((historyOrderClose) => {
 //             const isFind = historyOrderClose.id_string === idStringCloseTP && historyOrderClose.left === 0;
 //             if (isFind) {
-//                 // this.logWorker.info(`🤷 ✅${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
+//                 // this.logWorker().info(`🤷 ✅${contractShouldFix} Tìm thấy lệnh Tp (filled): fix thành công`);
 //             }
 //             return isFind;
 //         });
@@ -2626,13 +2812,13 @@
 //         const hisCloseTPFail = historysOrderClose.find((historyOrderClose) => {
 //             const isFind = historyOrderClose.id_string === idStringCloseTP && historyOrderClose.left !== 0;
 //             if (isFind) {
-//                 // this.logWorker.info(`🤷 ❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
+//                 // this.logWorker().info(`🤷 ❌ ${contractShouldFix} Tìm thấy lệnh thanh lý (liquidated): fix thất bại`);
 //             }
 //             return isFind;
 //         });
 
 //         if (hisCloseTPSuccess === undefined && hisCloseTPFail === undefined) {
-//             // this.logWorker.info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
+//             // this.logWorker().info(`🔵 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
 //             console.log(`🤷 ${contractShouldFix} skip by đang đợi lệnh fix để lệnh fix bị thanh lý hoặc lệnh tp khớp`);
 //             return;
 //         }
@@ -2641,13 +2827,13 @@
 //             const maxStep = (this.settingUser.martingale?.options?.length ?? 0) - 1;
 //             if (stepNext > maxStep) {
 //                 stepNext = 0;
-//                 this.logWorker.info(
+//                 this.logWorker().info(
 //                     `🤷 ❌ ${contractShouldFix} Fix thất bại reset step: ${this.dataFixStopLoss.stepFixStopLoss} -> ${stepNext} / ${maxStep}`,
 //                 );
 //                 this.fixStopLossFailedPassTrue(stepNext);
 //                 return;
 //             } else {
-//                 this.logWorker.info(
+//                 this.logWorker().info(
 //                     `🤷 ❌ ${contractShouldFix} Fix thất bại tăng step: ${this.dataFixStopLoss.stepFixStopLoss} -> ${stepNext} / ${maxStep}`,
 //                 );
 //                 this.fixStopLossFailedPassFalse(stepNext);
@@ -2655,7 +2841,7 @@
 //             }
 //         }
 //         if (hisCloseTPSuccess) {
-//             this.logWorker.info(`🤷 ✅ ${contractShouldFix} Fix thành công`);
+//             this.logWorker().info(`🤷 ✅ ${contractShouldFix} Fix thành công`);
 //             this.fixStopLossSuccess();
 //             return;
 //         }
@@ -2818,7 +3004,7 @@
 //         const selectorCheckLogin = this.uiSelector?.find((item) => item.code === "checkLogin")?.selectorValue;
 
 //         if (!selectorCheckLogin) {
-//             this.logWorker.info(`❌ Not found selector checkLogin`);
+//             this.logWorker().info(`❌ Not found selector checkLogin`);
 //             throw new Error(`Not found selector checkLogin`);
 //         }
 
@@ -2840,7 +3026,7 @@
 //             throw new Error(`❌ Check Login error: ${error ?? "unknown"} ${body} ${ok}`);
 //         }
 
-//         this.logWorker.info(`✅ Check Login`);
+//         this.logWorker().info(`✅ Check Login`);
 
 //         return body;
 //     }
@@ -2849,7 +3035,7 @@
 //         const selectorGetUid = this.uiSelector?.find((item) => item.code === "getUid")?.selectorValue;
 
 //         if (!selectorGetUid) {
-//             this.logWorker.info(`❌ Not found selector getUid`);
+//             this.logWorker().info(`❌ Not found selector getUid`);
 //             throw new Error(`Not found selector getUid`);
 //         }
 
@@ -2873,12 +3059,12 @@
 
 //         if (body == null) {
 //             if (this.uidWeb || this.uidWeb === undefined) {
-//                 this.logWorker.info("❌ Not logined to gate");
+//                 this.logWorker().info("❌ Not logined to gate");
 //             }
 //             this.uidWeb = null;
 //         } else {
 //             if (!this.uidWeb) {
-//                 this.logWorker.info("✅ Logined to gate");
+//                 this.logWorker().info("✅ Logined to gate");
 //             }
 //             this.uidWeb = Number(body);
 //         }
@@ -2909,7 +3095,7 @@
 
 //         if (code >= 400 || code < 0) {
 //             const msg = `❌ Change Hedge: code:${code} | ${message}`;
-//             this.logWorker.error(msg);
+//             this.logWorker().error(msg);
 //             return false;
 //         }
 
