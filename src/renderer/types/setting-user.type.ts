@@ -1,60 +1,24 @@
 import { TBaseTimestamps } from "./base.type";
-import { EntrySignalMode } from "./enum/entry-signal-mode.enum";
-import { MartingaleConfig } from "./martingale.type";
 
 export type TSettingUsers = {
     id: number;
     maxTotalOpenPO: number;
-    // maxSideLong: number;
-    // maxSideShort: number;
     leverage: number;
-    // inputUSDT: number;
-    // takeProfit: number;
-    // stopLoss: number;
     stopLossUsdtPnl: number;
-    // timeoutEnabled: boolean;
-    // timeoutMs: number;
-    // minSpreadPercent: number;
-    // maxSpreadPercent: number;
-    // maxDepth: number;
-    // timeoutClearOpenSecond: number;
-    // lastPriceGapGateAndBinancePercent: number;
-    // max24hChangeGreen: number;
-    // max24hChangeRed: number;
-    // ifImbalanceBidPercent: number;
-    // ifImbalanceAskPercent: number;
-    // entrySignalMode: EntrySignalMode;
-    // delayForPairsMs: number;
-    // martingale: MartingaleConfig | null;
-    // maxRoiNextPhase: number;
-    // sizeIOC: number;
-
-    // ioc ----------------------
-    // farm
-    // minSpreadPercentFarm: number;
-    // maxSpreadPercentFarm: number;
-    // ifImbalanceBidPercentFarm: number;
-    // ifImbalanceAskPercentFarm: number;
-    // lastPriceGapGateAndBinancePercentFarm: number;
-
-    // scalp
-    // minSpreadPercentScalp: number;
-    // maxSpreadPercentScalp: number;
-    // ifImbalanceBidPercentScalp: number;
-    // ifImbalanceAskPercentScalp: number;
-    // lastPriceGapGateAndBinancePercentScalp: number;
-
     indexBidAsk: number;
-
     delayFarm: number;
     delayScalp: number;
-
     tauS: number;
-
     logType: number;
-
     stepS: number;
+    tauSWindow: TTimeFrame[] | null;
 } & TBaseTimestamps;
+
+export type TTimeFrame = {
+    start: string;
+    end: string;
+    tauS: number;
+};
 
 export type TSettingUsersSocket = Omit<TSettingUsers, keyof TBaseTimestamps>;
 export type TSettingUsersUpdate = Partial<Omit<TSettingUsers, keyof TBaseTimestamps | "id">> & {

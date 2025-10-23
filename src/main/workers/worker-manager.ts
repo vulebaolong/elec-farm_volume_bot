@@ -205,6 +205,7 @@ export class BotWorkerManager {
                 case "bot:sticky:set":
                 case "bot:sticky:remove":
                 case "bot:ioc:sideCount":
+                case "bot:ioc:fixStopLossIOC":
                 case "bot:sticky:clear": {
                     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
                         this.mainWindow.webContents.send(msg.type, withUid);
@@ -450,6 +451,48 @@ export class BotWorkerManager {
                     break;
                 }
 
+                case "bot:checkLogin": {
+                    const { reqCheckLoginId, stringCheckLogin } = msg?.payload;
+                    const type = "bot:checkLogin:res";
+                    try {
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: TGateOrderMainRes = {
+                                ok: false,
+                                reqOrderId: reqCheckLoginId,
+                                bodyText: "",
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
+                        const result: TResultClick<boolean> = await webContentsViewGate.webContents.executeJavaScript(stringCheckLogin, true);
+
+                        if (result.ok === false && result.error) {
+                            throw new Error(result.error);
+                        }
+
+                        const payload: TGateClick<boolean> & { reqCheckLoginId: number } = {
+                            ok: result.ok,
+                            body: result.data,
+                            reqCheckLoginId: reqCheckLoginId,
+                            error: null,
+                        };
+
+                        entry.worker.postMessage({ type: type, payload: payload });
+                    } catch (e: any) {
+                        const payload: TGateClick<boolean> & { reqCheckLoginId: number } = {
+                            ok: false,
+                            body: null,
+                            reqCheckLoginId: reqCheckLoginId,
+                            error: String(e?.message || e),
+                        };
+                        entry.worker.postMessage({ type: type, payload: payload });
+                    }
+                    break;
+                }
+
                 case "bot:clickMarketPosition": {
                     const { reqClickMarketPositionId, stringClickMarketPosition } = msg?.payload;
                     const type = "bot:clickMarketPosition:res";
@@ -497,48 +540,6 @@ export class BotWorkerManager {
                     break;
                 }
 
-                case "bot:checkLogin": {
-                    const { reqCheckLoginId, stringCheckLogin } = msg?.payload;
-                    const type = "bot:checkLogin:res";
-                    try {
-                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
-                        if (!webContentsViewGate) {
-                            const payload: TGateOrderMainRes = {
-                                ok: false,
-                                reqOrderId: reqCheckLoginId,
-                                bodyText: "",
-                                error: "webContentsViewGate not found",
-                            };
-                            entry.worker.postMessage({ type: type, payload: payload });
-                            return;
-                        }
-
-                        const result: TResultClick<boolean> = await webContentsViewGate.webContents.executeJavaScript(stringCheckLogin, true);
-
-                        if (result.ok === false && result.error) {
-                            throw new Error(result.error);
-                        }
-
-                        const payload: TGateClick<boolean> & { reqCheckLoginId: number } = {
-                            ok: result.ok,
-                            body: result.data,
-                            reqCheckLoginId: reqCheckLoginId,
-                            error: null,
-                        };
-
-                        entry.worker.postMessage({ type: type, payload: payload });
-                    } catch (e: any) {
-                        const payload: TGateClick<boolean> & { reqCheckLoginId: number } = {
-                            ok: false,
-                            body: null,
-                            reqCheckLoginId: reqCheckLoginId,
-                            error: String(e?.message || e),
-                        };
-                        entry.worker.postMessage({ type: type, payload: payload });
-                    }
-                    break;
-                }
-
                 case "bot:clickClearAll": {
                     const { reqClickClearAllId, stringClickClearAll } = msg?.payload;
                     const type = "bot:clickClearAll:res";
@@ -560,6 +561,8 @@ export class BotWorkerManager {
                         if (result.ok === false && result.error) {
                             throw new Error(result.error);
                         }
+
+                        this.isDisableApiPosition = false;
 
                         const payload: TGateClick<boolean> & { reqClickClearAllId: number } = {
                             ok: result.ok,

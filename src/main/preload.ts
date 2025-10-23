@@ -61,6 +61,7 @@ export type Channels =
     | "bot:ioc:short"
     | "bot:ioc:hedge"
     | "bot:ioc:oneway"
+    | "bot:ioc:fixStopLossIOC"
     | "bot:ioc:sideCount";
 
 const electronHandler = {

@@ -90,6 +90,7 @@
         "@electron/notarize": "^3.0.0",
         "@hookform/resolvers": "^5.2.0",
         "@mantine/core": "^8.2.4",
+        "@mantine/dates": "^8.2.4",
         "@mantine/hooks": "^8.2.4",
         "@radix-ui/react-accordion": "^1.2.11",
         "@radix-ui/react-avatar": "^1.1.10",
@@ -199,7 +200,7 @@
         "webpack-merge": "^6.0.1"
     },
     "build": {
-        "productName": "BotFarmVolume_v1_0_86",
+        "productName": "BotFarmVolume_v1_0_87",
         "appId": "org.erb.BotFarmVolume",
         "asar": true,
         "afterSign": ".erb/scripts/notarize.js",

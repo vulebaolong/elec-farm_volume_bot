@@ -4,21 +4,19 @@ import { useGetInfoMutation } from "@/api/tanstack/auth.tanstack";
 import { useGetSettingUserById, useUpdateSettingUser } from "@/api/tanstack/setting-user.tanstack";
 import { resError } from "@/helpers/function.helper";
 import { useAppSelector } from "@/redux/store";
-import { EntrySignalMode } from "@/types/enum/entry-signal-mode.enum";
-import { MartingaleConfig, MartingaleOption } from "@/types/martingale.type";
-import { TSettingUsersUpdate } from "@/types/setting-user.type";
+import { ELogType, logTypeOptions } from "@/types/enum/log-type.enum";
+import { MartingaleConfig } from "@/types/martingale.type";
+import { TTimeFrame, TSettingUsersUpdate } from "@/types/setting-user.type";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Checkbox, Divider, Group, InputLabel, NumberInput, Paper, Radio, Select, Stack, Text } from "@mantine/core";
+import { Divider, NumberInput, Select } from "@mantine/core";
 import { useQueryClient } from "@tanstack/react-query";
-import { Trash } from "lucide-react";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { Button } from "../ui/button";
 import { ButtonLoading } from "../ui/button-loading";
 import { Form } from "../ui/form";
-import { ELogType, logTypeOptions } from "@/types/enum/log-type.enum";
+import { TauSWindowsEditor } from "./taus-windows-editor";
 
 const numberFromStringOrNumber = z.union([
     z.number(),
@@ -62,56 +60,73 @@ export const ZMartingaleConfig = z
         }
     });
 
+const HHMM = z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Time must be HH:mm (00:00-23:59)");
+
+const toMinutes = (hhmm: string) => {
+    const [hh, mm] = hhmm.split(":").map((v) => Number(v));
+    return hh * 60 + mm; // 0..1439
+};
+
+export const ZTimeFrame = z
+    .object({
+        start: HHMM,
+        end: HHMM,
+        tauS: numberRange(0, 100, "Tau S"),
+    })
+    .superRefine((v, ctx) => {
+        const s = toMinutes(v.start);
+        const e = toMinutes(v.end);
+        if (!(e > s)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "End must be > Start",
+                path: ["end"],
+            });
+        }
+    });
+
+export const ZTimeFrameArray = z
+    .array(ZTimeFrame)
+    .max(24)
+    .default([])
+    .superRefine((arr, ctx) => {
+        if (arr.length <= 1) return;
+
+        // sort theo start (phút)
+        const withIdx = arr.map((it, i) => ({ i, s: toMinutes(it.start), e: toMinutes(it.end) }));
+        withIdx.sort((a, b) => a.s - b.s);
+
+        for (let k = 0; k < withIdx.length - 1; k++) {
+            const cur = withIdx[k];
+            const nxt = withIdx[k + 1];
+            // chồng chéo nếu next.start < cur.end
+            if (nxt.s < cur.e) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Time windows must not overlap",
+                    path: [cur.i, "end"],
+                });
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Time windows must not overlap",
+                    path: [nxt.i, "start"],
+                });
+                break;
+            }
+        }
+    });
+
 export const FormSchema = z.object({
     maxTotalOpenPO: intField(1, "Maximum Position"),
     leverage: intField(1, "Leverage"),
-    // inputUSDT: intField(1, "Input USDT"),
-    // sizeIOC: intField(1, "size IOC"),
-    // takeProfit: positiveNumber("Take Profit"),
-    // stopLoss: positiveNumber("Stop Loss"),
     stopLossUsdtPnl: positiveNumber("Stop Loss Usdt Pnl"),
-    // timeoutMs: intField(1, "Timeout (ms)"),
-    // timeoutEnabled: z.boolean(),
-    // minSpreadPercent: numberRange(0, 100, "Min Spread %"),
-    // maxSpreadPercent: numberRange(0, 100, "Max Spread %"),
-    // maxDepth: positiveNumber("Max Depth"),
-    // timeoutClearOpenSecond: positiveNumber("Timeout Clear Open"),
-    // lastPriceGapGateAndBinancePercent: numberRange(0, 100, "Max Spread %"),
-    // ifImbalanceBidPercent: numberRange(0, 100, "Imbalance Bid %"),
-    // ifImbalanceAskPercent: numberRange(0, 100, "Imbalance Ask %"),
-    // entrySignalMode: z.enum(EntrySignalMode),
-    // delayForPairsMs: intField(0, "Delay For Pairs (ms)"),
-    // max24hChangeGreen: numberRange(0, 100, "24h Change Green %"),
-    // max24hChangeRed: numberRange(0, 100, "24h Change Red %"),
-
-    // martingale: ZMartingaleConfig,
-    // maxRoiNextPhase: positiveNumber("Max ROI Next Phase"),
-
-    // ioc ----------------------
-    // farm
-    // minSpreadPercentFarm: numberRange(0, 100, "Min Spread Farm %"),
-    // maxSpreadPercentFarm: numberRange(0, 100, "Max Spread Farm %"),
-    // ifImbalanceBidPercentFarm: numberRange(0, 100, "Imbalance Farm Bid %"),
-    // ifImbalanceAskPercentFarm: numberRange(0, 100, "Imbalance Farm Ask %"),
-    // lastPriceGapGateAndBinancePercentFarm: numberRange(0, 100, "Max Farm Gap %"),
-
-    // scalp
-    // minSpreadPercentScalp: numberRange(0, 100, "Min Spread Scalp %"),
-    // maxSpreadPercentScalp: numberRange(0, 100, "Max Spread Scalp %"),
-    // ifImbalanceBidPercentScalp: numberRange(0, 100, "Imbalance Scalp Bid %"),
-    // ifImbalanceAskPercentScalp: numberRange(0, 100, "Imbalance Scalp Ask %"),
-    // lastPriceGapGateAndBinancePercentScalp: numberRange(0, 100, "Max Scalp Gap %"),
-
     indexBidAsk: intField(1, "Index Bid/Ask"),
-
     delayFarm: intField(0, "Delay Farm (ms)"),
     delayScalp: intField(0, "Delay Scalp (ms)"),
-
     tauS: numberRange(0, 100, "Tau S"),
-
     logType: z.enum(ELogType).default(ELogType.Silent),
-
-    stepS: intField(1,"Step S"),
+    stepS: intField(1, "Step S"),
+    tauSWindow: ZTimeFrameArray,
 });
 
 const defaultMartingale: MartingaleConfig = {
@@ -145,51 +160,14 @@ export default function SettingAdminUser({ type }: TProps) {
         defaultValues: {
             maxTotalOpenPO: "",
             leverage: "",
-            // inputUSDT: "",
-            // sizeIOC: "",
-            // takeProfit: "",
-            // stopLoss: "",
             stopLossUsdtPnl: "",
-            // timeoutMs: "",
-            // timeoutEnabled: false,
-            // minSpreadPercent: "",
-            // maxSpreadPercent: "",
-            // maxDepth: "",
-            // timeoutClearOpenSecond: "",
-            // lastPriceGapGateAndBinancePercent: "",
-            // ifImbalanceBidPercent: "",
-            // ifImbalanceAskPercent: "",
-            // entrySignalMode: EntrySignalMode.IMBALANCE,
-            // delayForPairsMs: "",
-            // max24hChangeGreen: "",
-            // max24hChangeRed: "",
-            // martingale: defaultMartingale,
-            // maxRoiNextPhase: "",
-
-            // ioc ----------------------
-            // farm
-            // minSpreadPercentFarm: "",
-            // maxSpreadPercentFarm: "",
-            // ifImbalanceBidPercentFarm: "",
-            // ifImbalanceAskPercentFarm: "",
-            // lastPriceGapGateAndBinancePercentFarm: "",
-
-            // scalp
-            // minSpreadPercentScalp: "",
-            // maxSpreadPercentScalp: "",
-            // ifImbalanceBidPercentScalp: "",
-            // ifImbalanceAskPercentScalp: "",
-            // lastPriceGapGateAndBinancePercentScalp: "",
-
             indexBidAsk: "",
             delayFarm: "",
             delayScalp: "",
-
             tauS: "",
-
             logType: ELogType.Silent,
-
             stepS: "",
+            tauSWindow: [],
         },
     });
 
@@ -199,52 +177,14 @@ export default function SettingAdminUser({ type }: TProps) {
             form.reset({
                 maxTotalOpenPO: setting.maxTotalOpenPO ?? "",
                 leverage: setting.leverage ?? "",
-                // inputUSDT: setting.inputUSDT ?? "",
-                // sizeIOC: setting.sizeIOC ?? "",
-                // takeProfit: setting.takeProfit ?? "",
-                // stopLoss: setting.stopLoss ?? "",
                 stopLossUsdtPnl: setting.stopLossUsdtPnl ?? "",
-                // timeoutMs: setting.timeoutMs ?? "",
-                // timeoutEnabled: setting.timeoutEnabled ?? false,
-                // minSpreadPercent: setting.minSpreadPercent ?? "",
-                // maxSpreadPercent: setting.maxSpreadPercent ?? "",
-                // maxDepth: setting.maxDepth ?? "",
-                // timeoutClearOpenSecond: setting.timeoutClearOpenSecond ?? "",
-                // lastPriceGapGateAndBinancePercent: setting.lastPriceGapGateAndBinancePercent ?? "",
-                // ifImbalanceAskPercent: setting.ifImbalanceAskPercent ?? "",
-                // ifImbalanceBidPercent: setting.ifImbalanceBidPercent ?? "",
-                // entrySignalMode: setting.entrySignalMode ?? EntrySignalMode.IMBALANCE,
-                // delayForPairsMs: setting.delayForPairsMs ?? "",
-                // max24hChangeGreen: setting.max24hChangeGreen ?? "",
-                // max24hChangeRed: setting.max24hChangeRed ?? "",
-                // martingale: (setting.martingale as MartingaleConfig) ?? defaultMartingale,
-                // maxRoiNextPhase: setting.maxRoiNextPhase ?? "",
-
-                // ioc ----------------------
-                // farm
-                // minSpreadPercentFarm: setting.minSpreadPercentFarm ?? "",
-                // maxSpreadPercentFarm: setting.maxSpreadPercentFarm ?? "",
-                // ifImbalanceAskPercentFarm: setting.ifImbalanceAskPercentFarm ?? "",
-                // ifImbalanceBidPercentFarm: setting.ifImbalanceBidPercentFarm ?? "",
-                // lastPriceGapGateAndBinancePercentFarm: setting.lastPriceGapGateAndBinancePercentFarm ?? "",
-
-                // scalp
-                // minSpreadPercentScalp: setting.minSpreadPercentScalp ?? "",
-                // maxSpreadPercentScalp: setting.maxSpreadPercentScalp ?? "",
-                // ifImbalanceAskPercentScalp: setting.ifImbalanceAskPercentScalp ?? "",
-                // ifImbalanceBidPercentScalp: setting.ifImbalanceBidPercentScalp ?? "",
-                // lastPriceGapGateAndBinancePercentScalp: setting.lastPriceGapGateAndBinancePercentScalp ?? "",
-
                 indexBidAsk: setting.indexBidAsk ?? "",
-
                 delayFarm: setting.delayFarm ?? "",
                 delayScalp: setting.delayScalp ?? "",
-
                 tauS: setting.tauS ?? "",
-
                 logType: setting.logType ?? "",
-
                 stepS: setting.stepS ?? "",
+                tauSWindow: (setting.tauSWindow as TTimeFrame[] | null) ?? [],
             });
         }
     }, [settingUser, getSettingUserById.data, form, type]);
@@ -258,52 +198,14 @@ export default function SettingAdminUser({ type }: TProps) {
             id: type === "user" ? 1 : settingUser.id,
             maxTotalOpenPO: data.maxTotalOpenPO,
             leverage: data.leverage,
-            // inputUSDT: data.inputUSDT,
-            // sizeIOC: data.sizeIOC,
-            // takeProfit: data.takeProfit,
-            // stopLoss: data.stopLoss,
             stopLossUsdtPnl: data.stopLossUsdtPnl,
-            // timeoutMs: data.timeoutMs,
-            // timeoutEnabled: data.timeoutEnabled,
-            // minSpreadPercent: data.minSpreadPercent,
-            // maxSpreadPercent: data.maxSpreadPercent,
-            // maxDepth: data.maxDepth,
-            // timeoutClearOpenSecond: data.timeoutClearOpenSecond,
-            // lastPriceGapGateAndBinancePercent: data.lastPriceGapGateAndBinancePercent,
-            // ifImbalanceBidPercent: data.ifImbalanceBidPercent,
-            // ifImbalanceAskPercent: data.ifImbalanceAskPercent,
-            // entrySignalMode: data.entrySignalMode,
-            // delayForPairsMs: data.delayForPairsMs,
-            // max24hChangeGreen: data.max24hChangeGreen,
-            // max24hChangeRed: data.max24hChangeRed,
-            // martingale: data.martingale,
-            // maxRoiNextPhase: data.maxRoiNextPhase,
-
-            // ioc ----------------------
-            // farm
-            // minSpreadPercentFarm: data.minSpreadPercentFarm,
-            // maxSpreadPercentFarm: data.maxSpreadPercentFarm,
-            // ifImbalanceBidPercentFarm: data.ifImbalanceBidPercentFarm,
-            // ifImbalanceAskPercentFarm: data.ifImbalanceAskPercentFarm,
-            // lastPriceGapGateAndBinancePercentFarm: data.lastPriceGapGateAndBinancePercentFarm,
-
-            // scalp
-            // minSpreadPercentScalp: data.minSpreadPercentScalp,
-            // maxSpreadPercentScalp: data.maxSpreadPercentScalp,
-            // ifImbalanceBidPercentScalp: data.ifImbalanceBidPercentScalp,
-            // ifImbalanceAskPercentScalp: data.ifImbalanceAskPercentScalp,
-            // lastPriceGapGateAndBinancePercentScalp: data.lastPriceGapGateAndBinancePercentScalp,
-
             indexBidAsk: data.indexBidAsk,
-
             delayFarm: data.delayFarm,
             delayScalp: data.delayScalp,
-
             tauS: data.tauS,
-
             logType: data.logType,
-
             stepS: data.stepS,
+            tauSWindow: data.tauSWindow,
         };
 
         console.log({ updateSettingUser: payload });
@@ -360,7 +262,7 @@ export default function SettingAdminUser({ type }: TProps) {
                 />
 
                 {/* maxTotalOpenPO */}
-                <Controller
+                {/* <Controller
                     name="maxTotalOpenPO"
                     control={form.control}
                     render={({ field }) => (
@@ -381,8 +283,7 @@ export default function SettingAdminUser({ type }: TProps) {
                             clampBehavior="strict"
                         />
                     )}
-                />
-
+                /> */}
 
                 <Divider my="sm" />
 
@@ -528,6 +429,22 @@ export default function SettingAdminUser({ type }: TProps) {
                             step={0.1}
                             clampBehavior="strict"
                         />
+                    )}
+                />
+
+                <Controller
+                    name="tauSWindow"
+                    control={form.control}
+                    render={({ field }) => (
+                        <div>
+                            <TauSWindowsEditor value={(field.value || []) as TTimeFrame[]} onChange={(next) => field.onChange(next)} />
+                            {form.formState.errors.tauSWindow && (
+                                <div style={{ color: "var(--mantine-color-red-6)", fontSize: 12, marginTop: 4 }}>
+                                    {/* Hiển thị lỗi tổng thể nếu có (ví dụ chồng chéo) */}
+                                    {(form.formState.errors.tauSWindow as any)?.message}
+                                </div>
+                            )}
+                        </div>
                     )}
                 />
 

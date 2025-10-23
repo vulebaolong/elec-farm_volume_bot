@@ -5,6 +5,7 @@ import Log from "../log/log";
 import SideCountIoc from "../side-count-ioc/side-count-ioc";
 import { PageTitle } from "../title-page/title-page";
 import Controll from "./controll";
+import StoplossIoc from "../stoploss-ioc/stoploss-ioc";
 
 export default function Bot() {
     const info = useAppSelector((state) => state.user.info);
@@ -20,6 +21,7 @@ export default function Bot() {
                         {/* <FixLiquidation /> */}
                         {/* <FixStopLoss /> */}
                         <SideCountIoc />
+                        <StoplossIoc />
                         <Log />
                         {/* <PassiveSticky /> */}
                         {/* <TakeprofitAccount /> */}
