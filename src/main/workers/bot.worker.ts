@@ -195,13 +195,11 @@ class Bot {
                             await this.handleRoi(pos);
                         }
                     }
-                    // this.reloadWebContentsViewRequest();
                 }
             } catch (err: any) {
                 this.logWorker().error(err?.message);
                 if (this.isTimeoutError(err)) {
-                    // this.reloadWebContentsViewRequest();
-                    this.stop();
+                    this.reloadWebContentsViewRequest();
                 }
             } finally {
                 const dt = Math.round(performance.now() - iterStart);
