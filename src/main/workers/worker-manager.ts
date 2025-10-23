@@ -493,6 +493,53 @@ export class BotWorkerManager {
                     break;
                 }
 
+                case "bot:clickTabPosition": {
+                    const { reqClickTabPositionId, stringClickTabPosition } = msg?.payload;
+                    const type = "bot:clickTabPosition:res";
+                    try {
+                        const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
+                        if (!webContentsViewGate) {
+                            const payload: TGateOrderMainRes = {
+                                ok: false,
+                                reqOrderId: reqClickTabPositionId,
+                                bodyText: "",
+                                error: "webContentsViewGate not found",
+                            };
+                            entry.worker.postMessage({ type: type, payload: payload });
+                            return;
+                        }
+
+                        const result: TResultClickMarketPosition = await webContentsViewGate.webContents.executeJavaScript(
+                            stringClickTabPosition,
+                            true,
+                        );
+
+                        if (result.ok === false && result.error) {
+                            throw new Error(result.error);
+                        }
+
+                        this.isDisableApiPosition = false;
+
+                        const payload: TGateClick<boolean> & { reqClickTabPositionId: number } = {
+                            ok: result.ok,
+                            body: result.data,
+                            reqClickTabPositionId: reqClickTabPositionId,
+                            error: null,
+                        };
+
+                        entry.worker.postMessage({ type: type, payload: payload });
+                    } catch (e: any) {
+                        const payload: TGateClick<boolean> & { reqClickTabPositionId: number } = {
+                            ok: false,
+                            body: null,
+                            reqClickTabPositionId: reqClickTabPositionId,
+                            error: String(e?.message || e),
+                        };
+                        entry.worker.postMessage({ type: type, payload: payload });
+                    }
+                    break;
+                }
+
                 case "bot:clickMarketPosition": {
                     const { reqClickMarketPositionId, stringClickMarketPosition } = msg?.payload;
                     const type = "bot:clickMarketPosition:res";

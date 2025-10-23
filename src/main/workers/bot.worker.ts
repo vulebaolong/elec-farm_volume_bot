@@ -5,6 +5,7 @@ import {
     createCodeStringCheckLogin,
     createCodeStringClickClearAllPosition,
     createCodeStringClickMarketPosition,
+    createCodeStringClickTabPosition,
     createCodeStringGetUid,
 } from "@/javascript-string/logic-farm";
 import { TAccount } from "@/types/account.type";
@@ -137,6 +138,8 @@ class Bot {
 
     private fixStopLossIOC: Map<string, TFixStoplossIoc> = new Map();
 
+    private limitReloadWebContentsView: number = 0;
+
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
         this.settingUser = dataInitBot.settingUser;
@@ -204,6 +207,9 @@ class Bot {
             } catch (err: any) {
                 this.logWorker().error(err?.message);
                 if (this.isTimeoutError(err)) {
+                    this.reloadWebContentsViewRequest();
+                }
+                if (err?.message?.include("Buy button not found")) {
                     this.reloadWebContentsViewRequest();
                 }
             } finally {
@@ -309,7 +315,7 @@ class Bot {
         const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
         if (!ok) return;
 
-        const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC`);
+        await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC`);
         // this.logWorker().info(`🧨 ${entrySymbol} | ${sideScalp} | ${payloadOpenOrder.price}`);
         this.sideCountsIOC.set(keyPrevSidesCount, { keyPrevSidesCount, longHits: 0, shortHits: 0 });
         this.sendSideCountsIOC();
@@ -826,6 +832,7 @@ class Bot {
         const tau = this.getEffectiveTauS();
 
         // console.log("tau", tau);
+        this.logWorker().info(`Tau S: ${tau}`);
 
         let out: TSide | null = null;
 
@@ -1027,7 +1034,7 @@ class Bot {
 
         // 4) Không cover được → lưu lại để lần sau thử lại
         const createAt = Date.now();
-        this.fixStopLossIOC.set(symbol, {
+        this.fixStopLossIOC.set(`${symbol}-${absLoss}`, {
             symbol,
             unrealizedPnL: pnlLoss,
             createAt,
@@ -1085,7 +1092,42 @@ class Bot {
         this.parentPort?.postMessage(payload);
     }
 
+    private async clickTabPostion(label?: string) {
+        const selectorButtonTabPosition = this.uiSelector?.find((item) => item.code === "buttonTabPosition")?.selectorValue;
+
+        if (!selectorButtonTabPosition || !selectorButtonTabPosition) {
+            this.log(`🟢 Not found selector ${{ selectorButtonTabPosition }}`);
+            throw new Error(`Not found selector`);
+        }
+
+        const stringClickTabPosition = createCodeStringClickTabPosition({
+            buttonTabPosition: selectorButtonTabPosition,
+        });
+
+        const { body, error, ok } = await this.sendIpcRpc<boolean>({
+            sequenceKey: "clickTabPosition",
+            requestType: "bot:clickTabPosition",
+            responseType: "bot:clickTabPosition:res",
+            idFieldName: "reqClickTabPositionId",
+            buildPayload: (requestId) => ({
+                reqClickTabPositionId: requestId,
+                stringClickTabPosition,
+            }),
+            timeoutMs: 10_000,
+        });
+
+        if (!ok || error || body == null) {
+            throw new Error(`🟢 ❌ Click Tab Position error: ${error ?? "unknown"} ${body} ${ok}`);
+        }
+
+        this.logWorker(ELogType.Trade).info(`✅ 🤷 Click Tab Position | ${label || ""}`);
+
+        return body;
+    }
+
     private async clickMarketPostion(symbol: string, side: TSide, label?: string) {
+        await this.clickTabPostion();
+
         const selectorWrapperPositionBlocks = this.uiSelector?.find((item) => item.code === "wrapperPositionBlocks")?.selectorValue;
         const selectorButtonTabPosition = this.uiSelector?.find((item) => item.code === "buttonTabPosition")?.selectorValue;
 
@@ -1124,6 +1166,8 @@ class Bot {
     }
 
     private async clickClearAllPosition(label?: string) {
+        await this.clickTabPostion();
+
         const selectorButtonTabPosition = this.uiSelector?.find((item) => item.code === "buttonTabPosition")?.selectorValue;
         const selectorButtonCloseAllPosition = this.uiSelector?.find((item) => item.code === "buttonCloseAllPosition")?.selectorValue;
 
@@ -1194,6 +1238,7 @@ class Bot {
     }
 
     private reloadWebContentsViewRequest() {
+        if (this.limitReloadWebContentsView > this.limitReloadWebContentsView + 300_000) return;
         this.logWorker().info("🔄 Reload WebContentsView Request");
         let isStop = false;
         if (this.isStart) {
@@ -1204,9 +1249,16 @@ class Bot {
     }
 
     private async reloadWebContentsViewResponse({ isStop }: { isStop: boolean }) {
-        this.logWorker().info("🔄 Reload WebContentsView Response");
-        await this.sleep(2000);
+        const delayReload = 5000;
+
+        this.logWorker().info(`🔄 Reload WebContentsView Response -> DELAY: ${delayReload}ms `);
+
+        this.limitReloadWebContentsView = Date.now();
+
+        await this.sleep(delayReload);
+
         if (isStop) this.start(false);
+
         this.parentPort?.postMessage({ type: "bot:reloadWebContentsView", payload: true });
     }
 
@@ -1316,6 +1368,11 @@ class Bot {
     }
 
     private isHandleSL() {
+        if (!this.isHitCount(10)) {
+            // this.logWorker().info("🟣 SL: skip — hit count");
+            return false;
+        }
+
         // 1) Không có position -> không cần check SL
         if (this.positions.size === 0) {
             this.logWorker().info("🟣 SL: skip — no positions");
@@ -1590,5 +1647,10 @@ class Bot {
         const length = pairs.size;
 
         return length;
+    }
+
+    private isHitCount(step: number): boolean {
+        if (!Number.isFinite(step) || step <= 0) return false;
+        return this.count > 0 && this.count % step === 0;
     }
 }

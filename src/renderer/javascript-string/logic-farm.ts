@@ -210,6 +210,30 @@ window.state = Object.assign(window.state || {}, {
 `;
 };
 
+export type TClickTabPosition = {
+    buttonTabPosition: string;
+};
+
+export const createCodeStringClickTabPosition = (payload: TClickTabPosition) => {
+    return `
+(async () => {
+  try {
+      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+      const buttonTabPosition = document.querySelector("${payload.buttonTabPosition}");
+      if (!buttonTabPosition) throw new Error('buttonTabPosition not found');
+
+      buttonTabPosition.click();
+
+      await sleep(100);
+
+      return { ok: true, data: true, error: null };
+  } catch (err) {
+      return { ok: false, data: null, error: err };
+  }
+})();
+`;
+};
+
 export type TClickMarketPosition = {
     symbol: string;
     side: TSide;
