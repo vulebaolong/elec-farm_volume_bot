@@ -138,7 +138,9 @@ class Bot {
 
     private fixStopLossIOC: Map<string, TFixStoplossIoc> = new Map();
 
-    private limitReloadWebContentsView: number = 0;
+    private lastReloadAt = 0; // mốc lần gần nhất (ms)
+    private reloading = false; // đang chờ phản hồi?
+    private readonly RELOAD_INTERVAL = 300_000; // 5 phút
 
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
@@ -1238,28 +1240,38 @@ class Bot {
     }
 
     private reloadWebContentsViewRequest() {
-        if (this.limitReloadWebContentsView > this.limitReloadWebContentsView + 300_000) return;
+        const now = Date.now();
+
+        if (this.reloading) return; // đang xử lý lần trước
+        if (now - this.lastReloadAt < this.RELOAD_INTERVAL) return;
+
         this.logWorker().info("🔄 Reload WebContentsView Request");
+        this.reloading = true;
+        this.lastReloadAt = now; // set mốc NGAY khi gửi để chống spam
+
         let isStop = false;
         if (this.isStart) {
             this.stop();
             isStop = true;
         }
-        this.parentPort?.postMessage({ type: "bot:reloadWebContentsView:Request", payload: { isStop } });
+
+        this.parentPort?.postMessage({
+            type: "bot:reloadWebContentsView:Request",
+            payload: { isStop },
+        });
     }
 
     private async reloadWebContentsViewResponse({ isStop }: { isStop: boolean }) {
         const delayReload = 5000;
+        this.logWorker().info(`🔄 Reload WebContentsView Response -> DELAY: ${delayReload}ms`);
 
-        this.logWorker().info(`🔄 Reload WebContentsView Response -> DELAY: ${delayReload}ms `);
-
-        this.limitReloadWebContentsView = Date.now();
-
-        await this.sleep(delayReload);
-
-        if (isStop) this.start(false);
-
-        this.parentPort?.postMessage({ type: "bot:reloadWebContentsView", payload: true });
+        try {
+            await this.sleep(delayReload);
+            if (isStop) this.start(false);
+            this.parentPort?.postMessage({ type: "bot:reloadWebContentsView", payload: true });
+        } finally {
+            this.reloading = false; // luôn nhả cờ, kể cả khi lỗi
+        }
     }
 
     private handleFollowApi(payloadFollowApi: TPayloadFollowApi) {
