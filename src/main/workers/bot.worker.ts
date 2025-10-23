@@ -162,14 +162,28 @@ class Bot {
                     if (!isOneWay) continue;
 
                     for (const entryScalp of this.whiteListScalpIoc) {
+                        // nếu đã max thì không vào thoát vòng lặp
+                        if (this.isCheckMaxOpenPO()) {
+                            this.logWorker().info(`🔵 Push IOC Scalp: skip MaxOpenPO ${this.getLengthOrderInPosition()}`);
+                            break;
+                        }
+
                         const entryWhitelist = this.whiteList[entryScalp.symbol];
+
                         if (entryWhitelist) {
                             await this.handleWhiteListScalpIocNew(entryScalp.symbol, entryWhitelist);
                         }
                     }
 
                     for (const entryFarm of this.whiteListFarmIoc) {
+                        // nếu đã max thì không vào thoát vòng lặp
+                        if (this.isCheckMaxOpenPO()) {
+                            this.logWorker().info(`🔵 Push IOC Farm: skip MaxOpenPO ${this.getLengthOrderInPosition()}`);
+                            break;
+                        }
+
                         const entryWhitelist = this.whiteList[entryFarm.symbol];
+
                         if (entryWhitelist) {
                             await this.handleWhiteListFarmIocNew(entryFarm.symbol, entryWhitelist);
                         }
@@ -1084,7 +1098,6 @@ class Bot {
         const selectorButtonTabPosition = this.uiSelector?.find((item) => item.code === "buttonTabPosition")?.selectorValue;
         const selectorButtonCloseAllPosition = this.uiSelector?.find((item) => item.code === "buttonCloseAllPosition")?.selectorValue;
 
-
         if (!selectorButtonTabPosition || !selectorButtonCloseAllPosition) {
             this.logWorker().info(`❌ Not found selector clickClearAllPosition`);
             throw new Error(`Not found selector`);
@@ -1255,7 +1268,6 @@ class Bot {
         // 1) Không có position -> không cần check SL
         if (this.positions.size === 0) {
             this.logWorker().info("🟣 SL: skip — no positions");
-            console.log("🟣 SL: skip — no positions");
             return false;
         }
 
@@ -1320,7 +1332,7 @@ class Bot {
                     if (message?.payload?.[idFieldName] !== requestId) return;
 
                     const payload = message.payload as { ok: boolean; body: TBody | null; error?: string | null };
-                    console.log(responseType, payload);
+                    // console.log(responseType, payload);
                     if (!payload.ok) {
                         return finish({ ok: false, body: null, error: payload.error || "RPC failed", requestId });
                     }
@@ -1506,5 +1518,26 @@ class Bot {
             .map((p) => p.toFixed(dec));
 
         return uniq;
+    }
+
+    private isCheckMaxOpenPO() {
+        const lengthOrderInOrderOpensAndPosition = this.getLengthOrderInPosition();
+        if (lengthOrderInOrderOpensAndPosition >= this.settingUser.maxTotalOpenPO) {
+            return true;
+        }
+        return false;
+    }
+
+    private getLengthOrderInPosition(): number {
+        const pairs = new Set<string>();
+
+        for (const [, pos] of this.positions) {
+            if (!pos || !pos.size) continue;
+            pairs.add(pos.contract.replace("/", "_"));
+        }
+
+        const length = pairs.size;
+
+        return length;
     }
 }
