@@ -1,15 +1,11 @@
 import { useUpsertAccount } from "@/api/tanstack/account.tanstack";
-import { useCreateTakeProfitAccount, useUpdateTakeProfitAccount } from "@/api/tanstack/takeprofit-account.tanstack";
-import { accountEquity } from "@/helpers/function.helper";
 import { ADD_RIPPLE, SET_IS_RUNNING, SET_IS_START } from "@/redux/slices/bot.slice";
 import { useAppDispatch, useAppSelector } from "@/redux/store";
 import { TAccount } from "@/types/account.type";
-import { TCreateTakeprofitAccountReq, TTakeprofitAccount } from "@/types/takeprofit-account.type";
 import { TWorkerData, TWorkerHeartbeat } from "@/types/worker.type";
 import { Button, Group, Paper, Stack, Text } from "@mantine/core";
 import { Play, RefreshCcw, Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useState } from "react";
 import Ripple from "./ripple";
 
 type TProps = {};
@@ -21,10 +17,10 @@ export default function Controll({}: TProps) {
     const info = useAppSelector((state) => state.user.info);
     const dispatch = useAppDispatch();
     const [loadingReloadWebContent, setLoadingReloadWebContent] = useState(false);
-    const accountRef = useRef<TAccount | null>(null);
-    const takeprofitAccountNewRef = useRef<TTakeprofitAccount | null>(null);
-    const createTakeProfitAccount = useCreateTakeProfitAccount();
-    const updateTakeProfitAccount = useUpdateTakeProfitAccount();
+    // const accountRef = useRef<TAccount | null>(null);
+    // const takeprofitAccountNewRef = useRef<TTakeprofitAccount | null>(null);
+    // const createTakeProfitAccount = useCreateTakeProfitAccount();
+    // const updateTakeProfitAccount = useUpdateTakeProfitAccount();
     const upsertAccount = useUpsertAccount();
 
     const start = () => window.electron?.ipcRenderer.sendMessage("bot:start");
@@ -46,63 +42,63 @@ export default function Controll({}: TProps) {
                 data: data.payload,
             });
 
-            accountRef.current = data.payload[0];
-            if (takeprofitAccountNewRef.current) {
-                const total = data.payload[0].total;
-                const unrealised_pnl = data.payload[0].unrealised_pnl;
-                const newTotal = accountEquity(total, unrealised_pnl);
+            // accountRef.current = data.payload[0];
+            // if (takeprofitAccountNewRef.current) {
+            //     const total = data.payload[0].total;
+            //     const unrealised_pnl = data.payload[0].unrealised_pnl;
+            //     const newTotal = accountEquity(total, unrealised_pnl);
 
-                updateTakeProfitAccount.mutate(
-                    {
-                        id: takeprofitAccountNewRef.current.id,
-                        data: {
-                            newTotal: newTotal,
-                            source: "gate",
-                            uid: accountRef.current.user,
-                        },
-                    },
-                    {
-                        onSuccess: (data) => {
-                            if (takeprofitAccountNewRef.current) {
-                                takeprofitAccountNewRef.current.id = data.data;
-                            }
-                        },
-                        onError: (error: any) => {
-                            if (error?.response?.data?.message === "TakeProfitAccount not found") {
-                                takeprofitAccountNewRef.current = null;
-                            }
-                        },
-                    },
-                );
-            }
+            //     updateTakeProfitAccount.mutate(
+            //         {
+            //             id: takeprofitAccountNewRef.current.id,
+            //             data: {
+            //                 newTotal: newTotal,
+            //                 source: "gate",
+            //                 uid: accountRef.current.user,
+            //             },
+            //         },
+            //         {
+            //             onSuccess: (data) => {
+            //                 if (takeprofitAccountNewRef.current) {
+            //                     takeprofitAccountNewRef.current.id = data.data;
+            //                 }
+            //             },
+            //             onError: (error: any) => {
+            //                 if (error?.response?.data?.message === "TakeProfitAccount not found") {
+            //                     takeprofitAccountNewRef.current = null;
+            //                 }
+            //             },
+            //         },
+            //     );
+            // }
         });
 
         const offBotStart = window.electron.ipcRenderer.on(
             "bot:start",
             async (dataWorker: TWorkerData<{ isStart: boolean; isNextPhase: boolean }>) => {
-                if (dataWorker.payload.isNextPhase) {
-                    if (!accountRef.current) {
-                        toast.error("Please save account first");
-                        return;
-                    }
+                // if (dataWorker.payload.isNextPhase) {
+                //     if (!accountRef.current) {
+                //         toast.error("Please save account first");
+                //         return;
+                //     }
 
-                    const totalCurrent = accountRef.current.total;
-                    const unrealised_pnl = accountRef.current.unrealised_pnl;
-                    const total = accountEquity(totalCurrent, unrealised_pnl);
+                //     const totalCurrent = accountRef.current.total;
+                //     const unrealised_pnl = accountRef.current.unrealised_pnl;
+                //     const total = accountEquity(totalCurrent, unrealised_pnl);
 
-                    const payload: TCreateTakeprofitAccountReq = {
-                        newTotal: total,
-                        oldTotal: total,
-                        source: "gate",
-                        uid: accountRef.current.user,
-                    };
+                //     const payload: TCreateTakeprofitAccountReq = {
+                //         newTotal: total,
+                //         oldTotal: total,
+                //         source: "gate",
+                //         uid: accountRef.current.user,
+                //     };
 
-                    await createTakeProfitAccount.mutateAsync(payload, {
-                        onSuccess: (data) => {
-                            takeprofitAccountNewRef.current = data.data;
-                        },
-                    });
-                }
+                //     await createTakeProfitAccount.mutateAsync(payload, {
+                //         onSuccess: (data) => {
+                //             takeprofitAccountNewRef.current = data.data;
+                //         },
+                //     });
+                // }
 
                 dispatch(SET_IS_START(dataWorker.payload.isStart));
             },
@@ -110,7 +106,7 @@ export default function Controll({}: TProps) {
 
         const offBotStop = window.electron.ipcRenderer.on("bot:stop", (data: TWorkerData<{ isStart: boolean }>) => {
             dispatch(SET_IS_START(data.payload.isStart));
-            takeprofitAccountNewRef.current = null;
+            // takeprofitAccountNewRef.current = null;
         });
 
         const offReloadWebContentsView = window.electron.ipcRenderer.on("bot:reloadWebContentsView", (data: TWorkerData<{ isStart: boolean }>) => {
@@ -185,7 +181,7 @@ export default function Controll({}: TProps) {
                                 radius={"md"}
                                 variant="default"
                                 onClick={() => {
-                                    window.electron?.ipcRenderer.sendMessage("worker:toggleWebView", { uid: 31674740 });
+                                    window.electron?.ipcRenderer.sendMessage("worker:toggleWebView", { uid: info?.Uids[0].uid });
                                 }}
                             >
                                 {isChildView ? "Close Web" : "Open Web"}

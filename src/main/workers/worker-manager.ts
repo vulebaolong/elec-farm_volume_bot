@@ -287,11 +287,12 @@ export class BotWorkerManager {
                         this.payloadOrder = payloadOrderRaw;
 
                         // Tạo promise chờ API order
-                        const waitOrder = this.waitForOneRequest();
+                        const waitOrder = this.waitForOneRequest(payloadOrderRaw.contract);
 
                         // Thực hiện click (trả về khi JS của bạn xong, không phải khi API xong)
                         const js = createCodeStringClickOrder(selector);
                         const resultClick: TResultClickOpenOrder = await webContentsViewGate.webContents.executeJavaScript(js, true);
+                        // console.log(`Click buy ${payloadOrderRaw.contract} ${payloadOrderRaw.size} ${payloadOrderRaw.price}`, resultClick);
                         if (resultClick.ok === false && resultClick.error) {
                             throw new Error(resultClick.error);
                         }
@@ -860,7 +861,7 @@ export class BotWorkerManager {
 
     private attachView(uid: number) {
         const rec = this.entries.get(uid);
-        if (!rec || !rec.webContentsViewGate || rec.attached) return;
+        if (!rec || !rec.webContentsViewGate || rec.attached === true) return;
 
         this.mainWindow.contentView.addChildView(rec.webContentsViewGate);
         this.sendIsChildView(true);
@@ -870,7 +871,7 @@ export class BotWorkerManager {
 
     private detachView(uid: number) {
         const rec = this.entries.get(uid);
-        if (!rec || !rec.webContentsViewGate || rec.attached) return;
+        if (!rec || !rec.webContentsViewGate || rec.attached === false) return;
 
         try {
             this.mainWindow.contentView.removeChildView(rec.webContentsViewGate);
@@ -899,12 +900,12 @@ export class BotWorkerManager {
         this.mainWindow.webContents.send("bot:isChildView", { isChildView });
     }
 
-    private waitForOneRequest(timeoutMs = 8000): Promise<string> {
+    private waitForOneRequest(symbol: string, timeoutMs = 8000): Promise<string> {
         return new Promise((resolve, reject) => {
             this.resolveBodyCreateOrder = resolve as any;
             this.timer = setTimeout(() => {
                 if (this.timer) clearTimeout(this.timer);
-                reject(new Error(`waitForOneRequest ${this.GATE_TIMEOUT}`));
+                reject(new Error(`${symbol} waitForOneRequest ${this.GATE_TIMEOUT}`));
             }, timeoutMs);
         });
     }
@@ -1063,12 +1064,14 @@ export class BotWorkerManager {
             if (reqMethod === this.REQUEST_API.positions.method && url === this.REQUEST_API.positions.url) {
                 if (this.isDisableApiPosition) {
                     // Khuyến nghị: fulfill 200 + body rỗng/cached → UI không lỗi, request hoàn tất ngay
-                    const bodyText = this.lastPositionsBody ?? JSON.stringify({
-                        code: 200,
-                        data: [],
-                        message: "success",
-                        method: "/apiw/v2/futures/usdt/positions",
-                    }); // hoặc body gần nhất, hoặc "[]"
+                    const bodyText =
+                        this.lastPositionsBody ??
+                        JSON.stringify({
+                            code: 200,
+                            data: [],
+                            message: "success",
+                            method: "/apiw/v2/futures/usdt/positions",
+                        }); // hoặc body gần nhất, hoặc "[]"
                     await webContents.debugger.sendCommand("Fetch.fulfillRequest", {
                         requestId,
                         responseCode: 200,

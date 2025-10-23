@@ -456,7 +456,7 @@ export const createCodeStringGetBidsAsks = (contract: string, limit: number | un
 export const createCodeStringClickOrder = (selector: TUiSelectorOrder) => {
     return `
 (async () => {
-  // const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   let log = [];
 
   // hàm set value an toàn cho input controlled (React/Vue)
@@ -500,6 +500,7 @@ export const createCodeStringClickOrder = (selector: TUiSelectorOrder) => {
     btn.removeAttribute('disabled');
     btn.click();
     log.push({ message: 'Buy button clicked', data: null });
+    await sleep(500)
 
     return { ok: true, data: log, error: null };
   } catch (err) {
@@ -570,7 +571,7 @@ export type TClickClearAll = {
     buttonCloseAllOpenOrder: string;
 };
 
-export const createCodeStringClickClearAll = (payload: TClickClearAll) => {
+export const createCodeStringClickClearAllPositionVsOrder = (payload: TClickClearAll) => {
     return `
 (async () => {
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -597,6 +598,37 @@ export const createCodeStringClickClearAll = (payload: TClickClearAll) => {
 
         const buttonCloseAllOpenOrder = document.querySelector("${payload.buttonCloseAllOpenOrder}");
         if (buttonCloseAllOpenOrder) buttonCloseAllOpenOrder.click();
+
+        await wait(120);
+
+        return { ok: true, data: true, error: null };
+    } catch (error) {
+        return { ok: false, data: null, error: String(error && error.message ? error.message : error) };
+    }
+})();
+`;
+};
+
+export type TClickClearAllPosition = {
+    buttonTabPosition: string;
+    buttonCloseAllPosition: string;
+};
+
+export const createCodeStringClickClearAllPosition = (payload: TClickClearAllPosition) => {
+    return `
+(async () => {
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    try {
+        // 1) Clear All Position
+        const buttonTabPosition = document.querySelector("${payload.buttonTabPosition}");
+        if (!buttonTabPosition) throw new Error("buttonTabPosition not found");
+        buttonTabPosition.click();
+
+        await wait(120);
+
+        const buttonCloseAllPosition = document.querySelector("${payload.buttonCloseAllPosition}");
+        if (buttonCloseAllPosition) buttonCloseAllPosition.click();
 
         await wait(120);
 

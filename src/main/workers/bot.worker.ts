@@ -1,7 +1,12 @@
 // bot.worker.ts
 import { BASE_URL, IS_PRODUCTION } from "@/constant/app.constant";
 import { ENDPOINT } from "@/constant/endpoint.constant";
-import { createCodeStringCheckLogin, createCodeStringClickMarketPosition, createCodeStringGetUid } from "@/javascript-string/logic-farm";
+import {
+    createCodeStringCheckLogin,
+    createCodeStringClickClearAllPosition,
+    createCodeStringClickMarketPosition,
+    createCodeStringGetUid,
+} from "@/javascript-string/logic-farm";
 import { TAccount } from "@/types/account.type";
 import { TRes } from "@/types/app.type";
 import { TGateApiRes } from "@/types/base-gate.type";
@@ -109,7 +114,6 @@ class Bot {
      */
     private positions = new Map<string, TPosition>();
 
-    private changedLaveragelist = new Map<string, TValueChangeLeverage>();
     private changedLaverageCrosslist = new Map<string, TValueChangeLeverage>();
     private settingUser: TSettingUsers;
     private uiSelector: TUiSelector[];
@@ -127,16 +131,6 @@ class Bot {
     private uidDB: TUid["uid"];
 
     private uidWeb: TUid["uid"] | null | undefined = undefined;
-
-    /**
-     * key của map: "BTC_USDT", dữ liệu contract bên trong "BTC/USDT"
-     */
-    private maxScalpsPosition = new Map<string, TMaxScapsPosition>();
-
-    /**
-     * key của map: "BTC_USDT", dữ liệu contract bên trong "BTC/USDT"
-     */
-    private maxFarmsPosition = new Map<string, TMaxScapsPosition>();
 
     private sideCountsIOC: TSideCountsIOC = new Map();
 
@@ -158,7 +152,7 @@ class Bot {
         for (;;) {
             const iterStart = performance.now();
             try {
-                this.log(`\n\n\n\n\n ✅✅✅✅✅ ITER START ${this.isStart} | ${this.running} =====`);
+                // this.log(`\n\n\n\n\n ✅✅✅✅✅ ITER START ${this.isStart} | ${this.running} =====`);
                 await this.beforeEach();
 
                 // if (!this.uidWeb) continue;
@@ -167,17 +161,17 @@ class Bot {
                     const isOneWay = await this.handleDualMode("oneway");
                     if (!isOneWay) continue;
 
-                    for (const [key, entry] of Object.entries(this.whiteList)) {
-                        const symbol = entry.core.gate.symbol.replace("/", "_");
-
-                        const isExitsScalp = this.whiteListScalpIoc.find((item) => item.symbol === symbol);
-                        if (isExitsScalp) {
-                            await this.handleWhiteListScalpIocNew(symbol, entry);
+                    for (const entryScalp of this.whiteListScalpIoc) {
+                        const entryWhitelist = this.whiteList[entryScalp.symbol];
+                        if (entryWhitelist) {
+                            await this.handleWhiteListScalpIocNew(entryScalp.symbol, entryWhitelist);
                         }
+                    }
 
-                        const isExitsFarm = this.whiteListFarmIoc.find((item) => item.symbol === symbol);
-                        if (isExitsFarm) {
-                            await this.handleWhiteListFarmIocNew(symbol, entry);
+                    for (const entryFarm of this.whiteListFarmIoc) {
+                        const entryWhitelist = this.whiteList[entryFarm.symbol];
+                        if (entryWhitelist) {
+                            await this.handleWhiteListFarmIocNew(entryFarm.symbol, entryWhitelist);
                         }
                     }
 
@@ -192,12 +186,13 @@ class Bot {
             } catch (err: any) {
                 this.logWorker().error(err?.message);
                 if (this.isTimeoutError(err)) {
-                    this.reloadWebContentsViewRequest();
+                    // this.reloadWebContentsViewRequest();
+                    this.stop();
                 }
             } finally {
                 const dt = Math.round(performance.now() - iterStart);
                 this.count += 1;
-                this.log(`✅✅✅✅✅ ITER END (took ${dt}ms) =====`);
+                // this.log(`✅✅✅✅✅ ITER END (took ${dt}ms) =====`);
                 await this.sleep(1000);
             }
         }
@@ -386,46 +381,6 @@ class Bot {
         }
     }
 
-    private syncMaxScapsPosition(positions: TPosition[]) {
-        // Nếu không có position nào → xóa toàn bộ
-        if (positions.length === 0) {
-            this.maxScalpsPosition.clear();
-            return;
-        }
-
-        // Nếu maxScalpsPosition đang trống → không cần làm gì
-        if (this.maxScalpsPosition.size === 0) return;
-
-        for (const key of this.maxScalpsPosition.keys()) {
-            // Chuẩn hóa tên contract trong positions
-            const exists = positions.some((pos) => pos.contract.replace("/", "_") === key.replace("/", "_"));
-
-            if (!exists) {
-                this.maxScalpsPosition.delete(key);
-            }
-        }
-    }
-
-    private syncMaxFarmsPosition(positions: TPosition[]) {
-        // Nếu không có position nào → xóa toàn bộ
-        if (positions.length === 0) {
-            this.maxFarmsPosition.clear();
-            return;
-        }
-
-        // Nếu maxFarmsPosition đang trống → không cần làm gì
-        if (this.maxFarmsPosition.size === 0) return;
-
-        for (const key of this.maxFarmsPosition.keys()) {
-            // Chuẩn hóa tên contract trong positions
-            const exists = positions.some((pos) => pos.contract.replace("/", "_") === key.replace("/", "_"));
-
-            if (!exists) {
-                this.maxFarmsPosition.delete(key);
-            }
-        }
-    }
-
     private checkMaxSize(symbol: string, entrySide: TSide, maxSize: number): boolean {
         const position = this.positions.get(symbol);
         if (!position) {
@@ -440,13 +395,11 @@ class Bot {
             const sideShoudBe = sidePosition === "long" ? "short" : "long";
             if (sideShoudBe !== entrySide) {
                 const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): cần tín hiệu là ${sideShoudBe}`;
-                if (this.settingUser.sizeIOC === 5) this.logWorker().info(mes);
-                // this.logUnique("info", "all", mes);
+                this.logWorker(ELogType.Trade).info(mes);
                 return false;
             } else {
                 const mes = `Position ${symbol} ${sidePosition} đã maxSize (${position.size}/${maxSize}): đúng side cần ${sideShoudBe} => tiến hành vào lệnh`;
-                if (this.settingUser.sizeIOC === 5) this.logWorker().info(mes);
-                // this.logUnique("info", "all", mes);
+                this.logWorker(ELogType.Trade).info(mes);
                 return true;
             }
         } else {
@@ -485,6 +438,7 @@ class Bot {
         // console.log("whitelistEntryScalpIocNew", this.whitelistEntryScalpIocNew);
         // console.log("nextOpenAt", this.nextOpenAt);
         // console.dir(this.sideCountsIOC, { colors: true, depth: null });
+        // console.log("unrealised_pnl: ", this.accounts[0].unrealised_pnl);
     }
 
     private heartbeat() {
@@ -498,14 +452,6 @@ class Bot {
         };
         this.parentPort?.postMessage(payload);
     }
-
-    // private rateCounterSendRenderer() {
-    //     const payload: TWorkerData<Record<WindowKey, number>> = {
-    //         type: "bot:rateCounter",
-    //         payload: this.rateCounter.counts(),
-    //     };
-    //     this.parentPort?.postMessage(payload);
-    // }
 
     handleEvent(msg: any) {
         switch (msg.type) {
@@ -567,14 +513,6 @@ class Bot {
 
             case "bot:removeFixStopLossQueue":
                 // this.removeFixStopLossQueue(msg);
-                break;
-
-            case "bot:ioc:long":
-                this.handleIOCLong();
-                break;
-
-            case "bot:ioc:short":
-                this.handleIOCShort();
                 break;
 
             case "bot:ioc:hedge":
@@ -826,7 +764,6 @@ class Bot {
                     const p: Omit<TGateOrderMainRes, "bodyText"> & { body: TGateApiRes<TOrderOpen | null> | null } = m.payload;
                     if (!p.ok || p.body === null) return done({ ok: false, body: null, error: p.error || "Order failed" }, "main→order:res !ok");
 
-
                     return done({ ok: true, body: p.body as T, error: null });
                 } catch (e) {
                     return done({ ok: false, body: null, error: `Order handler error: ${String(e)}` }, "handler:error");
@@ -857,7 +794,7 @@ class Bot {
         });
     }
 
-    private async clickMarketPostion(symbol: string, side: TSide) {
+    private async clickMarketPostion(symbol: string, side: TSide, label?: string) {
         const selectorWrapperPositionBlocks = this.uiSelector?.find((item) => item.code === "wrapperPositionBlocks")?.selectorValue;
         const selectorButtonTabPosition = this.uiSelector?.find((item) => item.code === "buttonTabPosition")?.selectorValue;
 
@@ -891,7 +828,7 @@ class Bot {
             throw new Error(`🟢 ❌ Click Market Position error: ${error ?? "unknown"} ${body} ${ok}`);
         }
 
-        this.logWorker(ELogType.Trade).info(`✅ 🤷 ${symbol} Click StopLoss Market Position`);
+        this.logWorker(ELogType.Trade).info(`✅ 🤷 ${symbol} Click Market Position | ${label}`);
         return body;
     }
 
@@ -1024,100 +961,159 @@ class Bot {
         return data;
     }
 
-    private async handleRoi(pos: TPosition): Promise<void> {
-        const { stopLoss, stopLossUsdtPnl, timeoutEnabled, timeoutMs } = this.settingUser;
+    private async handleRoi(position: TPosition): Promise<void> {
+        const { stopLossUsdtPnl } = this.settingUser;
 
-        // Nếu stopLoss = 100 (OFF) & stopLossUsdtPnl = 0 (OFF) => bỏ qua
-        if (stopLoss >= 100 && stopLossUsdtPnl <= 0) {
-            this.logWorker().info(`🟣 SL: skip — stopLoss=${stopLoss} >=100 & stopLossUsdtPnl=${stopLossUsdtPnl} <=0`);
+        // OFF hoàn toàn nếu ngưỡng <= 0
+        if (stopLossUsdtPnl <= 0) {
+            this.logWorker().info(`🟣 ROI guard: skip — stopLossUsdtPnl<=0 (OFF)`);
             return;
         }
 
-        const symbol = pos.contract.replace("/", "_");
+        const symbol = position.contract.replace("/", "_");
 
-        // 🔹 Lấy thông tin hợp đồng
+        // 1) Lấy info hợp đồng & giá hiện tại
         const info = await this.getInfoContract(symbol);
         if (!info) {
-            this.logWorker().error(`🟣 ❌ SL ${symbol}: Get info contract fail`);
+            this.logWorker().error(`🟣 ❌ ROI ${symbol}: getInfoContract fail`);
             return;
         }
 
-        const size = Number(pos.size);
-        const entryPrice = Number(pos.entry_price);
-        const initial_margin = Number(pos.initial_margin);
         const quanto = Number(info.quanto_multiplier);
         const lastPrice = Number(await this.getLastPrice(symbol));
-        const openTimeSec = Number(pos.open_time);
-        const nowMs = Date.now();
 
-        // 🔹 Kiểm tra dữ liệu hợp lệ
+        // 2) Chuẩn hóa & validate dữ liệu position
+        const size = Number(position.size);
+        const entryPrice = Number(position.entry_price);
+        const initialMargin = Number(position.initial_margin);
+
         if (!Number.isFinite(size) || size === 0) {
-            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid size=${size}`);
+            this.logWorker().error(`🟣 ❌ ROI ${symbol}: invalid size=${size}`);
+            return;
         }
         if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
-            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid entryPrice=${entryPrice}`);
+            this.logWorker().error(`🟣 ❌ ROI ${symbol}: invalid entryPrice=${entryPrice}`);
+            return;
         }
-        if (!Number.isFinite(initial_margin) || initial_margin <= 0) {
-            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid initial_margin=${initial_margin}`);
+        if (!Number.isFinite(initialMargin) || initialMargin <= 0) {
+            this.logWorker().error(`🟣 ❌ ROI ${symbol}: invalid initialMargin=${initialMargin}`);
+            return;
         }
         if (!Number.isFinite(quanto) || quanto <= 0) {
-            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid quanto=${quanto}`);
+            this.logWorker().error(`🟣 ❌ ROI ${symbol}: invalid quanto_multiplier=${quanto}`);
+            return;
         }
         if (!Number.isFinite(lastPrice) || lastPrice <= 0) {
-            return this.logWorker().error(`🟣 ❌ SL ${symbol}: Invalid lastPrice=${lastPrice}`);
+            this.logWorker().error(`🟣 ❌ ROI ${symbol}: invalid lastPrice=${lastPrice}`);
+            return;
         }
 
-        // 🔹 Tính toán PnL và ROI
+        // 3) Tính metrics chung (dùng cho cả 2 logic)
         const unrealizedPnL = (lastPrice - entryPrice) * size * quanto;
-        const returnPercent = (unrealizedPnL / initial_margin) * 100;
-        const createdAtMs = openTimeSec > 0 ? openTimeSec * 1000 : nowMs;
+        // const roiPercent = (unrealizedPnL / initialMargin) * 100;
 
-        // 🔹 Kiểm tra điều kiện StopLoss
-        let isSL = false;
-        let reason = "";
+        // 4) Thử đóng theo lỗ USDT trước
+        const closedByLoss = await this.tryCloseByLossUSD(position, unrealizedPnL, stopLossUsdtPnl);
+        if (!closedByLoss) return;
 
-        const validSLPercent = stopLoss < 100; // stopLoss (%) hợp lệ
-        const validSLUsdt = stopLossUsdtPnl > 0; // stopLoss theo USDT hợp lệ
+        // 5) Nếu đã đóng, thử đóng theo lời USDT (>= ngưỡng)
+        let isCloseByProfit = false;
+        for (const [_, position2] of this.positions) {
+            const closedByProfit = await this.tryCloseByProfitUSD(position2, unrealizedPnL, stopLossUsdtPnl);
+            isCloseByProfit = closedByProfit;
+        }
+        if (isCloseByProfit) return;
 
-        // So sánh phần trăm
-        if (validSLPercent && returnPercent <= -stopLoss) {
-            isSL = true;
-            reason = `ROI=${returnPercent.toFixed(2)}% (<= -${stopLoss}%)`;
+        // 6) Nếu chua đóng theo lời USDT, thử clear all position theo pnl tài khoản
+        await this.tryCloseByProfitUSDAccount(stopLossUsdtPnl);
+    }
+
+    /** ĐÓNG khi LỖ theo USDT: unrealizedPnL <= -threshold */
+    private async tryCloseByLossUSD(position: TPosition, unrealizedPnL: number, thresholdUsdt: number): Promise<boolean> {
+        const symbol = position.contract.replace("/", "_");
+        const thresholdLoss = -Math.abs(thresholdUsdt);
+        const isHit = unrealizedPnL <= thresholdLoss;
+
+        this.logWorker().info(`🟣 StopLoss ${symbol}: PnL=${unrealizedPnL.toFixed(4)}$ | loss=${thresholdLoss}$ → ${isHit}`);
+
+        if (!isHit) return false;
+
+        const label = `STOPLOSS PnL=${unrealizedPnL.toFixed(4)}$ ≤ ${thresholdLoss}$ → ${isHit}`;
+
+        await this.clickMarketPostion(position.contract, Number(position.size) > 0 ? "long" : "short", label);
+
+        return true;
+    }
+
+    /** ĐÓNG khi LỜI theo USDT: unrealizedPnL >= +threshold */
+    private async tryCloseByProfitUSD(position: TPosition, unrealizedPnL: number, thresholdUsdt: number): Promise<boolean> {
+        const symbol = position.contract.replace("/", "_");
+        const thresholdProfit = Math.abs(thresholdUsdt);
+        const isHit = unrealizedPnL >= thresholdProfit;
+
+        this.logWorker().info(`🟣 StopLoss(Profit) ${symbol}: PnL=${unrealizedPnL.toFixed(4)}$ ≥ ${thresholdProfit}$ → ${isHit}`);
+
+        if (!isHit) return false;
+
+        const label = `PROFIT PnL=${unrealizedPnL.toFixed(4)}$ ≥ ${thresholdProfit}$`;
+
+        await this.clickMarketPostion(position.contract, Number(position.size) > 0 ? "long" : "short", label);
+
+        return true;
+    }
+
+    /** ĐÓNG khi LỜI theo USDT: unrealizedPnL >= +threshold */
+    private async tryCloseByProfitUSDAccount(thresholdUsdt: number): Promise<boolean> {
+        if (this.accounts.length === 0) return false;
+        const unrealizedPnLAccount = Number(this.accounts[0].unrealised_pnl);
+        const thresholdProfit = Math.abs(thresholdUsdt);
+        const isHit = unrealizedPnLAccount >= thresholdProfit;
+
+        this.logWorker().info(`🟣 StopLoss (Pnl account): PnL=${unrealizedPnLAccount.toFixed(4)}$ ≥ ${thresholdProfit}$ → ${isHit}`);
+
+        if (!isHit) return false;
+
+        const label = `ACCOUNT PnL=${unrealizedPnLAccount.toFixed(4)}$ ≥ ${thresholdProfit}$`;
+
+        await this.clickClearAllPosition(label);
+
+        return true;
+    }
+
+    private async clickClearAllPosition(label?: string) {
+        const selectorButtonTabPosition = this.uiSelector?.find((item) => item.code === "buttonTabPosition")?.selectorValue;
+        const selectorButtonCloseAllPosition = this.uiSelector?.find((item) => item.code === "buttonCloseAllPosition")?.selectorValue;
+
+
+        if (!selectorButtonTabPosition || !selectorButtonCloseAllPosition) {
+            this.logWorker().info(`❌ Not found selector clickClearAllPosition`);
+            throw new Error(`Not found selector`);
         }
 
-        // So sánh theo USD nếu chưa kích hoạt bởi %
-        if (!isSL && validSLUsdt && unrealizedPnL <= -stopLossUsdtPnl) {
-            isSL = true;
-            reason = `PnL=${unrealizedPnL.toFixed(2)} (<= -${stopLossUsdtPnl})`;
+        const stringClickClearAll = createCodeStringClickClearAllPosition({
+            buttonTabPosition: selectorButtonTabPosition,
+            buttonCloseAllPosition: selectorButtonCloseAllPosition,
+        });
+
+        const { body, error, ok } = await this.sendIpcRpc<boolean>({
+            sequenceKey: "clickClearAll",
+            requestType: "bot:clickClearAll",
+            responseType: "bot:clickClearAll:res",
+            idFieldName: "reqClickClearAllId",
+            buildPayload: (requestId) => ({
+                reqClickClearAllId: requestId,
+                stringClickClearAll,
+            }),
+            timeoutMs: 10_000,
+        });
+
+        if (!ok || error || body == null) {
+            throw new Error(`❌ Click Clear All error: ${error ?? "unknown"} ${body} ${ok}`);
         }
 
-        // Nếu cả hai hợp lệ thì xét cái nào đến trước
-        if (validSLPercent && validSLUsdt) {
-            const hitByPercent = returnPercent <= -stopLoss;
-            const hitByUsdt = unrealizedPnL <= -stopLossUsdtPnl;
-            if (hitByPercent || hitByUsdt) {
-                isSL = true;
-                reason = hitByPercent
-                    ? `ROI=${returnPercent.toFixed(2)}% (<= -${stopLoss}%)`
-                    : `PnL=${unrealizedPnL.toFixed(2)} (<= -${stopLossUsdtPnl})`;
-            }
-        }
+        this.logWorker().info(`✅ 🤷 Click Clear All Position | ${label}`);
 
-        // 🔹 Kiểm tra timeout (nếu bật)
-        const isTimedOut = timeoutEnabled && nowMs - createdAtMs >= timeoutMs;
-
-        this.logWorker().info(
-            `🟣 SL ${symbol}: ROI=${returnPercent.toFixed(2)}% | PnL=${unrealizedPnL.toFixed(2)} | SL%=${stopLoss} | SL$=${stopLossUsdtPnl} | ` +
-                `isSL=${isSL} (${reason || "none"}) | isTimedOut=${isTimedOut}`,
-        );
-
-        // 🔹 Không có điều kiện nào kích hoạt → return
-        if (!isSL && !isTimedOut) return;
-
-        // 🔹 Kích hoạt StopLoss
-        await this.clickMarketPostion(pos.contract, Number(pos.size) > 0 ? "long" : "short");
-
-        return;
+        return body;
     }
 
     private setWhitelist(whiteList: TWhiteList) {
@@ -1172,8 +1168,6 @@ class Bot {
                         return Number(pos.size) !== 0;
                     });
                     this.replacePositions(result);
-                    this.syncMaxScapsPosition(result);
-                    this.syncMaxFarmsPosition(result);
                     break;
 
                 default:
@@ -1272,21 +1266,6 @@ class Bot {
         this.accounts = accounts;
         this.parentPort?.postMessage({ type: "bot:saveAccount", payload: this.accounts });
     }
-
-    // private handleMaxRate(message: TWorkerData<Record<WindowKey, number>>) {
-    //     const incomingMaxByWindow = message.payload as Record<string, number>;
-
-    //     // Sanitize từng window và ghép vào cấu hình hiện tại
-    //     const updatedMaxByWindow: Record<WindowKey, number> = { ...this.rateMax };
-
-    //     (Object.keys(updatedMaxByWindow) as WindowKey[]).forEach((windowKey) => {
-    //         const rawValue = incomingMaxByWindow[windowKey];
-    //         const normalizedMax = Math.max(0, Number(rawValue ?? 0));
-    //         updatedMaxByWindow[windowKey] = Number.isFinite(normalizedMax) ? normalizedMax : 0;
-    //     });
-
-    //     this.rateMax = updatedMaxByWindow;
-    // }
 
     /** Lấy số thứ tự request cho 1 kênh nhất định */
     private nextRequestId(sequenceKey: string): number {
@@ -1470,44 +1449,6 @@ class Bot {
         }
 
         return true;
-    }
-
-    private async handleIOCLong() {
-        const bidsAsks = await this.getBidsAsks("H_USDT");
-
-        const asksToLong = bidsAsks["asks"];
-
-        for (let index = 0; index < 3; index++) {
-            const element = asksToLong[index];
-            const payloadOpenOrder: TPayloadOrder = {
-                contract: "H_USDT",
-                size: "1",
-                price: element.p,
-                reduce_only: false,
-                tif: "ioc",
-            };
-
-            const res = await this.openEntry(payloadOpenOrder, `🧨 ${element.p}`);
-        }
-    }
-
-    private async handleIOCShort() {
-        const bidsAsks = await this.getBidsAsks("H_USDT");
-
-        const bidsToShort = bidsAsks["bids"];
-
-        for (let index = 0; index < 3; index++) {
-            const element = bidsToShort[index];
-            const payloadOpenOrder: TPayloadOrder = {
-                contract: "H_USDT",
-                size: "-1",
-                price: element.p,
-                reduce_only: false,
-                tif: "ioc",
-            };
-
-            const res = await this.openEntry(payloadOpenOrder, `🧨 ${element.p}`);
-        }
     }
 
     private toNum(x: string | number): number {

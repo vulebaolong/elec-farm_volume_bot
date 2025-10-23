@@ -1,11 +1,11 @@
 import { useGetInfoMutation } from "@/api/tanstack/auth.tanstack";
-import { useGetMyBlackList } from "@/api/tanstack/black-list.tanstack";
 import { useGetFixLiquidation } from "@/api/tanstack/fix-liquidation.tanstack";
 import { useGetFixStopLossQueueByUserId } from "@/api/tanstack/fix-stoploss-queue.tanstack";
 import { useGetFixStopLoss } from "@/api/tanstack/fix-stoploss.tanstack";
 import { useGetUiSelector } from "@/api/tanstack/selector.tanstack";
 import { useSocketEmit } from "@/api/tanstack/socket.tanstack";
-import { useGetAllWhiteListMartingale } from "@/api/tanstack/white-list-martingale.tanstack";
+import { useGetWhiteListFarmIoc } from "@/api/tanstack/white-list-farm-ioc.tanstack";
+import { useGetWhiteListScalpIoc } from "@/api/tanstack/white-list-scalp-ioc.tanstack";
 import { SOCKET_ENVENT } from "@/constant/socket.constant";
 import { SET_SETTING_SYSTEM, SET_WHITELIST_DETAIL, SET_WHITELIST_RESET_IN_PROGRESS } from "@/redux/slices/bot.slice";
 import { SET_IS_INIT_WORKER } from "@/redux/slices/user.slice";
@@ -17,8 +17,6 @@ import { TSettingUsersSocket } from "@/types/setting-user.type";
 import { TWhiteList } from "@/types/white-list.type";
 import { useEffect } from "react";
 import { useSocket } from "./socket.hook";
-import { useGetWhiteListFarmIoc } from "@/api/tanstack/white-list-farm-ioc.tanstack";
-import { useGetWhiteListScalpIoc } from "@/api/tanstack/white-list-scalp-ioc.tanstack";
 
 export const useInitData = () => {
     const settingUser = useAppSelector((state) => state.user.info?.SettingUsers);
@@ -29,8 +27,6 @@ export const useInitData = () => {
     const dispatch = useAppDispatch();
     const getUiSelector = useGetUiSelector();
     const getInfoMutation = useGetInfoMutation();
-    const getMyBlackList = useGetMyBlackList();
-    const getAllWhiteListMartingale = useGetAllWhiteListMartingale();
 
     const getWhiteListFarmIoc = useGetWhiteListFarmIoc({
         pagination: { page: 1, pageSize: 99999 },
@@ -42,18 +38,6 @@ export const useInitData = () => {
         filters: {},
         sort: { sortBy: `createdAt`, isDesc: true },
     });
-
-    const getFixLiquidation = useGetFixLiquidation({
-        pagination: { page: 1, pageSize: 10 },
-        filters: {},
-        sort: { sortBy: `createdAt`, isDesc: true },
-    });
-    const getFixStopLoss = useGetFixStopLoss({
-        pagination: { page: 1, pageSize: 10 },
-        filters: {},
-        sort: { sortBy: `createdAt`, isDesc: true },
-    });
-    const getFixStopLossQueueByUserId = useGetFixStopLossQueueByUserId();
 
     const joinRoomEntry = useSocketEmit<boolean>({
         socket,
@@ -107,19 +91,6 @@ export const useInitData = () => {
     }, [socket]);
 
     useEffect(() => {
-        // console.log(456, {
-        //     settingUser,
-        //     getUiSelector: getUiSelector.data,
-        //     getMyBlackList: getMyBlackList.data,
-        //     getAllWhiteListMartingale: getAllWhiteListMartingale.data,
-        //     getWhiteListFarmIoc: getWhiteListFarmIoc.data,
-        //     getWhiteListScalpIoc: getWhiteListScalpIoc.data,
-        //     getFixLiquidation: getFixLiquidation.data,
-        //     getFixStopLoss: getFixStopLoss.data,
-        //     getFixStopLossQueueByUserId: getFixStopLossQueueByUserId.data,
-        //     uids: uids,
-        //     isInitWorker: isInitWorker,
-        // });
         if (!settingUser) return;
         if (!getUiSelector.data) return;
         if (!getWhiteListFarmIoc.data) return;
