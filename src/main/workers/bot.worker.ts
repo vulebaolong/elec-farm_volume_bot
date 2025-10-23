@@ -211,7 +211,7 @@ class Bot {
                 if (this.isTimeoutError(err)) {
                     this.reloadWebContentsViewRequest();
                 }
-                if (err?.message?.include("Buy button not found")) {
+                if (err?.message?.includes?.("Buy button not found")) {
                     this.reloadWebContentsViewRequest();
                 }
             } finally {
