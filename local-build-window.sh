@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Dừng lại trước khi thoát (kể cả lỗi)
+trap '
+  status=$?
+  echo
+  if [ $status -ne 0 ]; then
+    echo "❌ Script FAILED (exit $status)"
+  else
+    echo "✅ Script FINISHED successfully"
+  fi
+  read -rp "Press Enter to close this window..."
+' EXIT
+
 # ==== Config sửa cho phù hợp ====
 # Nạp .env nếu tồn tại (biến trong .env sẽ được export)
 if [ -f .env ]; then
@@ -29,4 +41,3 @@ export CSC_IDENTITY_AUTO_DISCOVERY=false
 npx electron-builder --win nsis --publish always
 
 echo "Done. Check your GitHub Releases for uploaded artifacts."
-."
