@@ -44,6 +44,8 @@ import axios from "axios";
 import { LogFunctions } from "electron-log";
 import { performance } from "node:perf_hooks";
 import { parentPort } from "node:worker_threads";
+import { quanto_multiplier } from "../gate/asset";
+import { TPositionLocal } from "@/types/position-local.type";
 
 const FLOWS_API = {
     acounts: {
@@ -142,6 +144,10 @@ class Bot {
     private reloading = false; // đang chờ phản hồi?
     private readonly RELOAD_INTERVAL = 300_000; // 5 phút
 
+    private positionLocal = new Map<string, TPositionLocal>();
+
+    private keyTakeProfit = "Take Profit";
+
     constructor(dataInitBot: TDataInitBot) {
         this.parentPort = dataInitBot.parentPort;
         this.settingUser = dataInitBot.settingUser;
@@ -149,6 +155,12 @@ class Bot {
         this.whiteListFarmIoc = dataInitBot.whiteListFarmIoc;
         this.whiteListScalpIoc = dataInitBot.whiteListScalpIoc;
         this.uidDB = dataInitBot.uidDB;
+
+        this.fixStopLossIOC.set(this.keyTakeProfit, {
+            symbol: this.keyTakeProfit,
+            unrealizedPnL: this.settingUser.stopLossUsdtPnl,
+        });
+        this.sendFixStopLossIOC();
 
         this.run();
     }
@@ -162,6 +174,14 @@ class Bot {
             try {
                 // this.log(`\n\n\n\n\n ✅✅✅✅✅ ITER START ${this.isStart} | ${this.running} =====`);
                 await this.beforeEach();
+
+                // if(this.count === 0) {
+                //     await this.syncPositionLocalWidthPositionGate();
+                // }
+
+                // if (this.isHitCount(50)) {
+                //     await this.getPositionByApi();
+                // }
 
                 // if (!this.uidWeb) continue;
 
@@ -210,8 +230,7 @@ class Bot {
                 this.logWorker().error(err?.message);
                 if (this.isTimeoutError(err)) {
                     this.reloadWebContentsViewRequest();
-                }
-                if (err?.message?.includes?.("Buy button not found")) {
+                } else if (err?.message?.includes?.("Buy button not found")) {
                     this.reloadWebContentsViewRequest();
                 }
             } finally {
@@ -317,7 +336,10 @@ class Bot {
         const ok = await this.changeLeverageCross(entrySymbol, this.settingUser.leverage);
         if (!ok) return;
 
-        await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC`);
+        const res = await this.openEntry(payloadOpenOrder, `🧨 Scalp IOC`);
+
+        this.fillPositionLocal(res);
+
         // this.logWorker().info(`🧨 ${entrySymbol} | ${sideScalp} | ${payloadOpenOrder.price}`);
         this.sideCountsIOC.set(keyPrevSidesCount, { keyPrevSidesCount, longHits: 0, shortHits: 0 });
         this.sendSideCountsIOC();
@@ -325,6 +347,68 @@ class Bot {
         if (this.settingUser.delayScalp > 0) {
             this.postponePair(keyDelay, this.settingUser.delayScalp);
         }
+    }
+
+    private fillPositionLocal(orderOpen: TOrderOpen) {
+        // 1) Tính phần khớp thực tế (cùng dấu với order.size)
+        const orderSize = orderOpen.size; // có thể dương (long) hoặc âm (short)
+        const leftSigned = Math.sign(orderSize) * Math.abs(orderOpen.left || 0);
+        const filledSize = orderSize - leftSigned; // 0 nếu không khớp
+
+        if (filledSize === 0) return; // không có gì để cập nhật
+
+        const fp = parseFloat(orderOpen.fill_price); // giá fill trung bình của lệnh
+        const key = orderOpen.contract;
+
+        const cur = this.positionLocal.get(key);
+
+        // 2) Nếu chưa có vị thế -> mở mới
+        if (!cur || cur.size === 0) {
+            this.positionLocal.set(key, {
+                entry_price: orderOpen.fill_price,
+                size: filledSize,
+            });
+            return;
+        }
+
+        // 3) Đang có vị thế
+        const curSize = cur.size;
+        const curEP = parseFloat(cur.entry_price);
+
+        const newSize = curSize + filledSize;
+
+        // 3a) Cùng hướng (tích số > 0) -> trung bình giá
+        if (curSize * filledSize > 0) {
+            // entry_price_new = (EP_old * size_old + fill_price * filled) / (size_old + filled)
+            const epNewNum = (curEP * curSize + fp * filledSize) / newSize;
+            // Ép về giá trị dương; format theo số lẻ của fill_price để đẹp
+            const decimals = (orderOpen.fill_price.split(".")[1] || "").length;
+            const epNew = Math.abs(epNewNum).toFixed(decimals);
+            this.positionLocal.set(key, { entry_price: epNew, size: newSize });
+            return;
+        }
+
+        // 3b) Ngược hướng
+        // Nếu không đảo (|filled| <= |cur|) -> chỉ giảm khối lượng, giữ nguyên entry_price
+        if (Math.abs(filledSize) <= Math.abs(curSize)) {
+            if (newSize === 0) {
+                // đóng hết
+                this.positionLocal.delete(key);
+            } else {
+                // giảm một phần, EP giữ nguyên
+                this.positionLocal.set(key, { entry_price: cur.entry_price, size: newSize });
+            }
+            return;
+        }
+
+        // 3c) Đảo chiều (|filled| > |cur|):
+        // Đóng hết vị thế cũ tại fill_price (PnL đã phản ánh ở nơi khác),
+        // mở vị thế mới với phần vượt và EP = fill_price
+        // newSize có dấu theo hướng lệnh hiện tại (cùng dấu với filledSize)
+        this.positionLocal.set(key, {
+            entry_price: orderOpen.fill_price,
+            size: newSize,
+        });
     }
 
     private async handleWhiteListFarmIocNew(entrySymbol: string, entry: TWhiteListItem) {
@@ -465,6 +549,7 @@ class Bot {
         // console.dir(this.sideCountsIOC, { colors: true, depth: null });
         // console.log("unrealised_pnl: ", this.accounts[0].unrealised_pnl);
         // console.dir(this.fixStopLossIOC, { colors: true, depth: null });
+        // console.log("positionLocal", this.positionLocal);
     }
 
     private heartbeat() {
@@ -652,7 +737,7 @@ class Bot {
     private async changeLeverageCross(symbol: string, leverageNumber: number): Promise<boolean> {
         const changedLeverage = this.changedLaverageCrosslist.get(symbol);
         if (changedLeverage && changedLeverage.leverage === leverageNumber) {
-            // this.log(`✅ Change Leverage [EXISTS] ${symbol} skip => `, this.changedLaveragelist);
+            // this.log(`✅ Change Leverage [SLISTS] ${symbol} skip => `, this.changedLaveragelist);
             return true;
         }
 
@@ -696,6 +781,50 @@ class Bot {
         this.logWorker().info(msg);
 
         return true;
+    }
+
+    private async getPositionByApi(): Promise<TPosition[]> {
+        const url = `https://www.gate.com/apiw/v2/futures/usdt/positions`;
+
+        const { body, error, ok } = await this.gateFetch<TGateApiRes<TPosition[]>>(url, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            isDisableApiPosition: false,
+        });
+
+        if (ok === false || error || body === null) {
+            const msg = `❌ Change Leverage Cross: ${error}`;
+            throw new Error(msg);
+        }
+
+        const { code, data, message } = body;
+
+        if (code >= 400 || code < 0) {
+            const msg = `❌ Get Position By Api | code:${code} | ${message}`;
+            throw new Error(msg);
+        }
+
+        if (data === null || data === undefined) {
+            const msg = `❌ Get Position By Api: data is ${data}`;
+            throw new Error(msg);
+        }
+
+        return data;
+    }
+
+    private async syncPositionLocalWidthPositionGate() {
+        const positionGate = await this.getPositionByApi();
+        const result = positionGate.filter((pos) => {
+            return Number(pos.size) !== 0;
+        });
+        this.positionLocal.clear();
+        result.forEach((pos) => {
+            this.positionLocal.set(pos.contract, {
+                entry_price: pos.entry_price,
+                size: pos.size,
+            });
+        });
+        this.logWorker().info("💚 Sync Position Success");
     }
 
     private async openEntry(payload: TPayloadOrder, label: string) {
@@ -992,7 +1121,7 @@ class Bot {
             const last = Number(await this.getLastPrice(symbol));
             const entry = Number(pos.entry_price);
             const size = Number(pos.size);
-            const quanto = Number(info.quanto_multiplier);
+            const quanto = quanto_multiplier[symbol];
             if (![last, entry, size, quanto].every(Number.isFinite)) return null;
 
             // Công thức chuẩn: (mark - entry) * size * contractSize
@@ -1021,53 +1150,64 @@ class Bot {
         }
 
         // 1) Thử SL theo ngưỡng lỗ cấu hình
-        const closedByLoss = await this.tryCloseByLossUSD(position, pnlLoss, stopLossUsdtPnl);
+        const closedByLoss = await this.tryCloseByLossUSD(position, pnlLoss);
         if (!closedByLoss) return; // chưa tới ngưỡng, thôi
 
-        const absLoss = Math.abs(pnlLoss);
-
         // 2) Thử tìm 1 position đang lời >= absLoss để bù lỗ
-        const coveredByProfitPos = await this.findAndCloseOneProfitablePositionToCover(absLoss, symbol);
-        if (coveredByProfitPos) return;
+        const coveredByProfitPos = await this.findAndCloseOneProfitablePositionToCover(symbol);
+        if (coveredByProfitPos) {
+            return
+        };
 
         // 3) Nếu không có position đơn lẻ cover được, thử cover bằng PnL account
-        const coveredByAccount = await this.tryCloseByProfitUSDAccount(absLoss, symbol);
+        const coveredByAccount = await this.tryCloseByProfitUSDAccount(symbol);
         if (coveredByAccount) return;
 
         // 4) Không cover được → lưu lại để lần sau thử lại
-        const createAt = Date.now();
-        this.fixStopLossIOC.set(`${symbol}-${absLoss}`, {
+        this.fixStopLossIOC.set(`${symbol}-${pnlLoss}`, {
             symbol,
             unrealizedPnL: pnlLoss,
-            createAt,
         });
         this.sendFixStopLossIOC();
     }
 
     /** ĐÓNG khi LỖ theo USDT: pnl <= -threshold */
-    private async tryCloseByLossUSD(pos: TPosition, pnlUSD: number, thresholdUsdt: number): Promise<boolean> {
+    private async tryCloseByLossUSD(pos: TPosition, pnlUSD: number): Promise<boolean> {
         const symbol = pos.contract.replace("/", "_");
-        const thrLoss = -Math.abs(thresholdUsdt);
-        const hit = pnlUSD <= thrLoss;
-        this.logWorker().info(`🟣 StopLoss ${symbol}: PnL=${pnlUSD.toFixed(4)}$ ≤ ${thrLoss}$ → ${hit}`);
+
+        const stopLossUsdtPnl = -Math.abs(this.settingUser.stopLossUsdtPnl);
+        const hit = pnlUSD <= stopLossUsdtPnl;
+
+        this.logWorker().info(`🟣 Review ${symbol} (Hit SL): PnL=${pnlUSD.toFixed(4)}$ | ${stopLossUsdtPnl.toFixed(4)}$ → ${hit}`);
         if (!hit) return false;
-        const label = `STOPLOSS PnL=${pnlUSD.toFixed(4)}$ ≤ ${thrLoss}$`;
+
+        const label = `${symbol} Hit SL PnL=${pnlUSD.toFixed(4)}$ | ${stopLossUsdtPnl.toFixed(4)}$`;
         await this.clickMarketPostion(pos.contract, Number(pos.size) > 0 ? "long" : "short", label);
+
         return true;
     }
 
     /** Tìm 1 position đang lời >= absLoss và đóng ngay */
-    private async findAndCloseOneProfitablePositionToCover(absLoss: number, losingSymbol: string): Promise<boolean> {
+    private async findAndCloseOneProfitablePositionToCover(losingSymbol: string): Promise<boolean> {
         for (const [, pos] of this.positions) {
             const sym = pos.contract.replace("/", "_");
             if (sym === losingSymbol) continue; // bỏ qua chính symbol vừa SL
 
             const pnl = await this.calcPositionPnLUSD(pos);
+
             if (pnl === null) continue;
-            if (pnl >= absLoss) {
+
+            const stopLossUsdtPnl = Math.abs(this.settingUser.stopLossUsdtPnl);
+            const hit = pnl >= stopLossUsdtPnl;
+
+            this.logWorker().info(`🟣 Review ${sym} (Position): PnLPosition=${pnl.toFixed(4)}$ | ${stopLossUsdtPnl.toFixed(4)}$ → ${hit}`);
+            if (!hit) return false;
+
+            if (pnl >= stopLossUsdtPnl) {
                 // đủ cover
-                const label = `COVER loss ${absLoss.toFixed(4)}$ by ${sym} PnL=${pnl.toFixed(4)}$`;
+                const label = `${sym} COVER (Position): PnLPosition=${pnl.toFixed(4)}$ | ${stopLossUsdtPnl.toFixed(4)}$`;
                 await this.clickMarketPostion(pos.contract, Number(pos.size) > 0 ? "long" : "short", label);
+
                 return true;
             }
         }
@@ -1075,14 +1215,19 @@ class Bot {
     }
 
     /** Dùng PnL account để cover: nếu total PnL ≥ absLoss → clear all */
-    private async tryCloseByProfitUSDAccount(absLoss: number, symbol: string): Promise<boolean> {
+    private async tryCloseByProfitUSDAccount(symbol: string): Promise<boolean> {
         if (this.accounts.length === 0) return false;
+
         const pnlAccount = Number(this.accounts[0].unrealised_pnl);
-        const hit = pnlAccount >= absLoss;
-        this.logWorker().info(`🟣 StopLoss ${symbol} (Account): PnLAccount=${pnlAccount.toFixed(4)}$ ≥ ${absLoss.toFixed(4)}$ → ${hit}`);
+        const stopLossUsdtPnl = Math.abs(this.settingUser.stopLossUsdtPnl);
+        const hit = pnlAccount >= stopLossUsdtPnl;
+
+        this.logWorker().info(`🟣 Review ${symbol} (Account): PnLAccount=${pnlAccount.toFixed(4)}$ | ${stopLossUsdtPnl.toFixed(4)}$ → ${hit}`);
         if (!hit) return false;
-        const label = `ACCOUNT cover ${absLoss.toFixed(4)}$ (total=${pnlAccount.toFixed(4)}$)`;
+
+        const label = `${symbol} COVER (Account): PnLAccount=${pnlAccount.toFixed(4)}$ | ${stopLossUsdtPnl.toFixed(4)}$`;
         await this.clickClearAllPosition(label);
+
         return true;
     }
 
@@ -1206,20 +1351,18 @@ class Bot {
 
     private async handleFixStopLossIOC(): Promise<void> {
         for (const [key, fix] of this.fixStopLossIOC) {
-            const absLoss = Math.abs(fix.unrealizedPnL); // dùng chính khoản lỗ đã lưu
-
             // 1) thử tìm 1 position lời cover được
-            const coveredByProfitPos = await this.findAndCloseOneProfitablePositionToCover(absLoss, fix.symbol);
+            const coveredByProfitPos = await this.findAndCloseOneProfitablePositionToCover(fix.symbol);
             if (coveredByProfitPos) {
-                this.fixStopLossIOC.delete(key);
+                if (key !== this.keyTakeProfit) this.fixStopLossIOC.delete(key);
                 this.sendFixStopLossIOC();
                 break;
             }
 
             // 2) thử cover bằng PnL account
-            const coveredByAccount = await this.tryCloseByProfitUSDAccount(absLoss, fix.symbol);
+            const coveredByAccount = await this.tryCloseByProfitUSDAccount(fix.symbol);
             if (coveredByAccount) {
-                this.fixStopLossIOC.delete(key);
+                if (key !== this.keyTakeProfit) this.fixStopLossIOC.delete(key);
                 this.sendFixStopLossIOC();
                 break;
             }
@@ -1327,7 +1470,7 @@ class Bot {
                 type: "bot:log",
                 payload: {
                     level,
-                    text: `PID:${process.pid}` + " " + parts.map(String).join(" "),
+                    text: this.count + " " + parts.map(String).join(" "),
                 },
             };
             parentPort?.postMessage(payload);

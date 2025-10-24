@@ -100,8 +100,8 @@ export class BotWorkerManager {
     private resolveBodyCreateOrder: ((value: { bodyText: string }) => void) | null = null;
     private timer: NodeJS.Timeout | null = null;
 
-    private isDisableApiPosition = false;
-    private lastPositionsBody: string | null = null;
+    // private isDisableApiPosition = true;
+    // private lastPositionsBody: string | null = null;
 
     constructor(mainWindow: BrowserWindow, mainLog: Logger.LogFunctions, workerLog: Logger.LogFunctions) {
         this.mainWindow = mainWindow;
@@ -219,6 +219,9 @@ export class BotWorkerManager {
                     const { url, init, reqId } = msg.payload;
                     const type = "bot:fetch:res";
                     try {
+
+                        // if(init?.isDisableApiPosition !== undefined) this.isDisableApiPosition = init?.isDisableApiPosition
+
                         const timeoutMs = 5_000;
 
                         const webContentsViewGate = this.entries.get(uid)?.webContentsViewGate;
@@ -254,6 +257,8 @@ export class BotWorkerManager {
                             })()
                             `;
                         const result: TFectMainRes = await webContentsViewGate.webContents.executeJavaScript(js, true);
+
+                        // if(init?.isDisableApiPosition !== undefined) this.isDisableApiPosition = true
 
                         if (result.ok === false && result.error) throw new Error(result.error);
 
@@ -309,18 +314,18 @@ export class BotWorkerManager {
                         }
 
                         // console.log("parsed", parsed);
-                        if (parsed.data === null) {
-                            throw new Error(`Order fail: ${parsed.message}`);
-                        } else {
-                            if (parsed.data.tif === "ioc") {
-                                // nếu left là 0 nghĩa là fill hết
-                                if (parsed.data.left === 0) {
-                                    this.isDisableApiPosition = false;
-                                } else {
-                                    this.isDisableApiPosition = true;
-                                }
-                            }
-                        }
+                        // if (parsed.data === null) {
+                        //     throw new Error(`Order fail: ${parsed.message}`);
+                        // } else {
+                        //     if (parsed.data.tif === "ioc") {
+                        //         // nếu left là 0 nghĩa là fill hết
+                        //         if (parsed.data.left === 0) {
+                        //             this.isDisableApiPosition = false;
+                        //         } else {
+                        //             this.isDisableApiPosition = true;
+                        //         }
+                        //     }
+                        // }
 
                         const payload: Omit<TGateOrderMainRes, "bodyText"> & { body: TGateApiRes<TOrderOpen | null> } = {
                             ok: true,
@@ -518,7 +523,7 @@ export class BotWorkerManager {
                             throw new Error(result.error);
                         }
 
-                        this.isDisableApiPosition = false;
+                        // this.isDisableApiPosition = false;
 
                         const payload: TGateClick<boolean> & { reqClickTabPositionId: number } = {
                             ok: result.ok,
@@ -565,7 +570,7 @@ export class BotWorkerManager {
                             throw new Error(result.error);
                         }
 
-                        this.isDisableApiPosition = false;
+                        // this.isDisableApiPosition = false;
 
                         const payload: TGateClickMarketPositionRes = {
                             ok: result.ok,
@@ -609,7 +614,7 @@ export class BotWorkerManager {
                             throw new Error(result.error);
                         }
 
-                        this.isDisableApiPosition = false;
+                        // this.isDisableApiPosition = false;
 
                         const payload: TGateClick<boolean> & { reqClickClearAllId: number } = {
                             ok: result.ok,
@@ -1078,7 +1083,7 @@ export class BotWorkerManager {
                             if (this.timer) clearTimeout(this.timer);
                             this.resolveBodyCreateOrder = null;
                         } else {
-                            if (isPositions) this.lastPositionsBody = bodyText;
+                            // if (isPositions) this.lastPositionsBody = bodyText;
 
                             const valueFollowApi: TWorkerData<TPayloadFollowApi> = {
                                 type: "bot:followApi",
@@ -1111,26 +1116,26 @@ export class BotWorkerManager {
             }
 
             // --- REQUEST: CHẶN/FAKE GET /positions khi IOC fill ---
-            if (reqMethod === this.REQUEST_API.positions.method && url === this.REQUEST_API.positions.url) {
-                if (this.isDisableApiPosition) {
-                    // Khuyến nghị: fulfill 200 + body rỗng/cached → UI không lỗi, request hoàn tất ngay
-                    const bodyText =
-                        this.lastPositionsBody ??
-                        JSON.stringify({
-                            code: 200,
-                            data: [],
-                            message: "success",
-                            method: "/apiw/v2/futures/usdt/positions",
-                        }); // hoặc body gần nhất, hoặc "[]"
-                    await webContents.debugger.sendCommand("Fetch.fulfillRequest", {
-                        requestId,
-                        responseCode: 200,
-                        responseHeaders: [{ name: "Content-Type", value: "application/json" }],
-                        body: Buffer.from(bodyText, "utf8").toString("base64"),
-                    });
-                    return; // ĐÃ xử lý xong
-                }
-            }
+            // if (reqMethod === this.REQUEST_API.positions.method && url === this.REQUEST_API.positions.url) {
+            //     if (this.isDisableApiPosition) {
+            //         // Khuyến nghị: fulfill 200 + body rỗng/cached → UI không lỗi, request hoàn tất ngay
+            //         const bodyText =
+            //             this.lastPositionsBody ??
+            //             JSON.stringify({
+            //                 code: 200,
+            //                 data: [],
+            //                 message: "success",
+            //                 method: "/apiw/v2/futures/usdt/positions",
+            //             }); // hoặc body gần nhất, hoặc "[]"
+            //         await webContents.debugger.sendCommand("Fetch.fulfillRequest", {
+            //             requestId,
+            //             responseCode: 200,
+            //             responseHeaders: [{ name: "Content-Type", value: "application/json" }],
+            //             body: Buffer.from(bodyText, "utf8").toString("base64"),
+            //         });
+            //         return; // ĐÃ xử lý xong
+            //     }
+            // }
 
             // Các request khác: cho đi thẳng
             await webContents.debugger.sendCommand("Fetch.continueRequest", { requestId });

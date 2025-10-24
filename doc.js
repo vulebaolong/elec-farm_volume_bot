@@ -1,11 +1,11 @@
 /**
-git tag -f v1.0.90             
-git push origin v1.0.90 --force
+git tag -f v1.0.91             
+git push origin v1.0.91 --force
 
-git tag v1.0.90
-git push origin v1.0.90
+git tag v1.0.91
+git push origin v1.0.91
 
-xattr -cr "/Applications/BotFarmVolume_v1_0_90.app"
+xattr -cr "/Applications/BotFarmVolume_v1_0_91.app"
 
  */
 

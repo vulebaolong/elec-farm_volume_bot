@@ -119,7 +119,7 @@ export const ZTimeFrameArray = z
 export const FormSchema = z.object({
     maxTotalOpenPO: intField(1, "Maximum Position"),
     leverage: intField(1, "Leverage"),
-    stopLossUsdtPnl: positiveNumber("Stop Loss Usdt Pnl"),
+    stopLossUsdtPnl: numberFromStringOrNumber.refine((v) => v >= 0, `stopLossUsdtPnl must be >= 0`),
     indexBidAsk: intField(1, "Index Bid/Ask"),
     delayFarm: intField(0, "Delay Farm (ms)"),
     delayScalp: intField(0, "Delay Scalp (ms)"),

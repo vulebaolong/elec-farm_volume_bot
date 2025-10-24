@@ -1,1 +1,1 @@
-export type TFixStoplossIoc = { symbol: string; unrealizedPnL: number; createAt: number };
+export type TFixStoplossIoc = { symbol: string; unrealizedPnL: number };

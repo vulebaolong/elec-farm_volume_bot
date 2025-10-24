@@ -25,13 +25,12 @@ export default function StoplossIoc() {
                     )}
 
                     {items.map((item, idx) => (
-                        <div key={`${item.symbol}-${item.createAt}-${idx}`}>
-                            <Group gap={2}>
-                                <Text size="sm" fw={600} ff="monospace">
+                        <div key={idx}>
+                            <Group gap={5}>
+                                <Text size="sm" fw={600}>
                                     {item.symbol}
                                 </Text>
-                                <Text size="xs">{String(item.unrealizedPnL)}</Text>
-                                <Text size="xs">{formatLocalTime(item.createAt, "HH:mm:ss")}</Text>
+                                <Text size="xs">{item.unrealizedPnL.toFixed(4)}$</Text>
                             </Group>
                             {idx < items.length - 1 && <Divider mt="xs" />}
                         </div>
